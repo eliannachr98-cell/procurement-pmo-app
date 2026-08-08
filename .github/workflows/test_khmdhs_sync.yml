@@ -7,10 +7,12 @@ on:
         description: "From date (YYYY-MM-DD)"
         required: true
         default: "2026-08-07"
+
       date_to:
         description: "To date (YYYY-MM-DD)"
         required: true
         default: "2026-08-08"
+
       source:
         description: "Source"
         required: true
@@ -21,15 +23,11 @@ on:
           - auction
           - contract
         default: all
-      max_pages:
-        description: "Safety limit: max pages per source"
-        required: true
-        default: "3"
 
 jobs:
   sync:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
 
     steps:
       - name: Checkout repository
@@ -50,5 +48,4 @@ jobs:
           python sync_khmdhs.py \
             --date-from "${{ inputs.date_from }}" \
             --date-to "${{ inputs.date_to }}" \
-            --source "${{ inputs.source }}" \
-            --max-pages "${{ inputs.max_pages }}"
+            --source "${{ inputs.source }}"
