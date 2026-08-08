@@ -1,0 +1,85 @@
+name: Backfill Notices (weekly)
+run-name: Backfill notices for ${{ inputs.year }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      year:
+        description: "Year to backfill"
+        required: true
+        type: choice
+        options: ["2020", "2021", "2022", "2023", "2024", "2025"]
+        default: "2020"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: khmdhs-historical-backfill
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      windows: ${{ steps.windows.outputs.windows }}
+    steps:
+      - name: Build weekly date windows
+        id: windows
+        env:
+          YEAR: ${{ inputs.year }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from datetime import date, timedelta
+
+          year = int(os.environ["YEAR"])
+          current = date(year, 1, 1)
+          year_end = date(year, 12, 31)
+          windows = []
+
+          while current <= year_end:
+              window_end = min(current + timedelta(days=6), year_end)
+              windows.append({
+                  "date_from": current.isoformat(),
+                  "date_to": window_end.isoformat(),
+              })
+              current = window_end + timedelta(days=1)
+
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              output.write("windows=" + json.dumps(windows, separators=(",", ":")) + "\n")
+          PY
+
+  backfill:
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        window: ${{ fromJson(needs.prepare.outputs.windows) }}
+    name: ${{ matrix.window.date_from }} to ${{ matrix.window.date_to }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install "requests>=2.32,<3" "psycopg[binary]>=3.2,<4"
+
+      - name: Backfill notices to Supabase
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          PYTHONUNBUFFERED: "1"
+        run: |
+          python -u sync_khmdhs.py \
+            --date-from "${{ matrix.window.date_from }}" \
+            --date-to "${{ matrix.window.date_to }}" \
+            --source "notice"
