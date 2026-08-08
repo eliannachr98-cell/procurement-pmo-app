@@ -1,0 +1,54 @@
+name: Test KHMDHS sync
+
+on:
+  workflow_dispatch:
+    inputs:
+      date_from:
+        description: "From date (YYYY-MM-DD)"
+        required: true
+        default: "2026-08-07"
+      date_to:
+        description: "To date (YYYY-MM-DD)"
+        required: true
+        default: "2026-08-08"
+      source:
+        description: "Source"
+        required: true
+        type: choice
+        options:
+          - all
+          - notice
+          - auction
+          - contract
+        default: all
+      max_pages:
+        description: "Safety limit: max pages per source"
+        required: true
+        default: "3"
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install "requests>=2.32,<3" "psycopg[binary]>=3.2,<4"
+
+      - name: Sync KHMDHS to Supabase
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          python sync_khmdhs.py \
+            --date-from "${{ inputs.date_from }}" \
+            --date-to "${{ inputs.date_to }}" \
+            --source "${{ inputs.source }}" \
+            --max-pages "${{ inputs.max_pages }}"
