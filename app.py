@@ -29,7 +29,7 @@ st.set_page_config(
     page_title="TenderScope",
     page_icon="🔭",
     layout="wide",
-    initial_sidebar_state="collapsed",
+    initial_sidebar_state="expanded",
 )
 
 st.markdown(
@@ -39,7 +39,9 @@ st.markdown(
     [data-testid="stAppViewContainer"] {background:linear-gradient(180deg,#eef4f8 0,#f7f9fb 260px,#f6f8fb 100%);}
     [data-testid="stHeader"] {background:transparent;}
     .block-container {padding-top:1rem; padding-bottom:2rem; max-width:1480px;}
-    [data-testid="stSidebar"] {background:#f5f7fa; border-right:1px solid #e5e7eb;}
+    [data-testid="stSidebar"] {background:#e8f1f6; border-left:1px solid #c6dbe6; border-right:0; left:auto !important; right:0 !important; box-shadow:-8px 0 24px rgba(23,50,77,.08);}
+    [data-testid="stSidebar"] > div:first-child {background:#e8f1f6;}
+    [data-testid="stSidebar"] h2 {font-size:1.2rem; margin-bottom:.2rem;}
     [data-testid="stMetric"] {border:1px solid #e5e7eb; border-radius:12px; padding:10px 12px; background:#fff; box-shadow:0 4px 14px rgba(15,23,42,.04); min-height:112px;}
     [data-testid="stMetricLabel"] {color:var(--ts-muted); font-size:.82rem;}
     [data-testid="stMetricValue"] {font-size:1.35rem; line-height:1.2; letter-spacing:-.02em; white-space:normal; overflow-wrap:anywhere;}
@@ -66,7 +68,7 @@ st.markdown(
     div[data-testid="stRadio"] label:has(input:checked) {background:rgba(255,255,255,.2); border-color:rgba(255,255,255,.55); box-shadow:0 3px 10px rgba(0,0,0,.12);}
     div[data-testid="stRadio"] label p {color:#fff !important; font-weight:650;}
     div[data-testid="stRadio"] [data-testid="stMarkdownContainer"] {color:#fff;}
-    div[data-testid="stRadio"] input {accent-color:#fff;}
+    div[data-testid="stRadio"] input {display:none;}
     h1, h2, h3 {color:#17324d; letter-spacing:-.02em;}
     .stButton button, .stDownloadButton button {border-radius:9px; font-weight:650;}
     @media (max-width: 800px) {
@@ -393,6 +395,12 @@ page = st.radio(
     ["Επισκόπηση", "Διαγωνισμοί", "Αγορά & Ανταγωνισμός", "🔔"],
     horizontal=True,
     label_visibility="collapsed",
+    format_func=lambda item: {
+        "Επισκόπηση": "▦  Επισκόπηση",
+        "Διαγωνισμοί": "☷  Διαγωνισμοί",
+        "Αγορά & Ανταγωνισμός": "◉  Αγορά & Ανταγωνισμός",
+        "🔔": "🔔  Ειδοποιήσεις",
+    }[item],
 )
 st.write("")
 
@@ -418,10 +426,10 @@ def clear_shared_filters():
 
 
 if page in {"Επισκόπηση", "Διαγωνισμοί"}:
-    with st.expander("Φίλτρα", expanded=True):
-        filter_title, filter_action = st.columns([5, 1])
-        filter_title.caption("Οι ίδιες επιλογές εφαρμόζονται στην Επισκόπηση και στους Διαγωνισμούς.")
-        filter_action.button("Καθαρισμός", on_click=clear_shared_filters, use_container_width=True)
+    with st.sidebar:
+        st.markdown("## Φίλτρα")
+        st.caption("Κοινά στην Επισκόπηση και στους Διαγωνισμούς")
+        st.button("Καθαρισμός φίλτρων", on_click=clear_shared_filters, use_container_width=True)
 
         year_values = sorted(df["publication_date"].dropna().dt.year.astype(int).unique(), reverse=True)
         authority_values = sorted(df.get("authority", pd.Series(dtype=str)).dropna().astype(str).unique(), key=str.casefold)
@@ -431,28 +439,33 @@ if page in {"Επισκόπηση", "Διαγωνισμοί"}:
         procedure_values = sorted(df[procedure_col].dropna().astype(str).unique(), key=str.casefold) if procedure_col else []
         contract_type_values = sorted(df[contract_type_col].dropna().astype(str).unique(), key=str.casefold) if contract_type_col else []
 
-        f1, f2, f3 = st.columns(3)
-        selected_years = f1.multiselect("Έτος", year_values, key="shared_years", placeholder="Όλα τα έτη")
-        selected_authorities = f2.multiselect(
+        selected_years = st.multiselect("Έτος", year_values, key="shared_years", placeholder="Όλα τα έτη")
+        selected_authorities = st.multiselect(
             "Αναθέτουσα Αρχή", authority_values, key="shared_authorities", placeholder="Όλες οι Αρχές"
         )
-        selected_cpvs = f3.multiselect("CPV", cpv_values, key="shared_cpvs", placeholder="Όλοι οι CPV")
+        selected_cpvs = st.multiselect("CPV", cpv_values, key="shared_cpvs", placeholder="Όλοι οι CPV")
 
-        f4, f5, f6 = st.columns(3)
-        contract_type = f4.selectbox(
+        contract_type = st.selectbox(
             "Τύπος σύμβασης", ["Όλοι"] + contract_type_values,
             key="shared_contract_type", disabled=not contract_type_values,
         )
-        procedure = f5.selectbox(
+        procedure = st.selectbox(
             "Τύπος διαδικασίας", ["Όλοι"] + procedure_values,
             key="shared_procedure", disabled=not procedure_values,
         )
-        status_filter = f6.selectbox(
+        status_filter = st.selectbox(
             "Κατάσταση",
             ["Όλες", "Ενεργοί μόνο", "Ενεργός", "Αξιολόγηση", "Ανατεθειμένος", "Σε υλοποίηση", "Ολοκληρωμένος", "Ακυρωμένος"],
             key="shared_status",
         )
-    st.divider()
+elif page == "Αγορά & Ανταγωνισμός":
+    with st.sidebar:
+        st.markdown("## Ανάλυση αγοράς")
+        st.caption("Τα φίλτρα CPV και Αναδόχου βρίσκονται στην κύρια οθόνη της ανάλυσης.")
+elif page == "🔔":
+    with st.sidebar:
+        st.markdown("## Ειδοποιήσεις")
+        st.caption("Εδώ θα εμφανίζονται οι αποθηκευμένες επιλογές CPV.")
 
 filtered = df.copy()
 if selected_years:
@@ -480,7 +493,7 @@ if page == "Επισκόπηση":
     metric_cols[3].metric("Χωρίς ανάθεση", int(filtered.get("award_date", pd.Series(index=filtered.index, dtype=float)).isna().sum()))
     metric_cols[4].metric("Ακυρωμένοι", int(filtered["status"].eq("Ακυρωμένος").sum()))
 
-    left, right = st.columns(2)
+    left, middle, right = st.columns([1.15, 1.35, 1])
     with left:
         st.subheader("Διαγωνισμοί ανά στάδιο")
         stage_counts = filtered["status"].value_counts().rename_axis("Στάδιο").reset_index(name="Πλήθος")
@@ -490,7 +503,7 @@ if page == "Επισκόπηση":
         )
         fig.update_layout(height=390, showlegend=False, xaxis_title=None, yaxis_title=None)
         st.plotly_chart(fig, use_container_width=True)
-    with right:
+    with middle:
         st.subheader("Κορυφαίοι CPV")
         cpv_data = filtered.copy()
         cpv_data["CPV"] = cpv_data.get("cpv_code", "—").fillna("—").astype(str) + " · " + cpv_data.get("cpv_description", "").fillna("")
@@ -498,6 +511,27 @@ if page == "Επισκόπηση":
         fig = px.bar(cpv_counts, x="Πλήθος", y="CPV", orientation="h", color_discrete_sequence=["#17324d"])
         fig.update_layout(height=390, xaxis_title=None, yaxis_title=None)
         st.plotly_chart(fig, use_container_width=True)
+    with right:
+        st.subheader("CPV Distribution")
+        cpv_distribution = (
+            filtered.assign(CPV=filtered.get("cpv_code", pd.Series(index=filtered.index, dtype=str)).fillna("Χωρίς CPV").astype(str))
+            .groupby("CPV")[id_col].nunique().sort_values(ascending=False)
+        )
+        top_cpv = cpv_distribution.head(6).copy()
+        other_count = cpv_distribution.iloc[6:].sum()
+        if other_count:
+            top_cpv.loc["Λοιπά"] = other_count
+        distribution_df = top_cpv.rename_axis("CPV").reset_index(name="Διαγωνισμοί")
+        if distribution_df.empty:
+            st.info("Δεν υπάρχουν δεδομένα CPV για τα επιλεγμένα φίλτρα.")
+        else:
+            fig = px.pie(
+                distribution_df, names="CPV", values="Διαγωνισμοί", hole=.58,
+                color_discrete_sequence=CHART_COLORS,
+            )
+            fig.update_traces(textposition="inside", textinfo="percent")
+            fig.update_layout(height=390, legend_title=None, margin=dict(l=0, r=0, t=18, b=0))
+            st.plotly_chart(fig, use_container_width=True)
 
     st.subheader("Ενεργοί διαγωνισμοί ανά έδρα Αναθέτουσας Αρχής")
     nuts_col = existing(filtered, "nuts_code", "nuts")
