@@ -18,7 +18,7 @@ st.set_page_config(
     page_title="TenderScope",
     page_icon="🔭",
     layout="wide",
-    initial_sidebar_state="expanded",
+    initial_sidebar_state="collapsed",
 )
 
 st.markdown(
@@ -351,67 +351,75 @@ page = st.radio(
 )
 st.divider()
 
-authority = "Όλες"
-selected_contractors = []
-cpv_search = ""
+selected_authorities = []
+selected_cpvs = []
 procedure = "Όλοι"
 contract_type = "Όλοι"
 status_filter = "Όλες"
-min_date = df["publication_date"].min().date() if df["publication_date"].notna().any() else date.today()
-max_date = df["publication_date"].max().date() if df["publication_date"].notna().any() else date.today()
-date_range = (min_date, max_date)
+selected_years = []
 procedure_col = existing(df, "procedure_type_name", "procedure")
 contract_type_col = existing(df, "contract_type")
 
-with st.sidebar:
-    st.markdown("### TenderScope")
-    if page == "Διαγωνισμοί":
-        st.markdown("#### Φίλτρα διαγωνισμών")
+def clear_shared_filters():
+    for key, default in {
+        "shared_years": [],
+        "shared_authorities": [],
+        "shared_cpvs": [],
+        "shared_contract_type": "Όλοι",
+        "shared_procedure": "Όλοι",
+        "shared_status": "Όλες",
+    }.items():
+        st.session_state[key] = default
+
+
+if page in {"Επισκόπηση", "Διαγωνισμοί"}:
+    filter_title, filter_action = st.columns([5, 1])
+    filter_title.markdown("#### Φίλτρα")
+    filter_action.button("Καθαρισμός", on_click=clear_shared_filters, use_container_width=True)
+
+    year_values = sorted(df["publication_date"].dropna().dt.year.astype(int).unique(), reverse=True)
     authority_values = sorted(df.get("authority", pd.Series(dtype=str)).dropna().astype(str).unique(), key=str.casefold)
-    if page == "Διαγωνισμοί":
-        authority = st.selectbox("Αναθέτουσα Αρχή", ["Όλες"] + authority_values)
-        selected_contractors = st.multiselect(
-            "Ανάδοχος",
-            contractor_options(df),
-            placeholder="Επωνυμία αναδόχου",
-            help="Χρησιμοποίησέ το όταν αναζητάς διαγωνισμούς που έχουν ήδη συνδεδεμένο ανάδοχο.",
-        )
-        cpv_search = st.text_input("CPV (κωδικός ή λέξη)", placeholder="π.χ. 72000000 ή λογισμικό")
-
+    cpv_catalog = df[["cpv_code", "cpv_description"]].dropna(subset=["cpv_code"]).drop_duplicates().copy()
+    cpv_catalog["label"] = cpv_catalog["cpv_code"].astype(str) + " — " + cpv_catalog["cpv_description"].fillna("")
+    cpv_values = cpv_catalog.sort_values("label")["label"].tolist()
     procedure_values = sorted(df[procedure_col].dropna().astype(str).unique(), key=str.casefold) if procedure_col else []
-    if page == "Διαγωνισμοί":
-        procedure = st.selectbox("Τύπος διαδικασίας", ["Όλοι"] + procedure_values, disabled=not procedure_values)
-
     contract_type_values = sorted(df[contract_type_col].dropna().astype(str).unique(), key=str.casefold) if contract_type_col else []
-    if page == "Διαγωνισμοί":
-        contract_type = st.selectbox("Τύπος σύμβασης", ["Όλοι"] + contract_type_values, disabled=not contract_type_values)
-        status_filter = st.selectbox(
-            "Κατάσταση",
-            ["Όλες", "Ενεργοί μόνο", "Ενεργός", "Αξιολόγηση", "Ανατεθειμένος", "Σε υλοποίηση", "Ολοκληρωμένος", "Ακυρωμένος"],
-        )
-        date_range = st.date_input("Ημερομηνία δημοσίευσης", value=(min_date, max_date), min_value=min_date, max_value=max_date)
-    else:
-        st.caption("Τα φίλτρα εμφανίζονται μόνο στη σελίδα Διαγωνισμοί.")
+
+    f1, f2, f3 = st.columns(3)
+    selected_years = f1.multiselect("Έτος", year_values, key="shared_years", placeholder="Όλα τα έτη")
+    selected_authorities = f2.multiselect(
+        "Αναθέτουσα Αρχή", authority_values, key="shared_authorities", placeholder="Όλες οι Αρχές"
+    )
+    selected_cpvs = f3.multiselect("CPV", cpv_values, key="shared_cpvs", placeholder="Όλοι οι CPV")
+
+    f4, f5, f6 = st.columns(3)
+    contract_type = f4.selectbox(
+        "Τύπος σύμβασης", ["Όλοι"] + contract_type_values,
+        key="shared_contract_type", disabled=not contract_type_values,
+    )
+    procedure = f5.selectbox(
+        "Τύπος διαδικασίας", ["Όλοι"] + procedure_values,
+        key="shared_procedure", disabled=not procedure_values,
+    )
+    status_filter = f6.selectbox(
+        "Κατάσταση",
+        ["Όλες", "Ενεργοί μόνο", "Ενεργός", "Αξιολόγηση", "Ανατεθειμένος", "Σε υλοποίηση", "Ολοκληρωμένος", "Ακυρωμένος"],
+        key="shared_status",
+    )
     st.divider()
-    st.caption("Πηγή δεδομένων: ΚΗΜΔΗΣ Open Data API")
 
 filtered = df.copy()
-if authority != "Όλες":
-    filtered = filtered[filtered["authority"].eq(authority)]
-if selected_contractors:
-    filtered = filtered[filtered.apply(row_has_contractor, axis=1, selected=selected_contractors)]
-if cpv_search.strip():
-    term = cpv_search.strip().casefold()
-    code = filtered.get("cpv_code", pd.Series("", index=filtered.index)).fillna("").astype(str).str.casefold()
-    description = filtered.get("cpv_description", pd.Series("", index=filtered.index)).fillna("").astype(str).str.casefold()
-    filtered = filtered[code.str.contains(term, regex=False) | description.str.contains(term, regex=False)]
+if selected_years:
+    filtered = filtered[filtered["publication_date"].dt.year.isin(selected_years)]
+if selected_authorities:
+    filtered = filtered[filtered["authority"].isin(selected_authorities)]
+if selected_cpvs:
+    selected_cpv_codes = [item.split(" — ", 1)[0] for item in selected_cpvs]
+    filtered = filtered[filtered["cpv_code"].astype(str).isin(selected_cpv_codes)]
 if procedure_col and procedure != "Όλοι":
     filtered = filtered[filtered[procedure_col].astype(str).eq(procedure)]
 if contract_type_col and contract_type != "Όλοι":
     filtered = filtered[filtered[contract_type_col].astype(str).eq(contract_type)]
-if isinstance(date_range, (tuple, list)) and len(date_range) == 2:
-    start, end = pd.Timestamp(date_range[0]), pd.Timestamp(date_range[1])
-    filtered = filtered[filtered["publication_date"].between(start, end)]
 if status_filter == "Ενεργοί μόνο":
     filtered = filtered[~filtered["status"].isin(["Ολοκληρωμένος", "Ακυρωμένος"])]
 elif status_filter != "Όλες":
@@ -457,9 +465,11 @@ elif page == "Διαγωνισμοί":
     top_left.subheader("Λίστα διαγωνισμών")
     top_left.caption("Επίλεξε μία γραμμή για να ανοίξεις την καρτέλα, το Gantt και τις αναλύσεις.")
     applied = {
-        "Αναθέτουσα Αρχή": authority,
-        "Ανάδοχος": ", ".join(selected_contractors) or "Όλοι",
-        "CPV": cpv_search or "Όλοι",
+        "Έτος": ", ".join(map(str, selected_years)) or "Όλα",
+        "Αναθέτουσα Αρχή": ", ".join(selected_authorities) or "Όλες",
+        "CPV": ", ".join(selected_cpvs) or "Όλοι",
+        "Τύπος σύμβασης": contract_type,
+        "Τύπος διαδικασίας": procedure,
         "Κατάσταση": status_filter,
     }
     top_right.download_button(
@@ -493,13 +503,20 @@ elif page == "Διαγωνισμοί":
 
 elif page == "Αγορά & Ανταγωνισμός":
     st.subheader("Ανάλυση ανταγωνισμού ανά CPV")
-    st.caption("Επίλεξε έναν CPV για να δεις την αγορά, τους αναδόχους και τις συνδεδεμένες συμβάσεις.")
+    st.caption("Επίλεξε έναν ή περισσότερους CPV για να δεις την αγορά, τους αναδόχους και τις συνδεδεμένες συμβάσεις.")
     cpv_catalog = df[["cpv_code", "cpv_description"]].dropna(subset=["cpv_code"]).drop_duplicates().copy()
     cpv_catalog["Επιλογή"] = cpv_catalog["cpv_code"].astype(str) + " — " + cpv_catalog["cpv_description"].fillna("")
-    cpv_choice = st.selectbox("Επίλεξε CPV", cpv_catalog.sort_values("Επιλογή")["Επιλογή"].tolist()) if not cpv_catalog.empty else None
-    market_data = df[df["cpv_code"].astype(str).eq(cpv_choice.split(" — ", 1)[0])].copy() if cpv_choice else df.iloc[0:0].copy()
+    market_cpvs = st.multiselect(
+        "Επίλεξε CPV",
+        cpv_catalog.sort_values("Επιλογή")["Επιλογή"].tolist(),
+        placeholder="Επίλεξε έναν ή περισσότερους CPV",
+    ) if not cpv_catalog.empty else []
+    market_codes = [item.split(" — ", 1)[0] for item in market_cpvs]
+    market_data = df[df["cpv_code"].astype(str).isin(market_codes)].copy() if market_codes else df.iloc[0:0].copy()
     columns = contractor_columns(market_data)
-    if not columns:
+    if not market_cpvs:
+        st.info("Επίλεξε τουλάχιστον έναν CPV για να ξεκινήσει η ανάλυση.")
+    elif not columns:
         st.info("Η ανάλυση θα ενεργοποιηθεί όταν ολοκληρωθεί η σύνδεση αναθέσεων και συμβάσεων.")
     else:
         records = []
@@ -527,6 +544,11 @@ elif page == "Αγορά & Ανταγωνισμός":
                 Συνολική_Αξία=("Αξία", "sum"),
                 Αναθέτουσες_Αρχές=("Αναθέτουσα Αρχή", "nunique"),
             ).reset_index().sort_values("Συνολική_Αξία", ascending=False).reset_index(drop=True)
+            contractor_search = st.text_input("Αναζήτηση αναδόχου", placeholder="Γράψε μέρος της επωνυμίας")
+            if contractor_search.strip():
+                competition = competition[
+                    competition["Ανάδοχος"].astype(str).str.contains(contractor_search.strip(), case=False, regex=False)
+                ].reset_index(drop=True)
             st.caption("Πάτησε επάνω σε έναν ανάδοχο για να δεις τους διαγωνισμούς και τις συμβάσεις του.")
             contractor_selection = st.dataframe(
                 competition,
