@@ -22,6 +22,8 @@ STATUS_COLORS = {
     "Ακυρωμένος": "#D9534F",
 }
 CHART_COLORS = ["#17324D", "#168C8C", "#2E8B57", "#E9A23B", "#6257A8", "#D9534F"]
+px.defaults.color_discrete_sequence = CHART_COLORS
+px.defaults.template = "plotly_white"
 
 st.set_page_config(
     page_title="TenderScope",
@@ -34,15 +36,19 @@ st.markdown(
     """
     <style>
     :root { --ts-blue:#17324d; --ts-teal:#168c8c; --ts-warning:#e9a23b; --ts-danger:#d9534f; --ts-ink:#1f2937; --ts-muted:#6b7280; }
-    [data-testid="stAppViewContainer"] {background:#f6f8fb;}
-    .block-container {padding-top:1.25rem; padding-bottom:2rem; max-width:1540px;}
+    [data-testid="stAppViewContainer"] {background:linear-gradient(180deg,#eef4f8 0,#f7f9fb 260px,#f6f8fb 100%);}
+    [data-testid="stHeader"] {background:transparent;}
+    .block-container {padding-top:1rem; padding-bottom:2rem; max-width:1480px;}
     [data-testid="stSidebar"] {background:#f5f7fa; border-right:1px solid #e5e7eb;}
     [data-testid="stMetric"] {border:1px solid #e5e7eb; border-radius:12px; padding:10px 12px; background:#fff; box-shadow:0 4px 14px rgba(15,23,42,.04); min-height:112px;}
     [data-testid="stMetricLabel"] {color:var(--ts-muted); font-size:.82rem;}
     [data-testid="stMetricValue"] {font-size:1.35rem; line-height:1.2; letter-spacing:-.02em; white-space:normal; overflow-wrap:anywhere;}
     [data-testid="stMetricDelta"] {font-size:.75rem;}
-    .ts-brand {font-size:2.35rem; font-weight:800; color:var(--ts-blue); letter-spacing:-.04em; line-height:1.05;}
-    .ts-subtitle {color:var(--ts-muted); margin:.4rem 0 1.25rem; font-size:1rem;}
+    .ts-header {background:linear-gradient(120deg,#0b3854 0%,#164f70 62%,#24738a 100%); border-radius:18px 18px 8px 8px; padding:22px 26px 18px; box-shadow:0 12px 30px rgba(12,56,84,.18);}
+    .ts-header-row {display:flex; align-items:center; gap:14px;}
+    .ts-logo {width:45px; height:45px; border:2px solid rgba(255,255,255,.82); border-radius:50%; display:flex; align-items:center; justify-content:center; color:#fff; font-size:1.45rem;}
+    .ts-brand {font-size:2rem; font-weight:800; color:#fff; letter-spacing:-.035em; line-height:1.05;}
+    .ts-subtitle {color:rgba(255,255,255,.78); margin:.35rem 0 0; font-size:.94rem;}
     .ts-kicker {font-size:.78rem; font-weight:700; color:var(--ts-teal); letter-spacing:.08em; text-transform:uppercase;}
     .ts-card {border:1px solid #e5e7eb; border-radius:14px; padding:14px; background:#fff; min-height:116px;}
     .ts-card-label {font-size:.78rem; color:var(--ts-muted); margin-bottom:6px;}
@@ -50,11 +56,25 @@ st.markdown(
     .ts-card-note {font-size:.76rem; color:var(--ts-muted); margin-top:7px;}
     .ts-pill {display:inline-block; padding:4px 9px; border-radius:999px; font-size:.78rem; font-weight:650; background:#eef2f7; color:#334155;}
     .ts-note {border-left:4px solid var(--ts-warning); background:#fffaf0; border-radius:8px; padding:11px 13px; color:#4b5563;}
-    [data-testid="stExpander"] {background:#edf4f7; border:1px solid #cfdee7; border-radius:14px; box-shadow:0 5px 16px rgba(23,50,77,.05);}
-    [data-testid="stDataFrame"] {background:#fff; border-radius:12px; box-shadow:0 4px 14px rgba(15,23,42,.04);}
-    div[data-testid="stRadio"] > div {gap:.35rem;}
-    div[data-testid="stRadio"] label {background:#f8fafc; border:1px solid #e5e7eb; border-radius:9px; padding:.45rem .75rem;}
+    [data-testid="stExpander"] {background:#e8f1f6; border:1px solid #c6dbe6; border-radius:14px; box-shadow:0 6px 18px rgba(23,50,77,.07); margin-top:.35rem;}
+    [data-testid="stExpander"] summary {font-weight:750; color:#17324d;}
+    [data-testid="stDataFrame"] {background:#fff; border:1px solid #e1e8ee; border-radius:12px; box-shadow:0 5px 16px rgba(15,23,42,.05); padding:3px;}
+    div[data-testid="stRadio"] {background:linear-gradient(120deg,#0b3854 0%,#164f70 62%,#24738a 100%); padding:7px 13px 12px; border-radius:0 0 16px 16px; box-shadow:0 12px 30px rgba(12,56,84,.18);}
+    div[data-testid="stRadio"] > div {gap:.4rem; justify-content:flex-end;}
+    div[data-testid="stRadio"] label {background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.15); border-radius:9px; padding:.42rem .72rem; transition:.15s ease;}
+    div[data-testid="stRadio"] label:hover {background:rgba(255,255,255,.13);}
+    div[data-testid="stRadio"] label:has(input:checked) {background:rgba(255,255,255,.2); border-color:rgba(255,255,255,.55); box-shadow:0 3px 10px rgba(0,0,0,.12);}
+    div[data-testid="stRadio"] label p {color:#fff !important; font-weight:650;}
+    div[data-testid="stRadio"] [data-testid="stMarkdownContainer"] {color:#fff;}
+    div[data-testid="stRadio"] input {accent-color:#fff;}
+    h1, h2, h3 {color:#17324d; letter-spacing:-.02em;}
     .stButton button, .stDownloadButton button {border-radius:9px; font-weight:650;}
+    @media (max-width: 800px) {
+      .ts-header {padding:18px 17px 14px;}
+      .ts-brand {font-size:1.55rem;}
+      div[data-testid="stRadio"] > div {justify-content:flex-start; overflow-x:auto; flex-wrap:nowrap;}
+      div[data-testid="stRadio"] label {white-space:nowrap;}
+    }
     </style>
     """,
     unsafe_allow_html=True,
@@ -360,9 +380,13 @@ df = add_status(parse_dates(load_all()))
 id_col = tender_id_col(df)
 deadline = deadline_col(df)
 
-st.markdown('<div class="ts-kicker">Public procurement intelligence</div>', unsafe_allow_html=True)
-st.markdown('<div class="ts-brand">TenderScope</div>', unsafe_allow_html=True)
-st.markdown('<div class="ts-subtitle">Ελληνικό Παρατηρητήριο Δημοσίων Συμβάσεων</div>', unsafe_allow_html=True)
+st.markdown(
+    '<div class="ts-header"><div class="ts-header-row"><div class="ts-logo">⌖</div><div>'
+    '<div class="ts-brand">TenderScope</div>'
+    '<div class="ts-subtitle">Ελληνικό Παρατηρητήριο Δημοσίων Συμβάσεων · Procurement Intelligence</div>'
+    '</div></div></div>',
+    unsafe_allow_html=True,
+)
 
 page = st.radio(
     "Κύρια πλοήγηση",
@@ -370,7 +394,7 @@ page = st.radio(
     horizontal=True,
     label_visibility="collapsed",
 )
-st.divider()
+st.write("")
 
 selected_authorities = []
 selected_cpvs = []
