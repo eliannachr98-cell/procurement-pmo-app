@@ -343,34 +343,55 @@ st.markdown('<div class="ts-kicker">Public procurement intelligence</div>', unsa
 st.markdown('<div class="ts-brand">TenderScope</div>', unsafe_allow_html=True)
 st.markdown('<div class="ts-subtitle">Ελληνικό Παρατηρητήριο Δημοσίων Συμβάσεων</div>', unsafe_allow_html=True)
 
+page = st.radio(
+    "Κύρια πλοήγηση",
+    ["Επισκόπηση", "Διαγωνισμοί", "Αγορά & Ανταγωνισμός", "🔔"],
+    horizontal=True,
+    label_visibility="collapsed",
+)
+st.divider()
+
+authority = "Όλες"
+selected_contractors = []
+cpv_search = ""
+procedure = "Όλοι"
+contract_type = "Όλοι"
+status_filter = "Όλες"
+min_date = df["publication_date"].min().date() if df["publication_date"].notna().any() else date.today()
+max_date = df["publication_date"].max().date() if df["publication_date"].notna().any() else date.today()
+date_range = (min_date, max_date)
+procedure_col = existing(df, "procedure_type_name", "procedure")
+contract_type_col = existing(df, "contract_type")
+
 with st.sidebar:
-    st.markdown("### Φίλτρα")
+    st.markdown("### TenderScope")
+    if page == "Διαγωνισμοί":
+        st.markdown("#### Φίλτρα διαγωνισμών")
     authority_values = sorted(df.get("authority", pd.Series(dtype=str)).dropna().astype(str).unique(), key=str.casefold)
-    authority = st.selectbox("Αναθέτουσα Αρχή", ["Όλες"] + authority_values)
+    if page == "Διαγωνισμοί":
+        authority = st.selectbox("Αναθέτουσα Αρχή", ["Όλες"] + authority_values)
+        selected_contractors = st.multiselect(
+            "Ανάδοχος",
+            contractor_options(df),
+            placeholder="Επωνυμία αναδόχου",
+            help="Χρησιμοποίησέ το όταν αναζητάς διαγωνισμούς που έχουν ήδη συνδεδεμένο ανάδοχο.",
+        )
+        cpv_search = st.text_input("CPV (κωδικός ή λέξη)", placeholder="π.χ. 72000000 ή λογισμικό")
 
-    selected_contractors = st.multiselect(
-        "Ανάδοχος",
-        contractor_options(df),
-        placeholder="Επωνυμία αναδόχου",
-        help="Η επιλογή θα εμπλουτιστεί όταν ολοκληρωθεί η φόρτωση αναθέσεων και συμβάσεων.",
-    )
-    cpv_search = st.text_input("CPV (κωδικός ή λέξη)", placeholder="π.χ. 72000000 ή λογισμικό")
-
-    procedure_col = existing(df, "procedure_type_name", "procedure")
     procedure_values = sorted(df[procedure_col].dropna().astype(str).unique(), key=str.casefold) if procedure_col else []
-    procedure = st.selectbox("Τύπος διαδικασίας", ["Όλοι"] + procedure_values, disabled=not procedure_values)
+    if page == "Διαγωνισμοί":
+        procedure = st.selectbox("Τύπος διαδικασίας", ["Όλοι"] + procedure_values, disabled=not procedure_values)
 
-    contract_type_col = existing(df, "contract_type")
     contract_type_values = sorted(df[contract_type_col].dropna().astype(str).unique(), key=str.casefold) if contract_type_col else []
-    contract_type = st.selectbox("Τύπος σύμβασης", ["Όλοι"] + contract_type_values, disabled=not contract_type_values)
-
-    status_filter = st.selectbox(
-        "Κατάσταση",
-        ["Όλες", "Ενεργοί μόνο", "Ενεργός", "Αξιολόγηση", "Ανατεθειμένος", "Σε υλοποίηση", "Ολοκληρωμένος", "Ακυρωμένος"],
-    )
-    min_date = df["publication_date"].min().date() if df["publication_date"].notna().any() else date.today()
-    max_date = df["publication_date"].max().date() if df["publication_date"].notna().any() else date.today()
-    date_range = st.date_input("Ημερομηνία δημοσίευσης", value=(min_date, max_date), min_value=min_date, max_value=max_date)
+    if page == "Διαγωνισμοί":
+        contract_type = st.selectbox("Τύπος σύμβασης", ["Όλοι"] + contract_type_values, disabled=not contract_type_values)
+        status_filter = st.selectbox(
+            "Κατάσταση",
+            ["Όλες", "Ενεργοί μόνο", "Ενεργός", "Αξιολόγηση", "Ανατεθειμένος", "Σε υλοποίηση", "Ολοκληρωμένος", "Ακυρωμένος"],
+        )
+        date_range = st.date_input("Ημερομηνία δημοσίευσης", value=(min_date, max_date), min_value=min_date, max_value=max_date)
+    else:
+        st.caption("Τα φίλτρα εμφανίζονται μόνο στη σελίδα Διαγωνισμοί.")
     st.divider()
     st.caption("Πηγή δεδομένων: ΚΗΜΔΗΣ Open Data API")
 
@@ -396,14 +417,6 @@ if status_filter == "Ενεργοί μόνο":
 elif status_filter != "Όλες":
     filtered = filtered[filtered["status"].eq(status_filter)]
 
-page = st.radio(
-    "Κύρια πλοήγηση",
-    ["Επισκόπηση", "Διαγωνισμοί", "Χάρτης", "Ανάλυση ανταγωνισμού", "🔔 Ειδοποιήσεις"],
-    horizontal=True,
-    label_visibility="collapsed",
-)
-st.divider()
-
 if page == "Επισκόπηση":
     metric_cols = st.columns(5)
     metric_cols[0].metric("Διαγωνισμοί", f"{filtered[id_col].nunique():,}".replace(",", "."))
@@ -428,6 +441,16 @@ if page == "Επισκόπηση":
         fig = px.bar(cpv_counts, x="Πλήθος", y="CPV", orientation="h", color_discrete_sequence=["#17324d"])
         fig.update_layout(height=390, xaxis_title=None, yaxis_title=None)
         st.plotly_chart(fig, use_container_width=True)
+
+    st.subheader("Ενεργοί διαγωνισμοί ανά έδρα Αναθέτουσας Αρχής")
+    nuts_col = existing(filtered, "nuts_code", "nuts")
+    if not nuts_col:
+        st.info("Ο χάρτης θα ενεργοποιηθεί όταν το πεδίο NUTS μεταφερθεί από το raw_data στη βάση δεδομένων.")
+    else:
+        active = filtered[filtered["status"].eq("Ενεργός") & filtered[nuts_col].notna()].copy()
+        counts = active.groupby(nuts_col)[id_col].nunique().sort_values(ascending=False).reset_index(name="Ενεργοί διαγωνισμοί")
+        st.dataframe(counts, use_container_width=True, hide_index=True)
+        st.caption("Το NUTS αφορά την έδρα της Αναθέτουσας Αρχής και όχι τον τόπο εκτέλεσης της σύμβασης.")
 
 elif page == "Διαγωνισμοί":
     top_left, top_right = st.columns([3, 1])
@@ -468,26 +491,19 @@ elif page == "Διαγωνισμοί":
     else:
         st.info("Πάτησε επάνω σε έναν διαγωνισμό της λίστας για να εμφανιστεί η καρτέλα του.")
 
-elif page == "Χάρτης":
-    st.subheader("Ενεργοί διαγωνισμοί ανά έδρα Αναθέτουσας Αρχής")
-    nuts_col = existing(filtered, "nuts_code", "nuts")
-    if not nuts_col:
-        st.info("Ο χάρτης θα ενεργοποιηθεί όταν το πεδίο NUTS μεταφερθεί από το raw_data στη βάση δεδομένων.")
-    else:
-        active = filtered[filtered["status"].eq("Ενεργός") & filtered[nuts_col].notna()].copy()
-        counts = active.groupby(nuts_col)[id_col].nunique().sort_values(ascending=False).reset_index(name="Ενεργοί διαγωνισμοί")
-        st.dataframe(counts, use_container_width=True, hide_index=True)
-        st.caption("Το NUTS αφορά την έδρα της Αναθέτουσας Αρχής και όχι τον τόπο εκτέλεσης της σύμβασης.")
-
-elif page == "Ανάλυση ανταγωνισμού":
+elif page == "Αγορά & Ανταγωνισμός":
     st.subheader("Ανάλυση ανταγωνισμού ανά CPV")
-    st.caption("Ανάδοχοι, συμβάσεις, Αναθέτουσες Αρχές και συνολική αξία για τον επιλεγμένο CPV.")
-    columns = contractor_columns(filtered)
+    st.caption("Επίλεξε έναν CPV για να δεις την αγορά, τους αναδόχους και τις συνδεδεμένες συμβάσεις.")
+    cpv_catalog = df[["cpv_code", "cpv_description"]].dropna(subset=["cpv_code"]).drop_duplicates().copy()
+    cpv_catalog["Επιλογή"] = cpv_catalog["cpv_code"].astype(str) + " — " + cpv_catalog["cpv_description"].fillna("")
+    cpv_choice = st.selectbox("Επίλεξε CPV", cpv_catalog.sort_values("Επιλογή")["Επιλογή"].tolist()) if not cpv_catalog.empty else None
+    market_data = df[df["cpv_code"].astype(str).eq(cpv_choice.split(" — ", 1)[0])].copy() if cpv_choice else df.iloc[0:0].copy()
+    columns = contractor_columns(market_data)
     if not columns:
         st.info("Η ανάλυση θα ενεργοποιηθεί όταν ολοκληρωθεί η σύνδεση αναθέσεων και συμβάσεων.")
     else:
         records = []
-        for _, row in filtered.iterrows():
+        for _, row in market_data.iterrows():
             for index in range(1, 5):
                 contractor = row.get(f"contractor_{index}")
                 if pd.notna(contractor) and str(contractor).strip():
@@ -568,7 +584,7 @@ elif page == "Ανάλυση ανταγωνισμού":
                     fig.update_layout(height=430, legend_title=None)
                     st.plotly_chart(fig, use_container_width=True)
 
-elif page == "🔔 Ειδοποιήσεις":
+elif page == "🔔":
     st.subheader("Ειδοποιήσεις CPV")
     st.markdown(
         '<div class="ts-note">Οι συνδρομές θα ενεργοποιηθούν μετά την προσθήκη χρηστών και του πίνακα alerts στη Supabase. '
