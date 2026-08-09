@@ -43,8 +43,9 @@ st.markdown(
     [data-testid="stSidebar"] > div:first-child {background:#e8f1f6;}
     [data-testid="stSidebar"] h2 {font-size:1.2rem; margin-bottom:.2rem;}
     [data-testid="stMetric"] {border:1px solid #e5e7eb; border-radius:12px; padding:10px 12px; background:#fff; box-shadow:0 4px 14px rgba(15,23,42,.04); min-height:112px;}
-    [data-testid="stMetricLabel"] {color:var(--ts-muted); font-size:.82rem;}
-    [data-testid="stMetricValue"] {font-size:1.35rem; line-height:1.2; letter-spacing:-.02em; white-space:normal; overflow-wrap:anywhere;}
+    [data-testid="stMetric"] > div {align-items:center; text-align:center; width:100%;}
+    [data-testid="stMetricLabel"] {color:var(--ts-muted); font-size:.82rem; justify-content:center; text-align:center; width:100%;}
+    [data-testid="stMetricValue"] {font-size:1.55rem; font-weight:800; line-height:1.2; letter-spacing:-.02em; white-space:normal; overflow-wrap:anywhere; text-align:center; width:100%;}
     [data-testid="stMetricDelta"] {font-size:.75rem;}
     .ts-header {background:linear-gradient(120deg,#0b3854 0%,#164f70 62%,#24738a 100%); border-radius:18px 18px 8px 8px; padding:22px 26px 18px; box-shadow:0 12px 30px rgba(12,56,84,.18);}
     .ts-header-row {display:flex; align-items:center; gap:14px;}
@@ -169,6 +170,11 @@ def eur(item) -> str:
     return f"€{float(item):,.0f}".replace(",", ".")
 
 
+def count_fmt(item) -> str:
+    """Format counts with the Greek thousands separator."""
+    return f"{int(item):,}".replace(",", ".")
+
+
 def days_between(start, end):
     if pd.isna(start) or pd.isna(end):
         return None
@@ -286,7 +292,7 @@ def render_tender_detail(filtered: pd.DataFrame, selected_id: str):
     metrics[0].metric("Κατάσταση", row.get("status", "—"))
     metrics[1].metric("Προϋπολογισμός", eur(value(row, "budget_vat", "total_cost")))
     metrics[2].metric("Αξία ανάθεσης", eur(value(row, "award_value")))
-    metrics[3].metric("Αριθμός συμβάσεων", contract_count)
+    metrics[3].metric("Αριθμός συμβάσεων", count_fmt(contract_count))
     metrics[4].metric("Συμβασιοποιημένη αξία", eur(contracted_value))
 
     phases = []
@@ -486,12 +492,12 @@ elif status_filter != "Όλες":
 
 if page == "Επισκόπηση":
     metric_cols = st.columns(5)
-    metric_cols[0].metric("Διαγωνισμοί", f"{filtered[id_col].nunique():,}".replace(",", "."))
+    metric_cols[0].metric("Διαγωνισμοί", count_fmt(filtered[id_col].nunique()))
     active_mask = ~filtered["status"].isin(["Ολοκληρωμένος", "Ακυρωμένος"])
-    metric_cols[1].metric("Ενεργοί", f"{active_mask.sum():,}".replace(",", "."))
-    metric_cols[2].metric("Ανατεθειμένοι", int(filtered["status"].eq("Ανατεθειμένος").sum()))
-    metric_cols[3].metric("Χωρίς ανάθεση", int(filtered.get("award_date", pd.Series(index=filtered.index, dtype=float)).isna().sum()))
-    metric_cols[4].metric("Ακυρωμένοι", int(filtered["status"].eq("Ακυρωμένος").sum()))
+    metric_cols[1].metric("Ενεργοί", count_fmt(active_mask.sum()))
+    metric_cols[2].metric("Ανατεθειμένοι", count_fmt(filtered["status"].eq("Ανατεθειμένος").sum()))
+    metric_cols[3].metric("Χωρίς ανάθεση", count_fmt(filtered.get("award_date", pd.Series(index=filtered.index, dtype=float)).isna().sum()))
+    metric_cols[4].metric("Ακυρωμένοι", count_fmt(filtered["status"].eq("Ακυρωμένος").sum()))
 
     left, middle, right = st.columns([1.15, 1.35, 1])
     with left:
@@ -655,9 +661,9 @@ elif page == "Αγορά & Ανταγωνισμός":
                 st.divider()
                 st.markdown(f"### {selected_contractor}")
                 summary_cols = st.columns(4)
-                summary_cols[0].metric("Διαγωνισμοί", contractor_deals["ΑΔΑΜ Διακήρυξης"].nunique())
-                summary_cols[1].metric("Συμβάσεις", contractor_deals["ΑΔΑΜ Σύμβασης"].nunique())
-                summary_cols[2].metric("Αναθέτουσες Αρχές", contractor_deals["Αναθέτουσα Αρχή"].nunique())
+                summary_cols[0].metric("Διαγωνισμοί", count_fmt(contractor_deals["ΑΔΑΜ Διακήρυξης"].nunique()))
+                summary_cols[1].metric("Συμβάσεις", count_fmt(contractor_deals["ΑΔΑΜ Σύμβασης"].nunique()))
+                summary_cols[2].metric("Αναθέτουσες Αρχές", count_fmt(contractor_deals["Αναθέτουσα Αρχή"].nunique()))
                 summary_cols[3].metric("Συνολική αξία", eur(contractor_deals["Αξία"].sum()))
 
                 tenders_tab, contracts_tab, chart_tab = st.tabs(["Διαγωνισμοί", "Συμβάσεις", "Κατανομή"])
