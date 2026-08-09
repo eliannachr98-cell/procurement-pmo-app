@@ -162,7 +162,7 @@ export default function Home() {
           <label>Έτος<select value={year} onChange={(event) => setYear(event.target.value)}><option>Όλα</option>{years.map((item) => <option key={item}>{item}</option>)}</select></label>
           <label>Αναθέτουσα Αρχή<input list="authority-options" value={authority === "Όλες" ? "" : authority} onChange={(event) => setAuthority(event.target.value)} placeholder="Γράψε ή επίλεξε αρχή" /><datalist id="authority-options">{authorities.map((item) => <option key={item} value={item} />)}</datalist></label>
           <label>Ανάδοχος<input list="contractor-options" value={contractor} onChange={(event) => setContractor(event.target.value)} placeholder="Γράψε ή επίλεξε ανάδοχο" /><datalist id="contractor-options">{contractors.map((item) => <option key={item} value={item} />)}</datalist></label>
-          <label>CPV<input list="cpv-options" value={cpv} onChange={(event) => setCpv(event.target.value)} placeholder="Γράψε κωδικό ή περιγραφή" /><datalist id="cpv-options">{cpvOptions.map(([code,title]) => <option key={code} value={code} label={title} />)}</datalist></label>
+          {page !== "market" && <label>CPV<input list="cpv-options" value={cpv} onChange={(event) => setCpv(event.target.value)} placeholder="Γράψε κωδικό ή περιγραφή" /><datalist id="cpv-options">{cpvOptions.map(([code,title]) => <option key={code} value={code} label={title} />)}</datalist></label>}
           <label>Τύπος σύμβασης<select value={contractType} onChange={(event) => setContractType(event.target.value)}><option>Όλοι</option>{contractTypes.map((item) => <option key={item}>{item}</option>)}</select></label>
           <label>Τύπος εγγράφου<select value={documentType} onChange={(event) => setDocumentType(event.target.value)}><option>Όλοι</option>{documentTypes.map((item) => <option key={item}>{item}</option>)}</select></label>
           <label>Κατάσταση<select value={status} onChange={(event) => setStatus(event.target.value)}><option>Όλες</option>{Object.keys(statusTone).map((item) => <option key={item}>{item}</option>)}</select></label>
@@ -213,25 +213,26 @@ function TenderDetail({ tender, onBack }: { tender: Tender; onBack: () => void }
 }
 
 function NutsMap({ rows }: { rows: Tender[] }) {
-  const regions = [...rows.reduce((map, item) => { const key = item.nutsName || item.nutsCode || "Χωρίς NUTS"; map.set(key, (map.get(key) ?? 0) + 1); return map; }, new Map<string, number>())].sort((a,b) => b[1]-a[1]);
-  const max = Math.max(1,...regions.map((item) => item[1]));
-  return <article className="panel nutsPanel"><PanelHeader title="Ενεργοί διαγωνισμοί ανά NUTS" caption={`${number.format(rows.length)} ενεργοί διαγωνισμοί`} /><div className="nutsMap"><div className="geoMap"><svg viewBox="0 0 360 340" role="img" aria-label="Χάρτης ενεργών διαγωνισμών στην Ελλάδα"><path className="mainland" d="M72 38 L128 22 184 34 229 65 216 92 244 113 218 137 231 164 204 185 184 177 167 207 145 225 127 204 111 169 82 154 64 119 83 91 58 67Z"/><path className="peloponnese" d="M139 214 L177 201 199 225 190 260 154 278 118 256 112 231Z"/><path className="crete" d="M113 312 L206 301 261 307 226 322 151 326Z"/><g className="islandDots"><circle cx="274" cy="118" r="5"/><circle cx="295" cy="151" r="4"/><circle cx="263" cy="178" r="5"/><circle cx="307" cy="207" r="4"/><circle cx="282" cy="243" r="6"/><circle cx="44" cy="203" r="5"/></g>{regions.slice(0,10).map(([name,count],index) => { const [x,y] = mapPoint(name,index); return <g className="mapMarker" key={name} transform={`translate(${x} ${y})`}><circle r={7 + (count/max)*13}/><text y="4">{count}</text><title>{name}: {count}</title></g>; })}</svg><div className="mapHint">Το μέγεθος του κύκλου δείχνει τον αριθμό ενεργών διαγωνισμών.</div></div><div className="nutsLegend">{regions.slice(0,10).map(([name,count]) => <div key={name}><span title={name}>{name}</span><i><b style={{width:`${(count/max)*100}%`}} /></i><strong>{number.format(count)}</strong></div>)}</div></div></article>;
+  const stats = rows.reduce((map, item) => { const key = item.nutsName || item.nutsCode || "Χωρίς NUTS"; const current = map.get(key) ?? { count: 0, authorities: new Set<string>(), cpvs: new Map<string,number>() }; current.count += 1; current.authorities.add(item.authority); current.cpvs.set(item.cpv,(current.cpvs.get(item.cpv) ?? 0)+1); map.set(key,current); return map; }, new Map<string,{count:number;authorities:Set<string>;cpvs:Map<string,number>}>());
+  const regions = [...stats.entries()].sort((a,b) => b[1].count-a[1].count);
+  const max = Math.max(1,...regions.map((item) => item[1].count));
+  return <article className="panel nutsPanel"><PanelHeader title="Ενεργοί διαγωνισμοί ανά NUTS" caption={`${number.format(rows.length)} ενεργοί διαγωνισμοί`} /><div className="nutsMap"><div className="realMap"><iframe title="Χάρτης Ελλάδας" loading="lazy" src="https://www.openstreetmap.org/export/embed.html?bbox=18.4%2C34.4%2C30.4%2C42.2&amp;layer=mapnik" />{regions.slice(0,12).map(([name,data],index) => { const [left,top] = mapPosition(name,index); const topCpv=[...data.cpvs.entries()].sort((a,b)=>b[1]-a[1])[0]?.[0] ?? "—"; return <span className="mapPin" key={name} style={{left:`${left}%`,top:`${top}%`,width:`${22+(data.count/max)*20}px`,height:`${22+(data.count/max)*20}px`}}><b>{data.count}</b><span className="mapTooltip"><strong>{name}</strong><em>{data.count} ενεργοί διαγωνισμοί</em><em>{data.authorities.size} αναθέτουσες αρχές</em><em>Κορυφαίο CPV: {topCpv}</em></span></span>; })}<a className="mapCredit" href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">© OpenStreetMap</a></div><div className="nutsLegend">{regions.slice(0,10).map(([name,data]) => <div key={name}><span title={name}>{name}</span><i><b style={{width:`${(data.count/max)*100}%`}} /></i><strong>{number.format(data.count)}</strong></div>)}</div></div></article>;
 }
 
-function mapPoint(name: string, index: number): [number, number] {
+function mapPosition(name: string, index: number): [number, number] {
   const value = name.toLocaleLowerCase("el");
-  if (value.includes("θεσσαλον")) return [152,72]; if (value.includes("μακεδον") || value.includes("δράμα") || value.includes("έβρ")) return [190,58];
-  if (value.includes("αθην") || value.includes("αττικ")) return [198,190]; if (value.includes("πειρ")) return [180,204];
-  if (value.includes("κρήτ") || value.includes("χανι")) return [166,312]; if (value.includes("εύβ")) return [218,148];
-  if (value.includes("αχα") || value.includes("πάτρ")) return [123,231]; if (value.includes("κοριν")) return [159,218];
-  if (value.includes("θεσσαλ")) return [151,124]; if (value.includes("νησ") || value.includes("αιγα")) return [277,198];
-  return [[112,106],[177,105],[130,168],[215,132],[158,181]][index % 5] as [number,number];
+  if (value.includes("θεσσαλον")) return [47,22]; if (value.includes("μακεδον") || value.includes("δράμα") || value.includes("έβρ")) return [58,16];
+  if (value.includes("αθην") || value.includes("αττικ")) return [48,59]; if (value.includes("πειρ")) return [45,64];
+  if (value.includes("κρήτ") || value.includes("χανι")) return [48,88]; if (value.includes("εύβ")) return [53,49];
+  if (value.includes("αχα") || value.includes("πάτρ")) return [34,65]; if (value.includes("κοριν")) return [41,62];
+  if (value.includes("θεσσαλ")) return [43,39]; if (value.includes("νησ") || value.includes("αιγα")) return [70,61];
+  return [[36,31],[54,35],[38,51],[62,43],[51,72]][index % 5] as [number,number];
 }
 
 function MarketPanel({ awards, cpv, setCpv }: { awards: Award[]; cpv: string; setCpv: (value: string) => void }) {
   const [selectedContractor, setSelectedContractor] = useState("");
   const cpvOptions = [...new Map(awards.filter((item) => item.cpv !== "—").map((item) => [item.cpv, item.cpvDescription || "Χωρίς περιγραφή"])).entries()].sort();
-  const relevant = cpv ? awards.filter((item) => item.cpv.includes(cpv)) : awards;
+  const relevant = cpv ? awards.filter((item) => `${item.cpv} ${item.cpvDescription}`.toLocaleLowerCase("el").includes(cpv.toLocaleLowerCase("el"))) : awards;
   const contractors = [...relevant.reduce((map, item) => {
     if (!item.contractor || item.contractor === "Χωρίς ανάδοχο") return map;
     const current = map.get(item.contractor) ?? { name: item.contractor, awards: 0, value: 0, authorities: new Set<string>() };
@@ -246,7 +247,7 @@ function MarketPanel({ awards, cpv, setCpv }: { awards: Award[]; cpv: string; se
   return <>
     <article className="panel marketHero">
       <div><p className="eyebrow">COMPETITION MAPPING</p><h2>Ανάλυση ανταγωνισμού ανά CPV</h2><p>Επίλεξε CPV για να δεις τους αναδόχους, τις αναθέσεις και τη συνολική αξία.</p></div>
-      <label>CPV<select value={cpv} onChange={(event) => setCpv(event.target.value)}><option value="">Όλοι οι διαθέσιμοι CPV</option>{cpvOptions.map(([code,title]) => <option key={code} value={code}>{code} — {title}</option>)}</select></label>
+      <label>CPV<input list="market-cpv-options" value={cpv} onChange={(event) => setCpv(event.target.value)} placeholder="Γράψε κωδικό ή περιγραφή CPV" /><datalist id="market-cpv-options">{cpvOptions.map(([code,title]) => <option key={code} value={code} label={title} />)}</datalist></label>
     </article>
     <div className="metrics marketMetrics">
       <Metric label="Αναθέσεις" value={number.format(relevant.length)} tone="sky" />
