@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { readFile } from "node:fs/promises";
+import path from "node:path";
 
 type DbRecord = Record<string, string | number | boolean | null>;
 type CpvRow = { reference_number: string; cpv_code: string; cpv_description: string | null };
@@ -40,6 +42,18 @@ function statusFor(row: DbRecord) {
 }
 
 export async function GET() {
+  try {
+    // The curated Excel snapshot keeps the preview usable while the Supabase
+    // project is unavailable. Re-running the extractor refreshes this file.
+    const snapshotPath = path.join(process.cwd(), "data", "excel-procurement.json");
+    const snapshot = JSON.parse(await readFile(snapshotPath, "utf8"));
+    return NextResponse.json(snapshot, {
+      headers: { "Cache-Control": "public, s-maxage=300, stale-while-revalidate=3600" },
+    });
+  } catch (snapshotError) {
+    console.warn("Excel snapshot unavailable; falling back to Supabase", snapshotError);
+  }
+
   try {
     const [notices, auctions] = await Promise.all([
       supabaseGet(`notices?select=id,reference_number,title,organization_name,contract_type,publication_date,final_submission_date,opening_date,total_cost,status,cancel_date&order=publication_date.desc.nullslast&limit=${MAX_ROWS}`),
