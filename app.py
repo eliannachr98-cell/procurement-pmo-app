@@ -29,7 +29,7 @@ st.markdown(
     [data-testid="stSidebar"] {background:#f5f7fa; border-right:1px solid #e5e7eb;}
     [data-testid="stMetric"] {border:1px solid #e5e7eb; border-radius:12px; padding:10px 12px; background:#fff; box-shadow:0 4px 14px rgba(15,23,42,.04); min-height:112px;}
     [data-testid="stMetricLabel"] {color:var(--ts-muted); font-size:.82rem;}
-    [data-testid="stMetricValue"] {font-size:1.65rem; line-height:1.2; letter-spacing:-.02em; white-space:normal; overflow-wrap:anywhere;}
+    [data-testid="stMetricValue"] {font-size:1.35rem; line-height:1.2; letter-spacing:-.02em; white-space:normal; overflow-wrap:anywhere;}
     [data-testid="stMetricDelta"] {font-size:.75rem;}
     .ts-brand {font-size:2.35rem; font-weight:800; color:var(--ts-blue); letter-spacing:-.04em; line-height:1.05;}
     .ts-subtitle {color:var(--ts-muted); margin:.4rem 0 1.25rem; font-size:1rem;}
@@ -156,6 +156,19 @@ def contractor_options(df: pd.DataFrame) -> list[str]:
     return sorted(values, key=str.casefold)
 
 
+def contract_summary(row: pd.Series) -> tuple[int, float | None]:
+    references: set[str] = set()
+    amounts: list[float] = []
+    for index in range(1, 5):
+        reference = row.get(f"contract_adam_{index}")
+        if pd.notna(reference) and str(reference).strip():
+            references.add(str(reference).strip())
+        amount = pd.to_numeric(row.get(f"contract_value_{index}"), errors="coerce")
+        if pd.notna(amount):
+            amounts.append(float(amount))
+    return len(references), sum(amounts) if amounts else None
+
+
 def row_has_contractor(row: pd.Series, selected: list[str]) -> bool:
     if not selected:
         return True
@@ -231,14 +244,16 @@ def render_tender_detail(filtered: pd.DataFrame, selected_id: str):
     deadline = value(row, "final_submission_date", "opening_date")
     first_contract = first_non_null(row, [f"contract_date_{i}" for i in range(1, 5)] + ["contract_signed_date"])
     first_delivery = first_non_null(row, [f"delivery_date_{i}" for i in range(1, 5)] + ["end_date"])
+    contract_count, contracted_value = contract_summary(row)
 
     st.markdown(f"### {row.get('title', 'Χωρίς τίτλο')}")
     st.caption(f"{selected_id} • {row.get('authority', '—')} • {row.get('cpv_code', '—')}")
-    metrics = st.columns(4)
+    metrics = st.columns(5)
     metrics[0].metric("Κατάσταση", row.get("status", "—"))
     metrics[1].metric("Προϋπολογισμός", eur(value(row, "budget_vat", "total_cost")))
     metrics[2].metric("Αξία ανάθεσης", eur(value(row, "award_value")))
-    metrics[3].metric("Σύνολο συμβάσεων", eur(value(row, "total_contract_value")))
+    metrics[3].metric("Αριθμός συμβάσεων", contract_count)
+    metrics[4].metric("Συμβασιοποιημένη αξία", eur(contracted_value))
 
     phases = []
     for label, start, end in [
