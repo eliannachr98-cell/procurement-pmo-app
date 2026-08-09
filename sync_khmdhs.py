@@ -97,6 +97,24 @@ def find_contractor(item):
     name = next((item.get(k) for k in direct_name_keys if item.get(k)), None)
     vat = next((item.get(k) for k in direct_vat_keys if item.get(k)), None)
 
+    # KHMDHS awards currently keep contractors in this nested collection.
+    # Preserve every consortium/member instead of silently dropping the field.
+    details = item.get("contractingDataDetails") or {}
+    members = details.get("contractingMembersDataList") or [] if isinstance(details, dict) else []
+    if isinstance(members, list):
+        member_names = [
+            str(member.get("name")).strip()
+            for member in members
+            if isinstance(member, dict) and member.get("name")
+        ]
+        member_vats = [
+            str(member.get("vatNumber")).strip()
+            for member in members
+            if isinstance(member, dict) and member.get("vatNumber")
+        ]
+        name = name or " | ".join(dict.fromkeys(member_names)) or None
+        vat = vat or " | ".join(dict.fromkeys(member_vats)) or None
+
     def walk(obj):
         nonlocal name, vat
         if isinstance(obj, dict):
@@ -511,3 +529,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
