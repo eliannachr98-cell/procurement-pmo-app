@@ -1,317 +1,477 @@
+from __future__ import annotations
+
+from datetime import date
+from io import BytesIO
 from pathlib import Path
 import sqlite3
-from datetime import date, datetime
 
 import pandas as pd
 import plotly.express as px
-import plotly.graph_objects as go
 import streamlit as st
+
 
 BASE = Path(__file__).resolve().parent
 DB_PATH = BASE / "procurement.db"
+TODAY = pd.Timestamp(date.today())
 
-st.set_page_config(page_title="Procurement PMO Intelligence", page_icon="📊", layout="wide")
+st.set_page_config(
+    page_title="TenderScope",
+    page_icon="🔭",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
 
-# ---------- Styling ----------
-st.markdown("""
-<style>
-.block-container {padding-top: 1.4rem; padding-bottom: 2rem;}
-[data-testid="stMetric"] {border:1px solid #e7e7e7; border-radius:12px; padding:12px 14px; background:white;}
-.small-muted {color:#6b7280; font-size:0.88rem;}
-.stage {border:1px solid #e5e7eb; border-radius:12px; padding:12px; min-height:110px; background:#fff;}
-.stage-title {font-size:.82rem; color:#6b7280; margin-bottom:4px;}
-.stage-date {font-size:1.02rem; font-weight:700;}
-.stage-note {font-size:.78rem; color:#6b7280; margin-top:6px;}
-</style>
-""", unsafe_allow_html=True)
+st.markdown(
+    """
+    <style>
+    :root { --ts-blue:#17324d; --ts-coral:#ef5b5b; --ts-ink:#1f2937; --ts-muted:#6b7280; }
+    .block-container {padding-top:1.25rem; padding-bottom:2rem; max-width:1540px;}
+    [data-testid="stSidebar"] {background:#f5f7fa; border-right:1px solid #e5e7eb;}
+    [data-testid="stMetric"] {border:1px solid #e5e7eb; border-radius:14px; padding:14px 16px; background:#fff; box-shadow:0 4px 14px rgba(15,23,42,.04);}
+    [data-testid="stMetricLabel"] {color:var(--ts-muted);}
+    .ts-brand {font-size:2.35rem; font-weight:800; color:var(--ts-blue); letter-spacing:-.04em; line-height:1.05;}
+    .ts-subtitle {color:var(--ts-muted); margin:.4rem 0 1.25rem; font-size:1rem;}
+    .ts-kicker {font-size:.78rem; font-weight:700; color:var(--ts-coral); letter-spacing:.08em; text-transform:uppercase;}
+    .ts-card {border:1px solid #e5e7eb; border-radius:14px; padding:14px; background:#fff; min-height:116px;}
+    .ts-card-label {font-size:.78rem; color:var(--ts-muted); margin-bottom:6px;}
+    .ts-card-value {font-size:1.02rem; color:var(--ts-ink); font-weight:700;}
+    .ts-card-note {font-size:.76rem; color:var(--ts-muted); margin-top:7px;}
+    .ts-pill {display:inline-block; padding:4px 9px; border-radius:999px; font-size:.78rem; font-weight:650; background:#eef2f7; color:#334155;}
+    .ts-note {border-left:4px solid var(--ts-coral); background:#fff7f7; border-radius:8px; padding:11px 13px; color:#4b5563;}
+    div[data-testid="stRadio"] > div {gap:.35rem;}
+    div[data-testid="stRadio"] label {background:#f8fafc; border:1px solid #e5e7eb; border-radius:9px; padding:.45rem .75rem;}
+    .stButton button, .stDownloadButton button {border-radius:9px; font-weight:650;}
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
 
 @st.cache_resource
 def get_conn():
     return sqlite3.connect(DB_PATH, check_same_thread=False)
 
+
 @st.cache_data(show_spinner=False)
 def load_all():
     return pd.read_sql_query("SELECT * FROM tenders", get_conn())
 
-@st.cache_data(show_spinner=False)
-def distinct_values(col):
-    allowed = {"authority", "cpv_code", "procedure", "contract_type"}
-    if col not in allowed:
-        return []
-    q = f'SELECT DISTINCT "{col}" FROM tenders WHERE "{col}" IS NOT NULL AND TRIM("{col}") <> "" ORDER BY "{col}"'
-    return [r[0] for r in get_conn().execute(q).fetchall()]
 
-def parse_dates(df):
-    for c in ["publication_date","opening_date","cancellation_date","award_date",
-              "contract_date_1","contract_date_2","contract_date_3","contract_date_4",
-              "delivery_date_1","delivery_date_2","delivery_date_3","delivery_date_4"]:
-        if c in df:
-            df[c] = pd.to_datetime(df[c], errors="coerce")
+def existing(df: pd.DataFrame, *names: str) -> str | None:
+    return next((name for name in names if name in df.columns), None)
+
+
+def value(row: pd.Series, *names: str):
+    col = next((name for name in names if name in row.index), None)
+    return row.get(col) if col else None
+
+
+def parse_dates(df: pd.DataFrame) -> pd.DataFrame:
+    candidates = [
+        "publication_date", "final_submission_date", "opening_date", "cancellation_date",
+        "award_date", "contract_signed_date", "start_date", "end_date",
+    ]
+    candidates += [f"contract_date_{i}" for i in range(1, 5)]
+    candidates += [f"delivery_date_{i}" for i in range(1, 5)]
+    for col in candidates:
+        if col in df.columns:
+            df[col] = pd.to_datetime(df[col], errors="coerce")
     return df
 
-def first_non_null(row, cols):
-    for c in cols:
-        v = row.get(c)
-        if pd.notna(v) and str(v).strip() not in ("", "None", "nan"):
-            return v
+
+def first_non_null(row: pd.Series, columns: list[str]):
+    for col in columns:
+        if col not in row.index:
+            continue
+        item = row.get(col)
+        if pd.notna(item) and str(item).strip() not in {"", "None", "nan"}:
+            return item
     return None
 
-def lifecycle_status(row, today=None):
-    today = pd.Timestamp(today or date.today())
-    if bool(row.get("cancelled", 0)):
-        return "Ματαιωμένος"
-    deliveries = [row.get(f"delivery_date_{i}") for i in range(1,5)]
-    deliveries = [x for x in deliveries if pd.notna(x)]
-    contracts = [row.get(f"contract_date_{i}") for i in range(1,5)]
-    contracts = [x for x in contracts if pd.notna(x)]
-    if deliveries:
-        if max(deliveries) <= today:
-            return "Ολοκληρωμένος"
+
+def tender_id_col(df: pd.DataFrame) -> str:
+    return existing(df, "tender_adam", "reference_number") or "tender_adam"
+
+
+def deadline_col(df: pd.DataFrame) -> str | None:
+    return existing(df, "final_submission_date", "opening_date")
+
+
+def lifecycle_status(row: pd.Series) -> str:
+    if bool(value(row, "cancelled") or False):
+        return "Ακυρωμένος"
+
+    delivery = first_non_null(row, [f"delivery_date_{i}" for i in range(1, 5)] + ["end_date"])
+    contract = first_non_null(row, [f"contract_date_{i}" for i in range(1, 5)] + ["contract_signed_date"])
+    award = value(row, "award_date")
+    deadline = value(row, "final_submission_date", "opening_date")
+
+    if pd.notna(delivery):
+        return "Ολοκληρωμένος" if pd.Timestamp(delivery) <= TODAY else "Σε υλοποίηση"
+    if pd.notna(contract):
         return "Σε υλοποίηση"
-    if contracts:
-        return "Σε υλοποίηση"
-    if pd.notna(row.get("award_date")):
+    if pd.notna(award):
         return "Ανατεθειμένος"
-    if pd.notna(row.get("opening_date")) and row.get("opening_date") <= today:
+    if pd.notna(deadline) and pd.Timestamp(deadline) < TODAY:
         return "Αξιολόγηση"
-    return "Ενεργός / πριν την αποσφράγιση"
+    return "Ενεργός"
 
-def add_status(df):
-    if df.empty:
-        df["status"] = []
-        return df
-    df = df.copy()
-    df["status"] = df.apply(lifecycle_status, axis=1)
-    return df
 
-def eur(x):
-    if pd.isna(x): return "—"
-    return f"€{x:,.0f}".replace(",", ".")
+def add_status(df: pd.DataFrame) -> pd.DataFrame:
+    result = df.copy()
+    result["status"] = result.apply(lifecycle_status, axis=1) if not result.empty else pd.Series(dtype=str)
+    return result
 
-def fmt_date(x):
-    if pd.isna(x): return "—"
-    return pd.Timestamp(x).strftime("%d/%m/%Y")
 
-def days_between(a, b):
-    if pd.isna(a) or pd.isna(b): return None
-    d = (pd.Timestamp(b) - pd.Timestamp(a)).days
-    return d if d >= 0 else None
+def fmt_date(item) -> str:
+    return "—" if pd.isna(item) else pd.Timestamp(item).strftime("%d/%m/%Y")
 
-def render_stage(title, value, note=""):
-    st.markdown(f'<div class="stage"><div class="stage-title">{title}</div><div class="stage-date">{value}</div><div class="stage-note">{note}</div></div>', unsafe_allow_html=True)
 
-# ---------- Data ----------
-if not DB_PATH.exists():
-    st.error("Δεν βρέθηκε η βάση procurement.db. Τρέξε πρώτα το preprocess_master.py.")
-    st.stop()
+def eur(item) -> str:
+    if item is None or pd.isna(item):
+        return "—"
+    return f"€{float(item):,.0f}".replace(",", ".")
 
-df = parse_dates(load_all())
-df = add_status(df)
 
-# ---------- Header ----------
-st.title("Procurement PMO Intelligence")
-st.caption("Παρακολούθηση δημόσιων διαγωνισμών • lifecycle • CPV competition mapping")
+def days_between(start, end):
+    if pd.isna(start) or pd.isna(end):
+        return None
+    result = (pd.Timestamp(end) - pd.Timestamp(start)).days
+    return result if result >= 0 else None
 
-# ---------- Global filters ----------
-with st.sidebar:
-    st.header("Φίλτρα")
-    authority_opts = distinct_values("authority")
-    authority = st.selectbox("Αναθέτουσα Αρχή", ["Όλες"] + authority_opts)
 
-    cpv_search = st.text_input("CPV (κωδικός ή λέξη)", placeholder="π.χ. 72000000 ή λογισμικό")
-    status_opts = ["Όλα", "Ενεργοί μόνο", "Ενεργός / πριν την αποσφράγιση", "Αξιολόγηση", "Ανατεθειμένος", "Σε υλοποίηση", "Ολοκληρωμένος", "Ματαιωμένος"]
-    status_filter = st.selectbox("Κατάσταση", status_opts)
+def contractor_columns(df: pd.DataFrame) -> list[str]:
+    columns = [col for col in df.columns if col.startswith("contractor_")]
+    if "contractor_name" in df.columns:
+        columns.append("contractor_name")
+    return columns
 
-    min_date = df["publication_date"].min().date() if df["publication_date"].notna().any() else date(2024,1,1)
-    max_date = df["publication_date"].max().date() if df["publication_date"].notna().any() else date.today()
-    date_range = st.date_input("Ημ. δημοσίευσης", value=(min_date, max_date), min_value=min_date, max_value=max_date)
 
-    st.divider()
-    st.caption("Πηγή: ενοποιημένο φύλλο Δ-2024 του Master File")
+def contractor_options(df: pd.DataFrame) -> list[str]:
+    values: set[str] = set()
+    for col in contractor_columns(df):
+        values.update(df[col].dropna().astype(str).str.strip().loc[lambda s: s.ne("")].tolist())
+    return sorted(values, key=str.casefold)
 
-f = df.copy()
-if authority != "Όλες":
-    f = f[f["authority"] == authority]
-if cpv_search.strip():
-    s = cpv_search.strip().lower()
-    f = f[
-        f["cpv_code"].fillna("").astype(str).str.lower().str.contains(s, regex=False) |
-        f["cpv_description"].fillna("").astype(str).str.lower().str.contains(s, regex=False)
-    ]
-if isinstance(date_range, (tuple,list)) and len(date_range)==2:
-    start,end = pd.Timestamp(date_range[0]), pd.Timestamp(date_range[1])
-    f = f[(f["publication_date"] >= start) & (f["publication_date"] <= end)]
-if status_filter == "Ενεργοί μόνο":
-    f = f[~f["status"].isin(["Ολοκληρωμένος", "Ματαιωμένος"])]
-elif status_filter != "Όλα":
-    f = f[f["status"] == status_filter]
 
-# ---------- Navigation ----------
-page = st.radio("", ["Dashboard", "Διαγωνισμοί", "Καρτέλα Διαγωνισμού", "Competition Mapping"], horizontal=True, label_visibility="collapsed")
-st.divider()
+def row_has_contractor(row: pd.Series, selected: list[str]) -> bool:
+    if not selected:
+        return True
+    available = {str(row.get(col)).strip() for col in contractor_columns(row.to_frame().T) if pd.notna(row.get(col))}
+    return bool(available.intersection(selected))
 
-if page == "Dashboard":
-    c1,c2,c3,c4,c5 = st.columns(5)
-    c1.metric("Διαγωνισμοί", f"{f['tender_adam'].nunique():,}".replace(",","."))
-    active = (~f["status"].isin(["Ολοκληρωμένος","Ματαιωμένος"])).sum()
-    c2.metric("Ενεργοί", f"{active:,}".replace(",","."))
-    c3.metric("Συνολικός Π/Υ", eur(f["budget_vat"].sum()))
-    c4.metric("Συμβασιοποιημένη αξία", eur(f["total_contract_value"].sum()))
-    cancelled = (f["status"]=="Ματαιωμένος").mean()*100 if len(f) else 0
-    c5.metric("Ματαιώσεις", f"{cancelled:.1f}%")
 
-    left,right = st.columns(2)
-    with left:
-        st.subheader("Διαγωνισμοί ανά στάδιο")
-        s = f["status"].value_counts().reset_index()
-        s.columns=["Στάδιο","Πλήθος"]
-        fig=px.bar(s, x="Στάδιο", y="Πλήθος", text_auto=True)
-        fig.update_layout(xaxis_title=None, yaxis_title=None, height=390)
-        st.plotly_chart(fig, use_container_width=True)
-    with right:
-        st.subheader("Top CPV")
-        cp = (f.assign(cpv_label=f["cpv_code"].fillna("—")+" · "+f["cpv_description"].fillna(""))
-                .groupby("cpv_label")["tender_adam"].nunique().sort_values(ascending=False).head(12).reset_index(name="Πλήθος"))
-        fig=px.bar(cp.sort_values("Πλήθος"), x="Πλήθος", y="cpv_label", orientation="h")
-        fig.update_layout(xaxis_title=None, yaxis_title=None, height=390)
-        st.plotly_chart(fig, use_container_width=True)
+def render_stage(title: str, item, note: str = ""):
+    st.markdown(
+        f'<div class="ts-card"><div class="ts-card-label">{title}</div>'
+        f'<div class="ts-card-value">{fmt_date(item) if not isinstance(item, str) else item}</div>'
+        f'<div class="ts-card-note">{note}</div></div>',
+        unsafe_allow_html=True,
+    )
 
-    st.subheader("Χρόνοι lifecycle")
-    dd=f.copy()
-    dd["pub_to_open"]=(dd["opening_date"]-dd["publication_date"]).dt.days
-    dd["open_to_award"]=(dd["award_date"]-dd["opening_date"]).dt.days
-    dd["award_to_contract"]=(dd["contract_date_1"]-dd["award_date"]).dt.days
-    t1,t2,t3 = st.columns(3)
-    for box,col,label in [(t1,"pub_to_open","Δημοσίευση → Αποσφράγιση"),(t2,"open_to_award","Αποσφράγιση → Ανάθεση"),(t3,"award_to_contract","Ανάθεση → Σύμβαση")]:
-        vals=dd.loc[dd[col]>=0,col]
-        box.metric(label, "—" if vals.empty else f"{vals.mean():.0f} ημέρες")
 
-elif page == "Διαγωνισμοί":
-    st.subheader("Λίστα διαγωνισμών")
-    st.caption(f"{len(f):,} εγγραφές μετά τα φίλτρα".replace(",","."))
-    show = f[["tender_adam","title","authority","cpv_code","publication_date","opening_date","award_date","contract_date_1","status","budget_vat","total_contract_value"]].copy()
-    show.columns=["ΑΔΑΜ","Τίτλος","Αναθέτουσα Αρχή","CPV","Δημοσίευση","Αποσφράγιση","Ανάθεση","1η Σύμβαση","Κατάσταση","Π/Υ με ΦΠΑ","Αξία Συμβάσεων"]
-    show=show.sort_values("Δημοσίευση",ascending=False)
-    st.dataframe(show, use_container_width=True, hide_index=True, height=620,
-                 column_config={"Π/Υ με ΦΠΑ":st.column_config.NumberColumn(format="€ %.2f"),"Αξία Συμβάσεων":st.column_config.NumberColumn(format="€ %.2f")})
+def build_export(filtered: pd.DataFrame, applied_filters: dict[str, str]) -> bytes:
+    output = BytesIO()
+    id_col = tender_id_col(filtered)
+    summary = pd.DataFrame(
+        [
+            ["Ημερομηνία εξαγωγής", pd.Timestamp.now().strftime("%d/%m/%Y %H:%M")],
+            ["Διαγωνισμοί", filtered[id_col].nunique() if id_col in filtered else len(filtered)],
+            *[[label, selection] for label, selection in applied_filters.items()],
+        ],
+        columns=["Στοιχείο", "Τιμή"],
+    )
 
-elif page == "Καρτέλα Διαγωνισμού":
-    st.subheader("Καρτέλα Διαγωνισμού")
-    options = f[["tender_adam","title"]].dropna(subset=["tender_adam"]).drop_duplicates("tender_adam")
-    options["label"] = options["tender_adam"] + " — " + options["title"].fillna("").str.slice(0,100)
+    contracts = []
+    awards = []
+    for _, row in filtered.iterrows():
+        tender_adam = row.get(id_col)
+        if pd.notna(row.get("award_date")) or pd.notna(row.get("award_value")):
+            awards.append({
+                "ΑΔΑΜ Διακήρυξης": tender_adam,
+                "Ημερομηνία Ανάθεσης": row.get("award_date"),
+                "Αξία Ανάθεσης": row.get("award_value"),
+            })
+        for index in range(1, 5):
+            contract_adam = row.get(f"contract_adam_{index}")
+            if pd.notna(contract_adam) and str(contract_adam).strip():
+                contracts.append({
+                    "ΑΔΑΜ Διακήρυξης": tender_adam,
+                    "ΑΔΑΜ Σύμβασης": contract_adam,
+                    "Ημερομηνία Σύμβασης": row.get(f"contract_date_{index}"),
+                    "Ημερομηνία Λήξης": row.get(f"delivery_date_{index}"),
+                    "Ανάδοχος": row.get(f"contractor_{index}"),
+                    "Αξία": row.get(f"contract_value_{index}"),
+                })
+
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        summary.to_excel(writer, sheet_name="Σύνοψη", index=False)
+        filtered.to_excel(writer, sheet_name="Διαγωνισμοί", index=False)
+        pd.DataFrame(awards).to_excel(writer, sheet_name="Αναθέσεις", index=False)
+        pd.DataFrame(contracts).to_excel(writer, sheet_name="Συμβάσεις", index=False)
+        for sheet in writer.book.worksheets:
+            sheet.freeze_panes = "A2"
+            sheet.auto_filter.ref = sheet.dimensions
+            for column in sheet.columns:
+                width = min(max(len(str(cell.value or "")) for cell in column) + 2, 55)
+                sheet.column_dimensions[column[0].column_letter].width = max(width, 11)
+    output.seek(0)
+    return output.getvalue()
+
+
+def render_tender_detail(filtered: pd.DataFrame):
+    id_col = tender_id_col(filtered)
+    title_col = existing(filtered, "title")
+    options = filtered[[id_col, title_col]].dropna(subset=[id_col]).drop_duplicates(id_col).copy()
+    options["label"] = options[id_col].astype(str) + " — " + options[title_col].fillna("").str.slice(0, 100)
     if options.empty:
         st.info("Δεν υπάρχουν διαγωνισμοί με τα επιλεγμένα φίλτρα.")
-        st.stop()
-    selected = st.selectbox("Επίλεξε διαγωνισμό", options["label"].tolist())
-    adam = selected.split(" — ",1)[0]
-    r = f[f["tender_adam"]==adam].iloc[0]
+        return
 
-    st.markdown(f"### {r['title']}")
-    st.caption(f"{r['tender_adam']} • {r['authority']} • {r['cpv_code']} {r['cpv_description'] or ''}")
-    m1,m2,m3,m4=st.columns(4)
-    m1.metric("Κατάσταση",r["status"])
-    m2.metric("Προϋπολογισμός",eur(r["budget_vat"]))
-    m3.metric("Αξία ανάθεσης",eur(r["award_value"]))
-    m4.metric("Σύνολο συμβάσεων",eur(r["total_contract_value"]))
+    selected = st.selectbox("Άνοιγμα καρτέλας διαγωνισμού", options["label"].tolist())
+    selected_id = selected.split(" — ", 1)[0]
+    row = filtered[filtered[id_col].astype(str).eq(selected_id)].iloc[0]
+    deadline = value(row, "final_submission_date", "opening_date")
+    first_contract = first_non_null(row, [f"contract_date_{i}" for i in range(1, 5)] + ["contract_signed_date"])
+    first_delivery = first_non_null(row, [f"delivery_date_{i}" for i in range(1, 5)] + ["end_date"])
 
-    st.markdown("#### Lifecycle")
-    first_contract = first_non_null(r,[f"contract_date_{i}" for i in range(1,5)])
-    first_delivery = first_non_null(r,[f"delivery_date_{i}" for i in range(1,5)])
-    a,b,c,d,e,fstage,g = st.columns(7)
-    with a: render_stage("Δημοσίευση",fmt_date(r["publication_date"]),"Έναρξη procurement lifecycle")
-    with b: render_stage("Υποβολή","Μη διαθέσιμο","Δεν υπάρχει ξεχωριστή ημερομηνία στο Master")
-    with c: render_stage("Αποσφράγιση",fmt_date(r["opening_date"]),f"{days_between(r['publication_date'],r['opening_date']) or '—'} ημέρες από δημοσίευση")
-    with d: render_stage("Αξιολόγηση","Proxy περίοδος", "Αποσφράγιση → Ανάθεση")
-    with e: render_stage("Ανάθεση",fmt_date(r["award_date"]),f"{days_between(r['opening_date'],r['award_date']) or '—'} ημέρες αξιολόγησης")
-    with fstage: render_stage("Σύμβαση",fmt_date(first_contract),f"{days_between(r['award_date'],first_contract) or '—'} ημέρες μετά την ανάθεση")
-    with g: render_stage("Παράδοση",fmt_date(first_delivery),f"{days_between(first_contract,first_delivery) or '—'} ημέρες μετά τη σύμβαση")
+    st.markdown(f"### {row.get('title', 'Χωρίς τίτλο')}")
+    st.caption(f"{selected_id} • {row.get('authority', '—')} • {row.get('cpv_code', '—')}")
+    metrics = st.columns(4)
+    metrics[0].metric("Κατάσταση", row.get("status", "—"))
+    metrics[1].metric("Προϋπολογισμός", eur(value(row, "budget_vat", "total_cost")))
+    metrics[2].metric("Αξία ανάθεσης", eur(value(row, "award_value")))
+    metrics[3].metric("Σύνολο συμβάσεων", eur(value(row, "total_contract_value")))
 
-    gantt=[]
-    def add_phase(name,start,end):
-        if pd.notna(start) and pd.notna(end) and pd.Timestamp(end)>=pd.Timestamp(start):
-            gantt.append({"Στάδιο":name,"Έναρξη":pd.Timestamp(start),"Λήξη":pd.Timestamp(end)})
-    add_phase("Προκήρυξη / προετοιμασία",r["publication_date"],r["opening_date"])
-    add_phase("Αξιολόγηση (proxy)",r["opening_date"],r["award_date"])
-    add_phase("Συμβασιοποίηση",r["award_date"],first_contract)
-    add_phase("Υλοποίηση / Παράδοση",first_contract,first_delivery)
-    if gantt:
-        fig=px.timeline(pd.DataFrame(gantt),x_start="Έναρξη",x_end="Λήξη",y="Στάδιο",text="Στάδιο")
-        fig.update_yaxes(autorange="reversed",title=None)
-        fig.update_layout(xaxis_title=None,height=360,showlegend=False)
-        st.plotly_chart(fig,use_container_width=True)
+    st.markdown("#### Κύκλος ζωής")
+    stages = st.columns(5)
+    with stages[0]: render_stage("Δημοσίευση", value(row, "publication_date"))
+    with stages[1]: render_stage("Προθεσμία υποβολής", deadline)
+    with stages[2]: render_stage("Ανάθεση", value(row, "award_date"))
+    with stages[3]: render_stage("Σύμβαση", first_contract)
+    with stages[4]: render_stage("Ολοκλήρωση", first_delivery)
 
-    st.markdown("#### Συμβάσεις & ανάδοχοι")
-    contracts=[]
-    for i in range(1,5):
-        ca=r.get(f"contract_adam_{i}")
-        if pd.notna(ca) and str(ca).strip():
-            contracts.append({
-                "ΑΔΑΜ Σύμβασης":ca,
-                "Ημ. Σύμβασης":r.get(f"contract_date_{i}"),
-                "Ημ. Παράδοσης":r.get(f"delivery_date_{i}"),
-                "Ανάδοχος":r.get(f"contractor_{i}"),
-                "Αξία":r.get(f"contract_value_{i}")
-            })
-    if contracts:
-        st.dataframe(pd.DataFrame(contracts),use_container_width=True,hide_index=True,
-                     column_config={"Αξία":st.column_config.NumberColumn(format="€ %.2f")})
-    else:
-        st.info("Δεν έχει συνδεθεί σύμβαση με αυτόν τον διαγωνισμό.")
+    phases = []
+    for label, start, end in [
+        ("Υποβολή προσφορών", value(row, "publication_date"), deadline),
+        ("Αξιολόγηση", deadline, value(row, "award_date")),
+        ("Συμβασιοποίηση", value(row, "award_date"), first_contract),
+        ("Υλοποίηση", first_contract, first_delivery),
+    ]:
+        if pd.notna(start) and pd.notna(end) and pd.Timestamp(end) >= pd.Timestamp(start):
+            phases.append({"Στάδιο": label, "Έναρξη": pd.Timestamp(start), "Λήξη": pd.Timestamp(end)})
+    if phases:
+        fig = px.timeline(pd.DataFrame(phases), x_start="Έναρξη", x_end="Λήξη", y="Στάδιο", color="Στάδιο")
+        fig.update_yaxes(autorange="reversed", title=None)
+        fig.update_layout(height=350, xaxis_title=None, showlegend=False, margin=dict(l=10, r=10, t=20, b=10))
+        st.plotly_chart(fig, use_container_width=True)
 
-elif page == "Competition Mapping":
-    st.subheader("Competition Mapping ανά CPV")
-    st.caption("Ποιος έχει πάρει συμβάσεις, από ποιες Αναθέτουσες Αρχές, για τι αντικείμενο και με ποια αξία.")
 
-    cpv_base = df[["cpv_code","cpv_description"]].dropna(subset=["cpv_code"]).drop_duplicates()
-    cpv_base["label"] = cpv_base["cpv_code"].astype(str)+" — "+cpv_base["cpv_description"].fillna("")
-    if cpv_search.strip():
-        ss=cpv_search.strip().lower()
-        cpv_base=cpv_base[cpv_base["label"].str.lower().str.contains(ss,regex=False)]
-    cpv_label=st.selectbox("Επίλεξε CPV",cpv_base.sort_values("label")["label"].tolist()) if not cpv_base.empty else None
-    if not cpv_label:
-        st.info("Δεν βρέθηκε CPV.")
-        st.stop()
-    cpv=cpv_label.split(" — ",1)[0]
-    cdf=df[df["cpv_code"].astype(str)==cpv].copy()
-    if authority != "Όλες":
-        cdf=cdf[cdf["authority"]==authority]
+if not DB_PATH.exists():
+    st.error("Δεν βρέθηκε η προσωρινή βάση procurement.db. Η σύνδεση της οθόνης με τη Supabase είναι το επόμενο στάδιο.")
+    st.stop()
 
-    deals=[]
-    for _,r in cdf.iterrows():
-        for i in range(1,5):
-            contractor=r.get(f"contractor_{i}")
-            cadam=r.get(f"contract_adam_{i}")
-            value=r.get(f"contract_value_{i}")
-            if pd.notna(contractor) and str(contractor).strip():
-                deals.append({"Ανάδοχος":contractor,"Αξία":value,"Αναθέτουσα Αρχή":r["authority"],"Τίτλος":r["title"],"ΑΔΑΜ Διακήρυξης":r["tender_adam"],"ΑΔΑΜ Σύμβασης":cadam,"Ημ. Σύμβασης":r.get(f"contract_date_{i}")})
-    deals=pd.DataFrame(deals)
-    if deals.empty:
-        st.info("Δεν βρέθηκαν συνδεδεμένες συμβάσεις/ανάδοχοι για αυτόν τον CPV.")
-        st.stop()
+df = add_status(parse_dates(load_all()))
+id_col = tender_id_col(df)
+deadline = deadline_col(df)
 
-    k1,k2,k3,k4=st.columns(4)
-    k1.metric("Ανάδοχοι",deals["Ανάδοχος"].nunique())
-    k2.metric("Συμβάσεις",deals["ΑΔΑΜ Σύμβασης"].nunique())
-    k3.metric("Συνολική αξία",eur(deals["Αξία"].sum()))
-    k4.metric("Αναθέτουσες Αρχές",deals["Αναθέτουσα Αρχή"].nunique())
+st.markdown('<div class="ts-kicker">Public procurement intelligence</div>', unsafe_allow_html=True)
+st.markdown('<div class="ts-brand">TenderScope</div>', unsafe_allow_html=True)
+st.markdown('<div class="ts-subtitle">Ελληνικό Παρατηρητήριο Δημοσίων Συμβάσεων</div>', unsafe_allow_html=True)
 
-    summary=(deals.groupby("Ανάδοχος",dropna=False)
-             .agg(Συμβάσεις=("ΑΔΑΜ Σύμβασης","nunique"),Συνολική_Αξία=("Αξία","sum"),Αναθέτουσες_Αρχές=("Αναθέτουσα Αρχή","nunique"))
-             .reset_index().sort_values("Συνολική_Αξία",ascending=False))
-    left,right=st.columns([1.2,1])
+with st.sidebar:
+    st.markdown("### Φίλτρα")
+    authority_values = sorted(df.get("authority", pd.Series(dtype=str)).dropna().astype(str).unique(), key=str.casefold)
+    authority = st.selectbox("Αναθέτουσα Αρχή", ["Όλες"] + authority_values)
+
+    selected_contractors = st.multiselect(
+        "Ανάδοχος",
+        contractor_options(df),
+        placeholder="Επωνυμία αναδόχου",
+        help="Η επιλογή θα εμπλουτιστεί όταν ολοκληρωθεί η φόρτωση αναθέσεων και συμβάσεων.",
+    )
+    cpv_search = st.text_input("CPV (κωδικός ή λέξη)", placeholder="π.χ. 72000000 ή λογισμικό")
+
+    procedure_col = existing(df, "procedure_type_name", "procedure")
+    procedure_values = sorted(df[procedure_col].dropna().astype(str).unique(), key=str.casefold) if procedure_col else []
+    procedure = st.selectbox("Τύπος διαδικασίας", ["Όλοι"] + procedure_values, disabled=not procedure_values)
+
+    contract_type_col = existing(df, "contract_type")
+    contract_type_values = sorted(df[contract_type_col].dropna().astype(str).unique(), key=str.casefold) if contract_type_col else []
+    contract_type = st.selectbox("Τύπος σύμβασης", ["Όλοι"] + contract_type_values, disabled=not contract_type_values)
+
+    status_filter = st.selectbox(
+        "Κατάσταση",
+        ["Όλες", "Ενεργοί μόνο", "Ενεργός", "Αξιολόγηση", "Ανατεθειμένος", "Σε υλοποίηση", "Ολοκληρωμένος", "Ακυρωμένος"],
+    )
+    min_date = df["publication_date"].min().date() if df["publication_date"].notna().any() else date.today()
+    max_date = df["publication_date"].max().date() if df["publication_date"].notna().any() else date.today()
+    date_range = st.date_input("Ημερομηνία δημοσίευσης", value=(min_date, max_date), min_value=min_date, max_value=max_date)
+    st.divider()
+    st.caption("Πηγή δεδομένων: ΚΗΜΔΗΣ Open Data API")
+
+filtered = df.copy()
+if authority != "Όλες":
+    filtered = filtered[filtered["authority"].eq(authority)]
+if selected_contractors:
+    filtered = filtered[filtered.apply(row_has_contractor, axis=1, selected=selected_contractors)]
+if cpv_search.strip():
+    term = cpv_search.strip().casefold()
+    code = filtered.get("cpv_code", pd.Series("", index=filtered.index)).fillna("").astype(str).str.casefold()
+    description = filtered.get("cpv_description", pd.Series("", index=filtered.index)).fillna("").astype(str).str.casefold()
+    filtered = filtered[code.str.contains(term, regex=False) | description.str.contains(term, regex=False)]
+if procedure_col and procedure != "Όλοι":
+    filtered = filtered[filtered[procedure_col].astype(str).eq(procedure)]
+if contract_type_col and contract_type != "Όλοι":
+    filtered = filtered[filtered[contract_type_col].astype(str).eq(contract_type)]
+if isinstance(date_range, (tuple, list)) and len(date_range) == 2:
+    start, end = pd.Timestamp(date_range[0]), pd.Timestamp(date_range[1])
+    filtered = filtered[filtered["publication_date"].between(start, end)]
+if status_filter == "Ενεργοί μόνο":
+    filtered = filtered[~filtered["status"].isin(["Ολοκληρωμένος", "Ακυρωμένος"])]
+elif status_filter != "Όλες":
+    filtered = filtered[filtered["status"].eq(status_filter)]
+
+page = st.radio(
+    "Κύρια πλοήγηση",
+    ["Επισκόπηση", "Διαγωνισμοί", "Χάρτης", "Ανάλυση ανταγωνισμού", "🔔 Ειδοποιήσεις"],
+    horizontal=True,
+    label_visibility="collapsed",
+)
+st.divider()
+
+if page == "Επισκόπηση":
+    metric_cols = st.columns(5)
+    metric_cols[0].metric("Διαγωνισμοί", f"{filtered[id_col].nunique():,}".replace(",", "."))
+    active_mask = ~filtered["status"].isin(["Ολοκληρωμένος", "Ακυρωμένος"])
+    metric_cols[1].metric("Ενεργοί", f"{active_mask.sum():,}".replace(",", "."))
+    metric_cols[2].metric("Ανατεθειμένοι", int(filtered["status"].eq("Ανατεθειμένος").sum()))
+    metric_cols[3].metric("Χωρίς ανάθεση", int(filtered.get("award_date", pd.Series(index=filtered.index, dtype=float)).isna().sum()))
+    metric_cols[4].metric("Ακυρωμένοι", int(filtered["status"].eq("Ακυρωμένος").sum()))
+
+    left, right = st.columns(2)
     with left:
-        st.markdown("#### Ανάδοχοι")
-        st.dataframe(summary,use_container_width=True,hide_index=True,
-                     column_config={"Συνολική_Αξία":st.column_config.NumberColumn("Συνολική Αξία",format="€ %.2f"),"Αναθέτουσες_Αρχές":st.column_config.NumberColumn("Αναθέτουσες Αρχές")})
+        st.subheader("Διαγωνισμοί ανά στάδιο")
+        stage_counts = filtered["status"].value_counts().rename_axis("Στάδιο").reset_index(name="Πλήθος")
+        fig = px.bar(stage_counts, x="Στάδιο", y="Πλήθος", color="Στάδιο", text_auto=True)
+        fig.update_layout(height=390, showlegend=False, xaxis_title=None, yaxis_title=None)
+        st.plotly_chart(fig, use_container_width=True)
     with right:
-        top=summary.head(12).sort_values("Συνολική_Αξία")
-        fig=px.bar(top,x="Συνολική_Αξία",y="Ανάδοχος",orientation="h")
-        fig.update_layout(xaxis_title="Αξία (€)",yaxis_title=None,height=430)
-        st.plotly_chart(fig,use_container_width=True)
+        st.subheader("Κορυφαίοι CPV")
+        cpv_data = filtered.copy()
+        cpv_data["CPV"] = cpv_data.get("cpv_code", "—").fillna("—").astype(str) + " · " + cpv_data.get("cpv_description", "").fillna("")
+        cpv_counts = cpv_data.groupby("CPV")[id_col].nunique().nlargest(10).sort_values().reset_index(name="Πλήθος")
+        fig = px.bar(cpv_counts, x="Πλήθος", y="CPV", orientation="h", color_discrete_sequence=["#17324d"])
+        fig.update_layout(height=390, xaxis_title=None, yaxis_title=None)
+        st.plotly_chart(fig, use_container_width=True)
 
-    st.markdown("#### Τι αφορά")
-    st.dataframe(deals.sort_values("Αξία",ascending=False),use_container_width=True,hide_index=True,height=500,
-                 column_config={"Αξία":st.column_config.NumberColumn(format="€ %.2f")})
+elif page == "Διαγωνισμοί":
+    list_tab, gantt_tab, analysis_tab = st.tabs(["Λίστα", "Χρονοδιάγραμμα", "Αναλύσεις"])
+    with list_tab:
+        top_left, top_right = st.columns([3, 1])
+        top_left.subheader("Λίστα διαγωνισμών")
+        top_left.caption(f"{len(filtered):,} εγγραφές μετά τα φίλτρα".replace(",", "."))
+        applied = {
+            "Αναθέτουσα Αρχή": authority,
+            "Ανάδοχος": ", ".join(selected_contractors) or "Όλοι",
+            "CPV": cpv_search or "Όλοι",
+            "Κατάσταση": status_filter,
+        }
+        top_right.download_button(
+            "⬇ Εξαγωγή σε Excel",
+            data=build_export(filtered, applied),
+            file_name=f"tenderscope_{date.today().isoformat()}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True,
+        )
+        table_columns = [col for col in [id_col, "title", "authority", "cpv_code", "publication_date", deadline, "status"] if col]
+        table = filtered[table_columns].copy().sort_values("publication_date", ascending=False)
+        table.columns = ["ΑΔΑΜ", "Τίτλος", "Αναθέτουσα Αρχή", "CPV", "Δημοσίευση", "Προθεσμία υποβολής", "Κατάσταση"][:len(table.columns)]
+        st.dataframe(table, use_container_width=True, hide_index=True, height=520)
+        with st.expander("Προβολή καρτέλας διαγωνισμού", expanded=False):
+            render_tender_detail(filtered)
+
+    with gantt_tab:
+        st.subheader("Χρονοδιάγραμμα ενεργών διαγωνισμών")
+        if deadline:
+            gantt = filtered.loc[
+                filtered["publication_date"].notna() & filtered[deadline].notna() & filtered[deadline].ge(filtered["publication_date"]),
+                [id_col, "title", "publication_date", deadline, "status"],
+            ].copy().sort_values(deadline).head(75)
+            if gantt.empty:
+                st.info("Δεν υπάρχουν διαθέσιμες περίοδοι με τα επιλεγμένα φίλτρα.")
+            else:
+                gantt["Ετικέτα"] = gantt[id_col].astype(str) + " · " + gantt["title"].fillna("").str.slice(0, 55)
+                fig = px.timeline(gantt, x_start="publication_date", x_end=deadline, y="Ετικέτα", color="status")
+                fig.add_vline(x=TODAY.timestamp() * 1000, line_dash="dash", line_color="#ef5b5b")
+                fig.update_yaxes(autorange="reversed", title=None)
+                fig.update_layout(height=max(460, min(1500, 26 * len(gantt))), xaxis_title=None, legend_title=None)
+                st.plotly_chart(fig, use_container_width=True)
+                st.caption("Εμφανίζονται έως 75 διαγωνισμοί για καθαρή και γρήγορη απεικόνιση.")
+        else:
+            st.info("Το χρονοδιάγραμμα θα ενεργοποιηθεί όταν συνδεθεί η προθεσμία υποβολής.")
+
+    with analysis_tab:
+        st.subheader("Ανάλυση διαγωνισμών")
+        monthly = filtered.dropna(subset=["publication_date"]).copy()
+        monthly["Μήνας"] = monthly["publication_date"].dt.to_period("M").astype(str)
+        monthly_counts = monthly.groupby("Μήνας")[id_col].nunique().reset_index(name="Διαγωνισμοί")
+        fig = px.line(monthly_counts, x="Μήνας", y="Διαγωνισμοί", markers=True, color_discrete_sequence=["#ef5b5b"])
+        fig.update_layout(height=380, xaxis_title=None)
+        st.plotly_chart(fig, use_container_width=True)
+
+elif page == "Χάρτης":
+    st.subheader("Ενεργοί διαγωνισμοί ανά έδρα Αναθέτουσας Αρχής")
+    nuts_col = existing(filtered, "nuts_code", "nuts")
+    if not nuts_col:
+        st.info("Ο χάρτης θα ενεργοποιηθεί όταν το πεδίο NUTS μεταφερθεί από το raw_data στη βάση δεδομένων.")
+    else:
+        active = filtered[filtered["status"].eq("Ενεργός") & filtered[nuts_col].notna()].copy()
+        counts = active.groupby(nuts_col)[id_col].nunique().sort_values(ascending=False).reset_index(name="Ενεργοί διαγωνισμοί")
+        st.dataframe(counts, use_container_width=True, hide_index=True)
+        st.caption("Το NUTS αφορά την έδρα της Αναθέτουσας Αρχής και όχι τον τόπο εκτέλεσης της σύμβασης.")
+
+elif page == "Ανάλυση ανταγωνισμού":
+    st.subheader("Ανάλυση ανταγωνισμού ανά CPV")
+    st.caption("Ανάδοχοι, συμβάσεις, Αναθέτουσες Αρχές και συνολική αξία για τον επιλεγμένο CPV.")
+    columns = contractor_columns(filtered)
+    if not columns:
+        st.info("Η ανάλυση θα ενεργοποιηθεί όταν ολοκληρωθεί η σύνδεση αναθέσεων και συμβάσεων.")
+    else:
+        records = []
+        for _, row in filtered.iterrows():
+            for index in range(1, 5):
+                contractor = row.get(f"contractor_{index}")
+                if pd.notna(contractor) and str(contractor).strip():
+                    records.append({
+                        "Ανάδοχος": contractor,
+                        "Αναθέτουσα Αρχή": row.get("authority"),
+                        "ΑΔΑΜ": row.get(id_col),
+                        "Αξία": row.get(f"contract_value_{index}"),
+                    })
+        deals = pd.DataFrame(records)
+        if deals.empty:
+            st.info("Δεν υπάρχουν ακόμη συνδεδεμένες συμβάσεις για τα επιλεγμένα φίλτρα.")
+        else:
+            competition = deals.groupby("Ανάδοχος").agg(
+                Συμβάσεις=("ΑΔΑΜ", "nunique"),
+                Συνολική_Αξία=("Αξία", "sum"),
+                Αναθέτουσες_Αρχές=("Αναθέτουσα Αρχή", "nunique"),
+            ).reset_index().sort_values("Συνολική_Αξία", ascending=False)
+            st.dataframe(competition, use_container_width=True, hide_index=True)
+
+elif page == "🔔 Ειδοποιήσεις":
+    st.subheader("Ειδοποιήσεις CPV")
+    st.markdown(
+        '<div class="ts-note">Οι συνδρομές θα ενεργοποιηθούν μετά την προσθήκη χρηστών και του πίνακα alerts στη Supabase. '
+        'Έτσι κάθε ειδοποίηση θα αποστέλλεται μία φορά και δεν θα χάνεται όταν κλείνει η εφαρμογή.</div>',
+        unsafe_allow_html=True,
+    )
+    cpv_values = sorted(df.get("cpv_code", pd.Series(dtype=str)).dropna().astype(str).unique())
+    st.multiselect("CPV ενδιαφέροντος", cpv_values, disabled=True, placeholder="Διαθέσιμο στην επόμενη φάση")
+    st.toggle("Ειδοποίηση μέσα στην εφαρμογή", value=True, disabled=True)
+    st.toggle("Ημερήσιο email", value=False, disabled=True)
 
 st.divider()
-st.caption("MVP v0.2 • Data source: Master-File_06082026.xlsx / Δ-2024 • Submission date and a distinct evaluation milestone are not available as separate source fields.")
+st.caption("TenderScope • Ελληνικό Παρατηρητήριο Δημοσίων Συμβάσεων • Πηγή: ΚΗΜΔΗΣ Open Data API")
+
