@@ -107,7 +107,7 @@ export default function Home() {
   const contractors = [...new Set(tenders.flatMap((item) => item.contractors ?? []).filter(Boolean))].sort();
   const years = [...new Set(tenders.map((item) => item.publicationDate?.slice(0, 4)).filter(Boolean))].sort().reverse();
   const contractTypes = [...new Set(tenders.map((item) => item.contractType).filter(Boolean))].sort();
-  const documentTypes = [...new Set(tenders.map((item) => item.documentType).filter(Boolean))].sort();
+  const documentTypes = ["Διακήρυξη", "Τροποποίηση", "Απόφαση", "Διευκρίνιση", "Παράταση", "Ακύρωση", "Λοιπό"];
   const cpvOptions = [...new Map(tenders.filter((item) => item.cpv && item.cpv !== "—").map((item) => [item.cpv, item.cpvDescription || "Χωρίς περιγραφή"])).entries()].sort();
   const statusCount = (value: Status) => filtered.filter((item) => item.status === value).length;
 
@@ -233,6 +233,7 @@ function MarketPanel({ awards, cpv, setCpv }: { awards: Award[]; cpv: string; se
   const cpvOptions = [...new Map(awards.filter((item) => item.cpv !== "—").map((item) => [item.cpv, item.cpvDescription || "Χωρίς περιγραφή"])).entries()].sort();
   const relevant = cpv ? awards.filter((item) => item.cpv.includes(cpv)) : awards;
   const contractors = [...relevant.reduce((map, item) => {
+    if (!item.contractor || item.contractor === "Χωρίς ανάδοχο") return map;
     const current = map.get(item.contractor) ?? { name: item.contractor, awards: 0, value: 0, authorities: new Set<string>() };
     current.awards += 1;
     current.value += item.value;
