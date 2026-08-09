@@ -108,6 +108,7 @@ export default function Home() {
   const years = [...new Set(tenders.map((item) => item.publicationDate?.slice(0, 4)).filter(Boolean))].sort().reverse();
   const contractTypes = [...new Set(tenders.map((item) => item.contractType).filter(Boolean))].sort();
   const documentTypes = [...new Set(tenders.map((item) => item.documentType).filter(Boolean))].sort();
+  const cpvOptions = [...new Map(tenders.filter((item) => item.cpv && item.cpv !== "—").map((item) => [item.cpv, item.cpvDescription || "Χωρίς περιγραφή"])).entries()].sort();
   const statusCount = (value: Status) => filtered.filter((item) => item.status === value).length;
 
   return (
@@ -161,7 +162,7 @@ export default function Home() {
           <label>Έτος<select value={year} onChange={(event) => setYear(event.target.value)}><option>Όλα</option>{years.map((item) => <option key={item}>{item}</option>)}</select></label>
           <label>Αναθέτουσα Αρχή<input list="authority-options" value={authority === "Όλες" ? "" : authority} onChange={(event) => setAuthority(event.target.value)} placeholder="Γράψε ή επίλεξε αρχή" /><datalist id="authority-options">{authorities.map((item) => <option key={item} value={item} />)}</datalist></label>
           <label>Ανάδοχος<input list="contractor-options" value={contractor} onChange={(event) => setContractor(event.target.value)} placeholder="Γράψε ή επίλεξε ανάδοχο" /><datalist id="contractor-options">{contractors.map((item) => <option key={item} value={item} />)}</datalist></label>
-          <label>CPV<input value={cpv} onChange={(event) => setCpv(event.target.value)} placeholder="Κωδικός ή λέξη" /></label>
+          <label>CPV<input list="cpv-options" value={cpv} onChange={(event) => setCpv(event.target.value)} placeholder="Γράψε κωδικό ή περιγραφή" /><datalist id="cpv-options">{cpvOptions.map(([code,title]) => <option key={code} value={code} label={title} />)}</datalist></label>
           <label>Τύπος σύμβασης<select value={contractType} onChange={(event) => setContractType(event.target.value)}><option>Όλοι</option>{contractTypes.map((item) => <option key={item}>{item}</option>)}</select></label>
           <label>Τύπος εγγράφου<select value={documentType} onChange={(event) => setDocumentType(event.target.value)}><option>Όλοι</option>{documentTypes.map((item) => <option key={item}>{item}</option>)}</select></label>
           <label>Κατάσταση<select value={status} onChange={(event) => setStatus(event.target.value)}><option>Όλες</option>{Object.keys(statusTone).map((item) => <option key={item}>{item}</option>)}</select></label>
@@ -214,10 +215,21 @@ function TenderDetail({ tender, onBack }: { tender: Tender; onBack: () => void }
 function NutsMap({ rows }: { rows: Tender[] }) {
   const regions = [...rows.reduce((map, item) => { const key = item.nutsName || item.nutsCode || "Χωρίς NUTS"; map.set(key, (map.get(key) ?? 0) + 1); return map; }, new Map<string, number>())].sort((a,b) => b[1]-a[1]);
   const max = Math.max(1,...regions.map((item) => item[1]));
-  return <article className="panel nutsPanel"><PanelHeader title="Ενεργοί διαγωνισμοί ανά NUTS" caption={`${number.format(rows.length)} ενεργοί διαγωνισμοί`} /><div className="nutsMap"><div className="greeceShape"><span className="north">Βόρεια Ελλάδα</span><span className="central">Κεντρική Ελλάδα</span><span className="attica">Αττική</span><span className="islands">Νησιά</span><span className="crete">Κρήτη</span></div><div className="nutsLegend">{regions.slice(0,10).map(([name,count]) => <div key={name}><span title={name}>{name}</span><i><b style={{width:`${(count/max)*100}%`}} /></i><strong>{number.format(count)}</strong></div>)}</div></div></article>;
+  return <article className="panel nutsPanel"><PanelHeader title="Ενεργοί διαγωνισμοί ανά NUTS" caption={`${number.format(rows.length)} ενεργοί διαγωνισμοί`} /><div className="nutsMap"><div className="geoMap"><svg viewBox="0 0 360 340" role="img" aria-label="Χάρτης ενεργών διαγωνισμών στην Ελλάδα"><path className="mainland" d="M72 38 L128 22 184 34 229 65 216 92 244 113 218 137 231 164 204 185 184 177 167 207 145 225 127 204 111 169 82 154 64 119 83 91 58 67Z"/><path className="peloponnese" d="M139 214 L177 201 199 225 190 260 154 278 118 256 112 231Z"/><path className="crete" d="M113 312 L206 301 261 307 226 322 151 326Z"/><g className="islandDots"><circle cx="274" cy="118" r="5"/><circle cx="295" cy="151" r="4"/><circle cx="263" cy="178" r="5"/><circle cx="307" cy="207" r="4"/><circle cx="282" cy="243" r="6"/><circle cx="44" cy="203" r="5"/></g>{regions.slice(0,10).map(([name,count],index) => { const [x,y] = mapPoint(name,index); return <g className="mapMarker" key={name} transform={`translate(${x} ${y})`}><circle r={7 + (count/max)*13}/><text y="4">{count}</text><title>{name}: {count}</title></g>; })}</svg><div className="mapHint">Το μέγεθος του κύκλου δείχνει τον αριθμό ενεργών διαγωνισμών.</div></div><div className="nutsLegend">{regions.slice(0,10).map(([name,count]) => <div key={name}><span title={name}>{name}</span><i><b style={{width:`${(count/max)*100}%`}} /></i><strong>{number.format(count)}</strong></div>)}</div></div></article>;
+}
+
+function mapPoint(name: string, index: number): [number, number] {
+  const value = name.toLocaleLowerCase("el");
+  if (value.includes("θεσσαλον")) return [152,72]; if (value.includes("μακεδον") || value.includes("δράμα") || value.includes("έβρ")) return [190,58];
+  if (value.includes("αθην") || value.includes("αττικ")) return [198,190]; if (value.includes("πειρ")) return [180,204];
+  if (value.includes("κρήτ") || value.includes("χανι")) return [166,312]; if (value.includes("εύβ")) return [218,148];
+  if (value.includes("αχα") || value.includes("πάτρ")) return [123,231]; if (value.includes("κοριν")) return [159,218];
+  if (value.includes("θεσσαλ")) return [151,124]; if (value.includes("νησ") || value.includes("αιγα")) return [277,198];
+  return [[112,106],[177,105],[130,168],[215,132],[158,181]][index % 5] as [number,number];
 }
 
 function MarketPanel({ awards, cpv, setCpv }: { awards: Award[]; cpv: string; setCpv: (value: string) => void }) {
+  const [selectedContractor, setSelectedContractor] = useState("");
   const cpvOptions = [...new Map(awards.filter((item) => item.cpv !== "—").map((item) => [item.cpv, item.cpvDescription || "Χωρίς περιγραφή"])).entries()].sort();
   const relevant = cpv ? awards.filter((item) => item.cpv.includes(cpv)) : awards;
   const contractors = [...relevant.reduce((map, item) => {
@@ -241,8 +253,13 @@ function MarketPanel({ awards, cpv, setCpv }: { awards: Award[]; cpv: string; se
       <Metric label="Αναθέτουσες Αρχές" value={number.format(new Set(relevant.map((item) => item.authority)).size)} tone="sand" />
       <Metric label="Συνολική αξία" value={euro.format(relevant.reduce((sum, item) => sum + item.value, 0))} tone="lilac" />
     </div>
-    <article className="panel tablePanel"><PanelHeader title="Κατάταξη αναδόχων" caption={`${number.format(contractors.length)} ανάδοχοι στα τρέχοντα δεδομένα`} /><div className="tableScroll"><table><thead><tr><th>Ανάδοχος</th><th>Αναθέσεις</th><th>Αναθέτουσες Αρχές</th><th>Συνολική αξία</th></tr></thead><tbody>{contractors.map((item) => <tr key={item.name}><td><strong>{item.name}</strong></td><td>{number.format(item.awards)}</td><td>{number.format(item.authorities.size)}</td><td>{euro.format(item.value)}</td></tr>)}</tbody></table></div>{!contractors.length && <p className="noRows">Δεν βρέθηκαν αναθέσεις για τον επιλεγμένο CPV.</p>}</article>
+    <article className="panel tablePanel"><PanelHeader title="Κατάταξη αναδόχων" caption="Πάτησε έναν ανάδοχο για να δεις τις αναθέσεις του" /><div className="tableScroll"><table><thead><tr><th>Ανάδοχος</th><th>Αναθέσεις</th><th>Αναθέτουσες Αρχές</th><th>Συνολική αξία</th></tr></thead><tbody>{contractors.map((item) => <tr key={item.name} className={selectedContractor === item.name ? "selectedRow" : ""} onClick={() => setSelectedContractor(item.name)}><td><button className="contractorLink">{item.name}</button></td><td>{number.format(item.awards)}</td><td>{number.format(item.authorities.size)}</td><td>{euro.format(item.value)}</td></tr>)}</tbody></table></div>{!contractors.length && <p className="noRows">Δεν βρέθηκαν αναθέσεις για τον επιλεγμένο CPV.</p>}</article>
+    {selectedContractor && <ContractorAwards name={selectedContractor} rows={relevant.filter((item) => item.contractor === selectedContractor)} onClose={() => setSelectedContractor("")} />}
   </>;
+}
+
+function ContractorAwards({ name, rows, onClose }: { name: string; rows: Award[]; onClose: () => void }) {
+  return <article className="panel contractorAwards"><header><div><p className="eyebrow">ΑΝΑΘΕΣΕΙΣ ΑΝΑΔΟΧΟΥ</p><h2>{name}</h2><p>{number.format(rows.length)} εγγραφές · {euro.format(rows.reduce((sum,item) => sum + item.value,0))}</p></div><button onClick={onClose}>Κλείσιμο ×</button></header><div className="tableScroll"><table><thead><tr><th>ΑΔΑΜ</th><th>Τίτλος ανάθεσης / διαγωνισμού</th><th>Αναθέτουσα Αρχή</th><th>CPV</th><th>Ημερομηνία</th><th>Αξία</th></tr></thead><tbody>{rows.map((item) => <tr key={`${item.adam}-${item.title}`}><td className="adam">{item.adam}</td><td>{item.title}</td><td>{item.authority}</td><td><strong>{item.cpv}</strong><small className="cellSub">{item.cpvDescription}</small></td><td>{formatDate(item.awardDate)}</td><td>{euro.format(item.value)}</td></tr>)}</tbody></table></div></article>;
 }
 
 function formatDate(value?: string) {
