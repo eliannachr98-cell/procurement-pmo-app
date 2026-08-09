@@ -6,6 +6,7 @@ type DbRecord = Record<string, string | number | boolean | null>;
 type CpvRow = { reference_number: string; cpv_code: string; cpv_description: string | null };
 
 const MAX_ROWS = 1000;
+export const dynamic = "force-dynamic";
 
 async function supabaseGet(path: string) {
   const url = process.env.SUPABASE_URL;
@@ -60,7 +61,7 @@ export async function GET() {
       },
     };
     return NextResponse.json(snapshot, {
-      headers: { "Cache-Control": "public, s-maxage=300, stale-while-revalidate=3600" },
+      headers: { "Cache-Control": "no-store, max-age=0" },
     });
   } catch (snapshotError) {
     console.warn("Excel snapshot unavailable; falling back to Supabase", snapshotError);
