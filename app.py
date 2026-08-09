@@ -479,7 +479,11 @@ elif page == "Ανάλυση ανταγωνισμού":
                     records.append({
                         "Ανάδοχος": contractor,
                         "Αναθέτουσα Αρχή": row.get("authority"),
-                        "ΑΔΑΜ": row.get(id_col),
+                        "ΑΔΑΜ Διακήρυξης": row.get(id_col),
+                        "Τίτλος Διαγωνισμού": row.get("title"),
+                        "CPV": row.get("cpv_code"),
+                        "ΑΔΑΜ Σύμβασης": row.get(f"contract_adam_{index}"),
+                        "Ημερομηνία Σύμβασης": row.get(f"contract_date_{index}"),
                         "Αξία": row.get(f"contract_value_{index}"),
                     })
         deals = pd.DataFrame(records)
@@ -487,11 +491,67 @@ elif page == "Ανάλυση ανταγωνισμού":
             st.info("Δεν υπάρχουν ακόμη συνδεδεμένες συμβάσεις για τα επιλεγμένα φίλτρα.")
         else:
             competition = deals.groupby("Ανάδοχος").agg(
-                Συμβάσεις=("ΑΔΑΜ", "nunique"),
+                Διαγωνισμοί=("ΑΔΑΜ Διακήρυξης", "nunique"),
+                Συμβάσεις=("ΑΔΑΜ Σύμβασης", "nunique"),
                 Συνολική_Αξία=("Αξία", "sum"),
                 Αναθέτουσες_Αρχές=("Αναθέτουσα Αρχή", "nunique"),
-            ).reset_index().sort_values("Συνολική_Αξία", ascending=False)
-            st.dataframe(competition, use_container_width=True, hide_index=True)
+            ).reset_index().sort_values("Συνολική_Αξία", ascending=False).reset_index(drop=True)
+            st.caption("Πάτησε επάνω σε έναν ανάδοχο για να δεις τους διαγωνισμούς και τις συμβάσεις του.")
+            contractor_selection = st.dataframe(
+                competition,
+                use_container_width=True,
+                hide_index=True,
+                on_select="rerun",
+                selection_mode="single-row",
+                key="contractor_mapping",
+                column_config={
+                    "Συνολική_Αξία": st.column_config.NumberColumn("Συνολική αξία", format="€ %.2f"),
+                    "Αναθέτουσες_Αρχές": st.column_config.NumberColumn("Αναθέτουσες Αρχές"),
+                },
+            )
+            if contractor_selection.selection.rows:
+                selected_row = contractor_selection.selection.rows[0]
+                st.session_state["selected_mapping_contractor"] = competition.iloc[selected_row]["Ανάδοχος"]
+
+            selected_contractor = st.session_state.get("selected_mapping_contractor")
+            if selected_contractor:
+                contractor_deals = deals[deals["Ανάδοχος"].eq(selected_contractor)].copy()
+                st.divider()
+                st.markdown(f"### {selected_contractor}")
+                summary_cols = st.columns(4)
+                summary_cols[0].metric("Διαγωνισμοί", contractor_deals["ΑΔΑΜ Διακήρυξης"].nunique())
+                summary_cols[1].metric("Συμβάσεις", contractor_deals["ΑΔΑΜ Σύμβασης"].nunique())
+                summary_cols[2].metric("Αναθέτουσες Αρχές", contractor_deals["Αναθέτουσα Αρχή"].nunique())
+                summary_cols[3].metric("Συνολική αξία", eur(contractor_deals["Αξία"].sum()))
+
+                tenders_tab, contracts_tab, chart_tab = st.tabs(["Διαγωνισμοί", "Συμβάσεις", "Κατανομή"])
+                with tenders_tab:
+                    tender_details = contractor_deals[[
+                        "ΑΔΑΜ Διακήρυξης", "Τίτλος Διαγωνισμού", "Αναθέτουσα Αρχή", "CPV"
+                    ]].drop_duplicates("ΑΔΑΜ Διακήρυξης")
+                    st.dataframe(tender_details, use_container_width=True, hide_index=True)
+                with contracts_tab:
+                    contract_details = contractor_deals[[
+                        "ΑΔΑΜ Σύμβασης", "ΑΔΑΜ Διακήρυξης", "Ημερομηνία Σύμβασης",
+                        "Αναθέτουσα Αρχή", "Αξία"
+                    ]].sort_values("Ημερομηνία Σύμβασης", ascending=False)
+                    st.dataframe(
+                        contract_details,
+                        use_container_width=True,
+                        hide_index=True,
+                        column_config={"Αξία": st.column_config.NumberColumn(format="€ %.2f")},
+                    )
+                with chart_tab:
+                    authority_values = contractor_deals.groupby("Αναθέτουσα Αρχή", dropna=False)["Αξία"].sum().reset_index()
+                    fig = px.pie(
+                        authority_values,
+                        names="Αναθέτουσα Αρχή",
+                        values="Αξία",
+                        hole=.48,
+                        title="Αξία συμβάσεων ανά Αναθέτουσα Αρχή",
+                    )
+                    fig.update_layout(height=430, legend_title=None)
+                    st.plotly_chart(fig, use_container_width=True)
 
 elif page == "🔔 Ειδοποιήσεις":
     st.subheader("Ειδοποιήσεις CPV")
