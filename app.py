@@ -13,6 +13,15 @@ import streamlit as st
 BASE = Path(__file__).resolve().parent
 DB_PATH = BASE / "procurement.db"
 TODAY = pd.Timestamp(date.today())
+STATUS_COLORS = {
+    "Ενεργός": "#168C8C",
+    "Αξιολόγηση": "#E9A23B",
+    "Ανατεθειμένος": "#2F6B9A",
+    "Σε υλοποίηση": "#6257A8",
+    "Ολοκληρωμένος": "#2E8B57",
+    "Ακυρωμένος": "#D9534F",
+}
+CHART_COLORS = ["#17324D", "#168C8C", "#2E8B57", "#E9A23B", "#6257A8", "#D9534F"]
 
 st.set_page_config(
     page_title="TenderScope",
@@ -24,7 +33,8 @@ st.set_page_config(
 st.markdown(
     """
     <style>
-    :root { --ts-blue:#17324d; --ts-coral:#ef5b5b; --ts-ink:#1f2937; --ts-muted:#6b7280; }
+    :root { --ts-blue:#17324d; --ts-teal:#168c8c; --ts-warning:#e9a23b; --ts-danger:#d9534f; --ts-ink:#1f2937; --ts-muted:#6b7280; }
+    [data-testid="stAppViewContainer"] {background:#f6f8fb;}
     .block-container {padding-top:1.25rem; padding-bottom:2rem; max-width:1540px;}
     [data-testid="stSidebar"] {background:#f5f7fa; border-right:1px solid #e5e7eb;}
     [data-testid="stMetric"] {border:1px solid #e5e7eb; border-radius:12px; padding:10px 12px; background:#fff; box-shadow:0 4px 14px rgba(15,23,42,.04); min-height:112px;}
@@ -33,13 +43,15 @@ st.markdown(
     [data-testid="stMetricDelta"] {font-size:.75rem;}
     .ts-brand {font-size:2.35rem; font-weight:800; color:var(--ts-blue); letter-spacing:-.04em; line-height:1.05;}
     .ts-subtitle {color:var(--ts-muted); margin:.4rem 0 1.25rem; font-size:1rem;}
-    .ts-kicker {font-size:.78rem; font-weight:700; color:var(--ts-coral); letter-spacing:.08em; text-transform:uppercase;}
+    .ts-kicker {font-size:.78rem; font-weight:700; color:var(--ts-teal); letter-spacing:.08em; text-transform:uppercase;}
     .ts-card {border:1px solid #e5e7eb; border-radius:14px; padding:14px; background:#fff; min-height:116px;}
     .ts-card-label {font-size:.78rem; color:var(--ts-muted); margin-bottom:6px;}
     .ts-card-value {font-size:1.02rem; color:var(--ts-ink); font-weight:700;}
     .ts-card-note {font-size:.76rem; color:var(--ts-muted); margin-top:7px;}
     .ts-pill {display:inline-block; padding:4px 9px; border-radius:999px; font-size:.78rem; font-weight:650; background:#eef2f7; color:#334155;}
-    .ts-note {border-left:4px solid var(--ts-coral); background:#fff7f7; border-radius:8px; padding:11px 13px; color:#4b5563;}
+    .ts-note {border-left:4px solid var(--ts-warning); background:#fffaf0; border-radius:8px; padding:11px 13px; color:#4b5563;}
+    [data-testid="stExpander"] {background:#edf4f7; border:1px solid #cfdee7; border-radius:14px; box-shadow:0 5px 16px rgba(23,50,77,.05);}
+    [data-testid="stDataFrame"] {background:#fff; border-radius:12px; box-shadow:0 4px 14px rgba(15,23,42,.04);}
     div[data-testid="stRadio"] > div {gap:.35rem;}
     div[data-testid="stRadio"] label {background:#f8fafc; border:1px solid #e5e7eb; border-radius:9px; padding:.45rem .75rem;}
     .stButton button, .stDownloadButton button {border-radius:9px; font-weight:650;}
@@ -293,7 +305,10 @@ def render_tender_detail(filtered: pd.DataFrame, selected_id: str):
     with gantt_tab:
         st.markdown("#### Χρονοδιάγραμμα επιλεγμένου διαγωνισμού")
         if phases:
-            fig = px.timeline(pd.DataFrame(phases), x_start="Έναρξη", x_end="Λήξη", y="Στάδιο", color="Στάδιο")
+            fig = px.timeline(
+                pd.DataFrame(phases), x_start="Έναρξη", x_end="Λήξη", y="Στάδιο",
+                color="Στάδιο", color_discrete_sequence=CHART_COLORS,
+            )
             fig.add_vline(x=TODAY, line_dash="dash", line_color="#ef5b5b")
             fig.update_yaxes(autorange="reversed", title=None)
             fig.update_layout(height=390, xaxis_title=None, showlegend=False, margin=dict(l=10, r=10, t=20, b=10))
@@ -307,7 +322,10 @@ def render_tender_detail(filtered: pd.DataFrame, selected_id: str):
         with left:
             if phases:
                 phase_df = pd.DataFrame(phases)
-                fig = px.pie(phase_df, names="Στάδιο", values="Ημέρες", hole=.48, title="Κατανομή διάρκειας lifecycle")
+                fig = px.pie(
+                    phase_df, names="Στάδιο", values="Ημέρες", hole=.48,
+                    title="Κατανομή διάρκειας lifecycle", color_discrete_sequence=CHART_COLORS,
+                )
                 fig.update_layout(height=390, legend_title=None)
                 st.plotly_chart(fig, use_container_width=True)
             else:
@@ -324,7 +342,10 @@ def render_tender_detail(filtered: pd.DataFrame, selected_id: str):
                 })
         with right:
             if contract_values:
-                fig = px.pie(pd.DataFrame(contract_values), names="Ανάδοχος", values="Αξία", hole=.48, title="Κατανομή συμβασιοποιημένης αξίας")
+                fig = px.pie(
+                    pd.DataFrame(contract_values), names="Ανάδοχος", values="Αξία", hole=.48,
+                    title="Κατανομή συμβασιοποιημένης αξίας", color_discrete_sequence=CHART_COLORS,
+                )
                 fig.update_layout(height=390, legend_title=None)
                 st.plotly_chart(fig, use_container_width=True)
             else:
@@ -373,39 +394,40 @@ def clear_shared_filters():
 
 
 if page in {"Επισκόπηση", "Διαγωνισμοί"}:
-    filter_title, filter_action = st.columns([5, 1])
-    filter_title.markdown("#### Φίλτρα")
-    filter_action.button("Καθαρισμός", on_click=clear_shared_filters, use_container_width=True)
+    with st.expander("Φίλτρα", expanded=True):
+        filter_title, filter_action = st.columns([5, 1])
+        filter_title.caption("Οι ίδιες επιλογές εφαρμόζονται στην Επισκόπηση και στους Διαγωνισμούς.")
+        filter_action.button("Καθαρισμός", on_click=clear_shared_filters, use_container_width=True)
 
-    year_values = sorted(df["publication_date"].dropna().dt.year.astype(int).unique(), reverse=True)
-    authority_values = sorted(df.get("authority", pd.Series(dtype=str)).dropna().astype(str).unique(), key=str.casefold)
-    cpv_catalog = df[["cpv_code", "cpv_description"]].dropna(subset=["cpv_code"]).drop_duplicates().copy()
-    cpv_catalog["label"] = cpv_catalog["cpv_code"].astype(str) + " — " + cpv_catalog["cpv_description"].fillna("")
-    cpv_values = cpv_catalog.sort_values("label")["label"].tolist()
-    procedure_values = sorted(df[procedure_col].dropna().astype(str).unique(), key=str.casefold) if procedure_col else []
-    contract_type_values = sorted(df[contract_type_col].dropna().astype(str).unique(), key=str.casefold) if contract_type_col else []
+        year_values = sorted(df["publication_date"].dropna().dt.year.astype(int).unique(), reverse=True)
+        authority_values = sorted(df.get("authority", pd.Series(dtype=str)).dropna().astype(str).unique(), key=str.casefold)
+        cpv_catalog = df[["cpv_code", "cpv_description"]].dropna(subset=["cpv_code"]).drop_duplicates().copy()
+        cpv_catalog["label"] = cpv_catalog["cpv_code"].astype(str) + " — " + cpv_catalog["cpv_description"].fillna("")
+        cpv_values = cpv_catalog.sort_values("label")["label"].tolist()
+        procedure_values = sorted(df[procedure_col].dropna().astype(str).unique(), key=str.casefold) if procedure_col else []
+        contract_type_values = sorted(df[contract_type_col].dropna().astype(str).unique(), key=str.casefold) if contract_type_col else []
 
-    f1, f2, f3 = st.columns(3)
-    selected_years = f1.multiselect("Έτος", year_values, key="shared_years", placeholder="Όλα τα έτη")
-    selected_authorities = f2.multiselect(
-        "Αναθέτουσα Αρχή", authority_values, key="shared_authorities", placeholder="Όλες οι Αρχές"
-    )
-    selected_cpvs = f3.multiselect("CPV", cpv_values, key="shared_cpvs", placeholder="Όλοι οι CPV")
+        f1, f2, f3 = st.columns(3)
+        selected_years = f1.multiselect("Έτος", year_values, key="shared_years", placeholder="Όλα τα έτη")
+        selected_authorities = f2.multiselect(
+            "Αναθέτουσα Αρχή", authority_values, key="shared_authorities", placeholder="Όλες οι Αρχές"
+        )
+        selected_cpvs = f3.multiselect("CPV", cpv_values, key="shared_cpvs", placeholder="Όλοι οι CPV")
 
-    f4, f5, f6 = st.columns(3)
-    contract_type = f4.selectbox(
-        "Τύπος σύμβασης", ["Όλοι"] + contract_type_values,
-        key="shared_contract_type", disabled=not contract_type_values,
-    )
-    procedure = f5.selectbox(
-        "Τύπος διαδικασίας", ["Όλοι"] + procedure_values,
-        key="shared_procedure", disabled=not procedure_values,
-    )
-    status_filter = f6.selectbox(
-        "Κατάσταση",
-        ["Όλες", "Ενεργοί μόνο", "Ενεργός", "Αξιολόγηση", "Ανατεθειμένος", "Σε υλοποίηση", "Ολοκληρωμένος", "Ακυρωμένος"],
-        key="shared_status",
-    )
+        f4, f5, f6 = st.columns(3)
+        contract_type = f4.selectbox(
+            "Τύπος σύμβασης", ["Όλοι"] + contract_type_values,
+            key="shared_contract_type", disabled=not contract_type_values,
+        )
+        procedure = f5.selectbox(
+            "Τύπος διαδικασίας", ["Όλοι"] + procedure_values,
+            key="shared_procedure", disabled=not procedure_values,
+        )
+        status_filter = f6.selectbox(
+            "Κατάσταση",
+            ["Όλες", "Ενεργοί μόνο", "Ενεργός", "Αξιολόγηση", "Ανατεθειμένος", "Σε υλοποίηση", "Ολοκληρωμένος", "Ακυρωμένος"],
+            key="shared_status",
+        )
     st.divider()
 
 filtered = df.copy()
@@ -438,7 +460,10 @@ if page == "Επισκόπηση":
     with left:
         st.subheader("Διαγωνισμοί ανά στάδιο")
         stage_counts = filtered["status"].value_counts().rename_axis("Στάδιο").reset_index(name="Πλήθος")
-        fig = px.bar(stage_counts, x="Στάδιο", y="Πλήθος", color="Στάδιο", text_auto=True)
+        fig = px.bar(
+            stage_counts, x="Στάδιο", y="Πλήθος", color="Στάδιο", text_auto=True,
+            color_discrete_map=STATUS_COLORS,
+        )
         fig.update_layout(height=390, showlegend=False, xaxis_title=None, yaxis_title=None)
         st.plotly_chart(fig, use_container_width=True)
     with right:
@@ -602,6 +627,7 @@ elif page == "Αγορά & Ανταγωνισμός":
                         values="Αξία",
                         hole=.48,
                         title="Αξία συμβάσεων ανά Αναθέτουσα Αρχή",
+                        color_discrete_sequence=CHART_COLORS,
                     )
                     fig.update_layout(height=430, legend_title=None)
                     st.plotly_chart(fig, use_container_width=True)
