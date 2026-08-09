@@ -27,8 +27,10 @@ st.markdown(
     :root { --ts-blue:#17324d; --ts-coral:#ef5b5b; --ts-ink:#1f2937; --ts-muted:#6b7280; }
     .block-container {padding-top:1.25rem; padding-bottom:2rem; max-width:1540px;}
     [data-testid="stSidebar"] {background:#f5f7fa; border-right:1px solid #e5e7eb;}
-    [data-testid="stMetric"] {border:1px solid #e5e7eb; border-radius:14px; padding:14px 16px; background:#fff; box-shadow:0 4px 14px rgba(15,23,42,.04);}
-    [data-testid="stMetricLabel"] {color:var(--ts-muted);}
+    [data-testid="stMetric"] {border:1px solid #e5e7eb; border-radius:12px; padding:10px 12px; background:#fff; box-shadow:0 4px 14px rgba(15,23,42,.04); min-height:112px;}
+    [data-testid="stMetricLabel"] {color:var(--ts-muted); font-size:.82rem;}
+    [data-testid="stMetricValue"] {font-size:1.65rem; line-height:1.2; letter-spacing:-.02em; white-space:normal; overflow-wrap:anywhere;}
+    [data-testid="stMetricDelta"] {font-size:.75rem;}
     .ts-brand {font-size:2.35rem; font-weight:800; color:var(--ts-blue); letter-spacing:-.04em; line-height:1.05;}
     .ts-subtitle {color:var(--ts-muted); margin:.4rem 0 1.25rem; font-size:1rem;}
     .ts-kicker {font-size:.78rem; font-weight:700; color:var(--ts-coral); letter-spacing:.08em; text-transform:uppercase;}
