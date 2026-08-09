@@ -11,6 +11,7 @@ type Tender = {
   cpvDescription?: string;
   contractType?: string;
   procedureType?: string;
+  documentType?: string;
   nutsCode?: string;
   nutsName?: string;
   status: Status;
@@ -73,6 +74,7 @@ export default function Home() {
   const [cpv, setCpv] = useState("");
   const [year, setYear] = useState("Όλα");
   const [contractType, setContractType] = useState("Όλοι");
+  const [documentType, setDocumentType] = useState("Όλοι");
 
   useEffect(() => {
     fetch("/api/procurement")
@@ -91,19 +93,21 @@ export default function Home() {
 
   const filtered = useMemo(() => tenders.filter((tender) => {
     const needle = query.trim().toLocaleLowerCase("el");
-    const matchesQuery = !needle || `${tender.adam} ${tender.title} ${tender.authority}`.toLocaleLowerCase("el").includes(needle);
+    const matchesQuery = page !== "tenders" || !needle || `${tender.adam} ${tender.title}`.toLocaleLowerCase("el").includes(needle);
     return matchesQuery && (status === "Όλες" || tender.status === status) &&
       (!authority || authority === "Όλες" || tender.authority.toLocaleLowerCase("el").includes(authority.toLocaleLowerCase("el"))) &&
       (!contractor || (tender.contractors ?? []).join(" ").toLocaleLowerCase("el").includes(contractor.toLocaleLowerCase("el"))) &&
       (!cpv || `${tender.cpv} ${tender.cpvDescription}`.toLocaleLowerCase("el").includes(cpv.toLocaleLowerCase("el"))) &&
       (year === "Όλα" || tender.publicationDate?.startsWith(year)) &&
-      (contractType === "Όλοι" || tender.contractType === contractType);
-  }), [tenders, query, status, authority, contractor, cpv, year, contractType]);
+      (contractType === "Όλοι" || tender.contractType === contractType) &&
+      (documentType === "Όλοι" || tender.documentType === documentType);
+  }), [tenders, query, status, authority, contractor, cpv, year, contractType, documentType, page]);
 
   const authorities = [...new Set(tenders.map((item) => item.authority).filter(Boolean))].sort();
   const contractors = [...new Set(tenders.flatMap((item) => item.contractors ?? []).filter(Boolean))].sort();
   const years = [...new Set(tenders.map((item) => item.publicationDate?.slice(0, 4)).filter(Boolean))].sort().reverse();
   const contractTypes = [...new Set(tenders.map((item) => item.contractType).filter(Boolean))].sort();
+  const documentTypes = [...new Set(tenders.map((item) => item.documentType).filter(Boolean))].sort();
   const statusCount = (value: Status) => filtered.filter((item) => item.status === value).length;
 
   return (
@@ -126,7 +130,7 @@ export default function Home() {
         <section className="content">
           <div className="pageTitle">
             <div><p className="eyebrow">PROCUREMENT INTELLIGENCE</p><h1>{page === "overview" ? "Επισκόπηση" : page === "tenders" ? "Διαγωνισμοί" : page === "market" ? "Αγορά & Ανταγωνισμός" : "Ειδοποιήσεις"}</h1></div>
-            <label className="search"><span>⌕</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Αναζήτηση ΑΔΑΜ, τίτλου ή Αρχής…" /></label>
+            {page === "tenders" && <label className="search"><span>⌕</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Αναζήτηση με ΑΔΑΜ ή τίτλο…" /></label>}
           </div>
           {loading && <div className="dataBanner">Φόρτωση πραγματικών δεδομένων από Supabase…</div>}
           {dataError && <div className="dataBanner error">{dataError} · εμφανίζεται προσωρινό δείγμα.</div>}
@@ -144,7 +148,7 @@ export default function Home() {
               <article className="panel"><PanelHeader title="CPV Distribution" caption="Κορυφαίες κατηγορίες" /><CpvDonut rows={filtered} /></article>
             </div>
             <NutsMap rows={filtered.filter((item) => item.status === "Ενεργός")} />
-            <TenderTable rows={filtered} />
+            <TenderTable rows={[...filtered].sort((a,b) => (b.publicationDate || "").localeCompare(a.publicationDate || "")).slice(0,10)} title="Πρόσφατοι διαγωνισμοί" caption="Οι 10 πιο πρόσφατες εγγραφές" onViewAll={() => setPage("tenders")} />
           </>}
 
           {page === "tenders" && <TenderTable rows={filtered} expanded />}
@@ -153,12 +157,13 @@ export default function Home() {
         </section>
 
         <aside className="filters">
-          <div className="filterHeading"><div><span>Φίλτρα</span><small>{number.format(filtered.length)} αποτελέσματα</small></div><button onClick={() => { setStatus("Όλες"); setAuthority(""); setContractor(""); setCpv(""); setQuery(""); setYear("Όλα"); setContractType("Όλοι"); }}>↻</button></div>
+          <div className="filterHeading"><div><span>Φίλτρα</span><small>{number.format(filtered.length)} αποτελέσματα</small></div><button onClick={() => { setStatus("Όλες"); setAuthority(""); setContractor(""); setCpv(""); setQuery(""); setYear("Όλα"); setContractType("Όλοι"); setDocumentType("Όλοι"); }}>↻</button></div>
           <label>Έτος<select value={year} onChange={(event) => setYear(event.target.value)}><option>Όλα</option>{years.map((item) => <option key={item}>{item}</option>)}</select></label>
           <label>Αναθέτουσα Αρχή<input list="authority-options" value={authority === "Όλες" ? "" : authority} onChange={(event) => setAuthority(event.target.value)} placeholder="Γράψε ή επίλεξε αρχή" /><datalist id="authority-options">{authorities.map((item) => <option key={item} value={item} />)}</datalist></label>
           <label>Ανάδοχος<input list="contractor-options" value={contractor} onChange={(event) => setContractor(event.target.value)} placeholder="Γράψε ή επίλεξε ανάδοχο" /><datalist id="contractor-options">{contractors.map((item) => <option key={item} value={item} />)}</datalist></label>
           <label>CPV<input value={cpv} onChange={(event) => setCpv(event.target.value)} placeholder="Κωδικός ή λέξη" /></label>
           <label>Τύπος σύμβασης<select value={contractType} onChange={(event) => setContractType(event.target.value)}><option>Όλοι</option>{contractTypes.map((item) => <option key={item}>{item}</option>)}</select></label>
+          <label>Τύπος εγγράφου<select value={documentType} onChange={(event) => setDocumentType(event.target.value)}><option>Όλοι</option>{documentTypes.map((item) => <option key={item}>{item}</option>)}</select></label>
           <label>Κατάσταση<select value={status} onChange={(event) => setStatus(event.target.value)}><option>Όλες</option>{Object.keys(statusTone).map((item) => <option key={item}>{item}</option>)}</select></label>
           <div className="filterNote"><span>i</span><p>Τα ίδια φίλτρα εφαρμόζονται στην Επισκόπηση και στους Διαγωνισμούς.</p></div>
         </aside>
@@ -190,10 +195,10 @@ function CpvDonut({ rows }: { rows: Tender[] }) {
   return <div className="donutWrap"><div className="donut"><span><strong>{number.format(counts.length)}</strong><small>CPV</small></span></div><ul>{top.map(([code, count], index) => { const row = rows.find((item) => item.cpv === code); return <li key={code} title={row?.cpvDescription}><i className={["navy", "teal", "gold"][index]} /><span><b>{code}</b><small>{row?.cpvDescription || "Χωρίς περιγραφή"}</small></span><b>{Math.round(count / total * 100)}%</b></li>; })}{other > 0 && <li><i className="pale" />Λοιπά <b>{Math.round(other / total * 100)}%</b></li>}</ul></div>;
 }
 
-function TenderTable({ rows, expanded = false }: { rows: Tender[]; expanded?: boolean }) {
+function TenderTable({ rows, expanded = false, title = "Λίστα διαγωνισμών", caption, onViewAll }: { rows: Tender[]; expanded?: boolean; title?: string; caption?: string; onViewAll?: () => void }) {
   const [selected, setSelected] = useState<Tender | null>(null);
   if (selected) return <TenderDetail tender={selected} onBack={() => setSelected(null)} />;
-  return <article className={`panel tablePanel ${expanded ? "expanded" : ""}`}><PanelHeader title="Λίστα διαγωνισμών" caption={`${number.format(rows.length)} εγγραφές μετά τα φίλτρα`} /><div className="tableScroll"><table><thead><tr><th>ΑΔΑΜ</th><th>Τίτλος</th><th>Αναθέτουσα Αρχή</th><th>CPV / Τίτλος</th><th>Κατάσταση</th><th>Δημοσίευση</th><th /></tr></thead><tbody>{rows.map((item) => <tr key={item.adam}><td className="adam">{item.adam}</td><td>{item.title}</td><td>{item.authority}</td><td><strong>{item.cpv}</strong><small className="cellSub">{item.cpvDescription}</small></td><td><span className={`status ${statusTone[item.status]}`}>{item.status}</span></td><td>{formatDate(item.publicationDate)}</td><td><button className="view" aria-label={`Προβολή ${item.adam}`} onClick={() => setSelected(item)}>→</button></td></tr>)}</tbody></table></div>{!rows.length && <p className="noRows">Δεν βρέθηκαν διαγωνισμοί για τα επιλεγμένα φίλτρα.</p>}</article>;
+  return <article className={`panel tablePanel ${expanded ? "expanded" : ""}`}><PanelHeader title={title} caption={caption ?? `${number.format(rows.length)} εγγραφές μετά τα φίλτρα`} /><div className="tableScroll"><table><thead><tr><th>ΑΔΑΜ</th><th>Τίτλος</th><th>Αναθέτουσα Αρχή</th><th>CPV / Τίτλος</th><th>Κατάσταση</th><th>Δημοσίευση</th><th /></tr></thead><tbody>{rows.map((item) => <tr key={item.adam}><td className="adam">{item.adam}</td><td>{item.title}</td><td>{item.authority}</td><td><strong>{item.cpv}</strong><small className="cellSub">{item.cpvDescription}</small></td><td><span className={`status ${statusTone[item.status]}`}>{item.status}</span></td><td>{formatDate(item.publicationDate)}</td><td><button className="view" aria-label={`Προβολή ${item.adam}`} onClick={() => setSelected(item)}>→</button></td></tr>)}</tbody></table></div>{!rows.length && <p className="noRows">Δεν βρέθηκαν διαγωνισμοί για τα επιλεγμένα φίλτρα.</p>}{onViewAll && <button className="viewAll" onClick={onViewAll}>Προβολή όλων των διαγωνισμών →</button>}</article>;
 }
 
 function TenderDetail({ tender, onBack }: { tender: Tender; onBack: () => void }) {
