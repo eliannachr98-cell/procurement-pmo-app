@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { readFile } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 
 type DbRecord = Record<string, string | number | boolean | null>;
@@ -45,8 +45,20 @@ export async function GET() {
   try {
     // The curated Excel snapshot keeps the preview usable while the Supabase
     // project is unavailable. Re-running the extractor refreshes this file.
-    const snapshotPath = path.join(process.cwd(), "data", "excel-procurement.json");
-    const snapshot = JSON.parse(await readFile(snapshotPath, "utf8"));
+    const snapshotPath = path.join(process.cwd(), "data", "excel");
+    const filenames = (await readdir(snapshotPath)).filter((name) => name.endsWith(".json")).sort();
+    const chunks = await Promise.all(
+      filenames.map(async (name) => JSON.parse(await readFile(path.join(snapshotPath, name), "utf8"))),
+    );
+    const snapshot = {
+      tenders: chunks.flatMap((chunk) => chunk.tenders ?? []),
+      awards: chunks.flatMap((chunk) => chunk.awards ?? []),
+      meta: {
+        source: "Master-File_06082026.xlsx",
+        year: 2024,
+        chunkCount: chunks.length,
+      },
+    };
     return NextResponse.json(snapshot, {
       headers: { "Cache-Control": "public, s-maxage=300, stale-while-revalidate=3600" },
     });
