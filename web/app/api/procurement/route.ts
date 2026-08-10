@@ -188,6 +188,10 @@ export async function GET() {
         ...linkedAwards.flatMap((award) => awardContractorsByAdam.get(award.adam) ?? []),
         ...linkedContracts.flatMap((contract) => contractContractorsByAdam.get(contract.adam) ?? []),
       ].map((row) => row.contractor_name);
+      const submissionDeadline = notice.opening_at && notice.publication_date &&
+        notice.opening_at.slice(0, 10) < notice.publication_date
+        ? undefined
+        : notice.opening_at ?? undefined;
 
       return {
         adam: notice.adam,
@@ -202,8 +206,8 @@ export async function GET() {
         nutsName: notice.nuts_name ?? undefined,
         status: statusFor(notice, linkedAwards, linkedContracts),
         publicationDate: notice.publication_date,
-        deadline: notice.opening_at,
-        openingDate: notice.opening_at,
+        deadline: submissionDeadline,
+        openingDate: submissionDeadline,
         awardDate: linkedAwards.map((row) => row.award_date).filter(Boolean).sort()[0],
         contractDates: linkedContracts.map((row) => row.signed_date).filter(Boolean),
         deliveryDates: linkedContracts.map((row) => row.delivery_date).filter(Boolean),
