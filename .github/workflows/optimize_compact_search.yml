@@ -1,0 +1,42 @@
+name: Optimize compact search
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: optimize-compact-search
+  cancel-in-progress: false
+
+jobs:
+  indexes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install database driver
+        run: pip install "psycopg[binary]>=3.2,<4"
+      - name: Create compact search indexes
+        env:
+          DATABASE_URL: ${{ secrets.COMPACT_DATABASE_URL }}
+        run: |
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          import psycopg
+
+          statements = [
+              statement.strip()
+              for statement in Path("sql/compact_search_indexes.sql").read_text(encoding="utf-8").split(";")
+              if statement.strip()
+          ]
+          with psycopg.connect(os.environ["DATABASE_URL"], autocommit=True) as connection:
+              for statement in statements:
+                  connection.execute(statement)
+                  print(f"completed: {statement.splitlines()[0]}")
+          PY
