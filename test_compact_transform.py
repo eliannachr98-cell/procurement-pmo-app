@@ -3,7 +3,7 @@ from io import BytesIO
 from urllib.error import HTTPError
 from unittest.mock import patch
 
-from compact_transform import classify_document, transform
+from compact_transform import classify_document, transform, valid_deadline
 from prepare_compact_data import request_page
 
 
@@ -45,6 +45,13 @@ class CompactTransformTests(unittest.TestCase):
         self.assertIsNone(result["budget_ex_vat"])
         self.assertIsNone(result["budget_inc_vat"])
         self.assertEqual(result["budget_unknown_vat"], "1000.00")
+
+    def test_deadline_before_publication_is_not_shown(self):
+        self.assertIsNone(valid_deadline("2025-06-10", "2025-06-02T12:00:00"))
+        self.assertEqual(
+            valid_deadline("2025-06-10", "2025-06-20T12:00:00"),
+            "2025-06-20T12:00:00",
+        )
 
     def test_document_classification(self):
         self.assertEqual(classify_document("\u0391\u03c0\u03cc\u03c6\u03b1\u03c3\u03b7 \u03c4\u03c1\u03bf\u03c0\u03bf\u03c0\u03bf\u03af\u03b7\u03c3\u03b7\u03c2 \u03cc\u03c1\u03c9\u03bd"), "amendment")
