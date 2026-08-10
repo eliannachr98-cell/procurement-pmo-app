@@ -31,6 +31,13 @@ export async function GET(request: Request) {
     const value = encodeURIComponent(`*${query}*`);
 
     if (type === "contractor") {
+      const brand = query.toLocaleUpperCase("en-US");
+      const brands: Record<string, { value: string; label: string }> = {
+        PWC: { value: "PWC", label: "PWC — όλες οι επωνυμίες PricewaterhouseCoopers" },
+        EY: { value: "EY", label: "EY — όλες οι επωνυμίες Ernst & Young" },
+        OCTANE: { value: "OCTANE", label: "OCTANE — όλες οι επωνυμίες" },
+      };
+      if (brands[brand]) return NextResponse.json({ options: [brands[brand]] });
       const contractorValue = encodeURIComponent(`*${contractorSearchTerm(query)}*`);
       const rows = await supabaseRows<{ contractor_name: string }>(
         `record_contractors_compact?select=contractor_name&contractor_name=ilike.${contractorValue}&limit=60`,
