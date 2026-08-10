@@ -149,7 +149,7 @@ export default function Home() {
 
           {page === "overview" && <>
             <div className="metrics">
-              <Metric label="Διαγωνισμοί" value={number.format(filtered.length)} tone="sky" />
+              <Metric label="Διαγωνισμοί" value={number.format(totalTenders || filtered.length)} tone="sky" />
               <Metric label="Ενεργοί" value={number.format(statusCount("Ενεργός"))} tone="mint" />
               <Metric label="Σε αξιολόγηση" value={number.format(statusCount("Αξιολόγηση"))} tone="sand" />
               <Metric label="Ανατεθειμένοι" value={number.format(statusCount("Ανατεθειμένος"))} tone="lilac" />
