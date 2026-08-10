@@ -11,6 +11,7 @@ import json
 import time
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
+from urllib.error import HTTPError, URLError
 from pathlib import Path
 
 from compact_transform import transform
@@ -20,18 +21,37 @@ BASE_URL = "https://cerpp.eprocurement.gov.gr/khmdhs-opendata"
 ENDPOINTS = {"notice": "notices", "auction": "auctions", "contract": "contracts"}
 
 
+def request_page(source: str, page: int, payload: bytes) -> dict:
+    url = f"{BASE_URL}/{ENDPOINTS[source]}?{urlencode({'page': page})}"
+    request = Request(url, data=payload, headers={
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+        "User-Agent": "procurement-pmo-app/compact-1.1",
+    }, method="POST")
+    for attempt in range(1, 6):
+        try:
+            with urlopen(request, timeout=60) as response:
+                return json.load(response)
+        except HTTPError as exc:
+            if exc.code not in (429, 500, 502, 503, 504) or attempt == 5:
+                raise
+            wait = min(45, 5 * (2 ** (attempt - 1)))
+            print(f"{source}: HTTP {exc.code} on page {page + 1}; retry {attempt}/5 in {wait}s")
+            time.sleep(wait)
+        except (URLError, TimeoutError) as exc:
+            if attempt == 5:
+                raise
+            wait = min(45, 5 * (2 ** (attempt - 1)))
+            print(f"{source}: network error on page {page + 1}: {exc}; retry {attempt}/5 in {wait}s")
+            time.sleep(wait)
+    raise RuntimeError("unreachable retry state")
+
+
 def iter_records(source: str, date_from: str, date_to: str, max_pages: int | None = None):
     page = 0
     payload = json.dumps({"dateFrom": date_from, "dateTo": date_to}).encode("utf-8")
     while True:
-        url = f"{BASE_URL}/{ENDPOINTS[source]}?{urlencode({'page': page})}"
-        request = Request(url, data=payload, headers={
-            "Accept": "application/json",
-            "Content-Type": "application/json",
-            "User-Agent": "procurement-pmo-app/compact-1.0",
-        }, method="POST")
-        with urlopen(request, timeout=60) as response:
-            data = json.load(response)
+        data = request_page(source, page, payload)
         content = data.get("content") or []
         print(f"{source}: page {page + 1}/{data.get('totalPages', '?')} records={len(content)}")
         yield from content
