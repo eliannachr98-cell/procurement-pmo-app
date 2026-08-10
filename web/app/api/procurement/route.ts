@@ -98,7 +98,10 @@ async function supabasePage<T>(path: string): Promise<{ rows: T; total: number }
   if (!url || !key) throw new Error("Supabase environment variables are missing");
 
   const response = await fetch(`${url}/rest/v1/${path}`, {
-    headers: { apikey: key, Prefer: "count=exact" },
+    // An exact count scans the entire historical table and started timing out
+    // once the full backfill was loaded. Planned count keeps pagination open
+    // across the complete dataset without blocking every page request.
+    headers: { apikey: key, Prefer: "count=planned" },
     cache: "no-store",
   });
   if (!response.ok) {
@@ -189,7 +192,9 @@ export async function GET(request: Request) {
     // Recent tenders usually have no award yet, which previously made this view empty.
     const marketAwards = await supabaseGet<AwardRow[]>(
       "awards_compact?select=adam,procurement_adam,title,authority_name,contract_type,award_date,amount_ex_vat,amount_inc_vat,amount_unknown_vat" +
-      "&order=award_date.desc.nullslast&limit=500",
+      // `adam` is the primary key, so this avoids sorting the full awards table
+      // by an unindexed date on every dashboard request.
+      "&order=adam.desc&limit=200",
     );
     const marketAwardAdams = marketAwards.map((row) => row.adam);
     const marketNoticeAdams = marketAwards.map((row) => row.procurement_adam).filter((value): value is string => Boolean(value));

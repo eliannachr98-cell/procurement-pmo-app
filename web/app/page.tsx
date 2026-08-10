@@ -81,7 +81,9 @@ export default function Home() {
 
   const loadTenderPage = (nextPage: number, append = false) => {
     setLoading(true);
-    fetch(`/api/procurement?page=${nextPage}&pageSize=500`)
+    // Pages are intentionally small; users can continue through the complete
+    // dataset without downloading the whole historical database at once.
+    fetch(`/api/procurement?page=${nextPage}&pageSize=100`)
       .then(async (response) => {
         if (!response.ok) throw new Error("Δεν ήταν δυνατή η φόρτωση της Supabase");
         return response.json();
