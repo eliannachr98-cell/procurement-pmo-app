@@ -137,7 +137,15 @@ export default function Home() {
   const authorities = [...new Set(tenders.map((item) => item.authority).filter(Boolean))].sort();
   const years = [...new Set(tenders.map((item) => item.publicationDate?.slice(0, 4)).filter(Boolean))].sort().reverse();
   const contractTypes = [...new Set(tenders.map((item) => item.contractType).filter(Boolean))].sort();
-  const documentTypes = ["Διακήρυξη", "Τροποποίηση", "Απόφαση", "Διευκρίνιση", "Παράταση", "Ακύρωση", "Λοιπό"];
+  const documentTypes = [
+    ["declaration", "Διακήρυξη"],
+    ["clarification", "Διευκρίνιση"],
+    ["extension", "Παράταση / μετάθεση προθεσμίας"],
+    ["decision", "Απόφαση / έγκριση"],
+    ["amendment", "Τροποποίηση"],
+    ["cancellation", "Ματαίωση / ακύρωση"],
+    ["other", "Λοιπό"],
+  ];
   const statusCount = (value: Status) => filtered.filter((item) => item.status === value).length;
 
   return (
@@ -162,7 +170,7 @@ export default function Home() {
             <div><p className="eyebrow">PROCUREMENT INTELLIGENCE</p><h1>{page === "overview" ? "Επισκόπηση" : page === "tenders" ? "Διαγωνισμοί" : page === "market" ? "Αγορά & Ανταγωνισμός" : "Ειδοποιήσεις"}</h1></div>
             {page === "tenders" && <label className="search"><span>⌕</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Αναζήτηση με ΑΔΑΜ ή τίτλο…" /></label>}
           </div>
-          {loading && <div className="dataBanner">Φόρτωση πραγματικών δεδομένων από Supabase…</div>}
+          {loading && tenders.length === 0 && <div className="dataBanner">Φόρτωση πραγματικών δεδομένων από Supabase…</div>}
           {dataError && <div className="dataBanner error">{dataError} · εμφανίζεται προσωρινό δείγμα.</div>}
 
           {page === "overview" && <>
@@ -187,7 +195,7 @@ export default function Home() {
               {loading ? "Φόρτωση…" : `Φόρτωση περισσότερων (${number.format(tenders.length)} από ${number.format(totalTenders)})`}
             </button>}
           </>}
-          {page === "market" && <MarketPanel awards={awards} cpv={cpv} setCpv={setCpv} />}
+          {page === "market" && <MarketPanel awards={awards} cpv={cpv} setCpv={setCpv} contractor={contractor} />}
           {page === "alerts" && <EmptyState icon="♢" title="Ειδοποιήσεις CPV" text="Οι ειδοποιήσεις θα ενεργοποιηθούν μαζί με τους λογαριασμούς χρηστών στη Supabase." />}
         </section>
 
@@ -198,7 +206,7 @@ export default function Home() {
           <MultiSearchInput label="Ανάδοχος" type="contractor" values={contractor} onChange={setContractor} placeholder="Αναζήτησε και επίλεξε αναδόχους" />
           {page !== "market" && <MultiSearchInput label="CPV" type="cpv" values={cpv} onChange={setCpv} placeholder="Αναζήτησε κωδικό ή περιγραφή CPV" />}
           <label>Τύπος σύμβασης<select value={contractType} onChange={(event) => setContractType(event.target.value)}><option>Όλοι</option>{contractTypes.map((item) => <option key={item}>{item}</option>)}</select></label>
-          <label>Τύπος εγγράφου<select value={documentType} onChange={(event) => setDocumentType(event.target.value)}><option>Όλοι</option>{documentTypes.map((item) => <option key={item}>{item}</option>)}</select></label>
+          <label>Τύπος εγγράφου<select value={documentType} onChange={(event) => setDocumentType(event.target.value)}><option value="Όλοι">Όλοι</option>{documentTypes.map(([value,label]) => <option key={value} value={value}>{label}</option>)}</select></label>
           <label>Κατάσταση<select value={status} onChange={(event) => setStatus(event.target.value)}><option>Όλες</option>{Object.keys(statusTone).map((item) => <option key={item}>{item}</option>)}</select></label>
           <div className="filterNote"><span>i</span><p>Τα ίδια φίλτρα εφαρμόζονται στην Επισκόπηση και στους Διαγωνισμούς.</p></div>
         </aside>
@@ -314,7 +322,7 @@ function MultiSearchInput({ label, type, values, onChange, placeholder }: {
   </label>;
 }
 
-function MarketPanel({ awards, cpv, setCpv }: { awards: Award[]; cpv: string[]; setCpv: (value: string[]) => void }) {
+function MarketPanel({ awards, cpv, setCpv, contractor }: { awards: Award[]; cpv: string[]; setCpv: (value: string[]) => void; contractor: string[] }) {
   const [selectedContractor, setSelectedContractor] = useState("");
   const cpvTerms = cpv.map((item) => item.toLocaleLowerCase("el"));
   const relevant = cpvTerms.length ? awards.filter((item) => cpvTerms.some((term) => `${item.cpv} ${item.cpvDescription}`.toLocaleLowerCase("el").includes(term))) : awards;
@@ -327,20 +335,25 @@ function MarketPanel({ awards, cpv, setCpv }: { awards: Award[]; cpv: string[]; 
     map.set(item.contractor, current);
     return map;
   }, new Map<string, { name: string; awards: number; value: number; authorities: Set<string> }>()).values()]
-    .sort((a, b) => b.value - a.value).slice(0, 50);
+    .sort((a, b) => a.name.localeCompare(b.name, "el")).slice(0, 50);
+
+  const hasSelection = cpv.length > 0 || contractor.length > 0;
 
   return <>
     <article className="panel marketHero">
       <div><p className="eyebrow">COMPETITION MAPPING</p><h2>Ανάλυση ανταγωνισμού ανά CPV ή ανάδοχο</h2><p>Βάλε ένα ή περισσότερα CPV για να δεις αναδόχους ή επίλεξε αναδόχους από τα φίλτρα για να δεις τα στοιχεία τους.</p></div>
       <MultiSearchInput label="CPV" type="cpv" values={cpv} onChange={setCpv} placeholder="Αναζήτησε και επίλεξε CPV" />
     </article>
+    {!hasSelection && <article className="panel empty marketStart"><span>⌕</span><h2>Επίλεξε CPV ή ανάδοχο</h2><p>Τα αποτελέσματα ανταγωνισμού θα εμφανιστούν μόνο μετά τη δική σου επιλογή.</p></article>}
+    {hasSelection && <>
     <div className="metrics marketMetrics">
       <Metric label="Ανάδοχοι" value={number.format(contractors.length)} tone="mint" />
       <Metric label="Αναθέτουσες Αρχές" value={number.format(new Set(relevant.map((item) => item.authority)).size)} tone="sand" />
       <Metric label="Συνολική αξία" value={euro.format(relevant.reduce((sum, item) => sum + item.value, 0))} tone="lilac" />
     </div>
-    <article className="panel tablePanel"><PanelHeader title="Κατάταξη αναδόχων" caption="Πάτησε έναν ανάδοχο για να δεις τις αναθέσεις του" /><div className="tableScroll"><table><thead><tr><th>Ανάδοχος</th><th>Αναθέσεις</th><th>Αναθέτουσες Αρχές</th><th>Συνολική αξία</th></tr></thead><tbody>{contractors.map((item) => <tr key={item.name} className={selectedContractor === item.name ? "selectedRow" : ""} onClick={() => setSelectedContractor(item.name)}><td><button className="contractorLink">{item.name}</button></td><td>{number.format(item.awards)}</td><td>{number.format(item.authorities.size)}</td><td>{euro.format(item.value)}</td></tr>)}</tbody></table></div>{!contractors.length && <p className="noRows">Δεν βρέθηκαν αναθέσεις για τον επιλεγμένο CPV.</p>}</article>
+    <article className="panel tablePanel"><PanelHeader title="Ανάδοχοι και στοιχεία" caption="Πάτησε έναν ανάδοχο για να δεις τις σχετικές εγγραφές" /><div className="tableScroll"><table><thead><tr><th>Ανάδοχος</th><th>Σχετικές εγγραφές</th><th>Αναθέτουσες Αρχές</th><th>Συνολική αξία</th></tr></thead><tbody>{contractors.map((item) => <tr key={item.name} className={selectedContractor === item.name ? "selectedRow" : ""} onClick={() => setSelectedContractor(item.name)}><td><button className="contractorLink">{item.name}</button></td><td>{number.format(item.awards)}</td><td>{number.format(item.authorities.size)}</td><td>{euro.format(item.value)}</td></tr>)}</tbody></table></div>{!contractors.length && <p className="noRows">Δεν βρέθηκαν αποτελέσματα για τις επιλογές σου.</p>}</article>
     {selectedContractor && <ContractorAwards name={selectedContractor} rows={relevant.filter((item) => item.contractor === selectedContractor)} onClose={() => setSelectedContractor("")} />}
+    </>}
   </>;
 }
 
