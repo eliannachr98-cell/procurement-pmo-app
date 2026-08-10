@@ -58,6 +58,7 @@ type ContractorRow = {
 
 const MAX_ROWS = 1000;
 const CHUNK_SIZE = 70;
+// Preview reads live compact rows while the historical backfill continues.
 export const dynamic = "force-dynamic";
 
 function money(row: {
