@@ -18,7 +18,7 @@ from compact_transform import transform
 
 
 BASE_URL = "https://cerpp.eprocurement.gov.gr/khmdhs-opendata"
-ENDPOINTS = {"notice": "notices", "auction": "auctions", "contract": "contracts"}
+ENDPOINTS = {"notice": "notice", "auction": "auction", "contract": "contract"}
 
 
 def date_windows(date_from: str, date_to: str, days: int = 7):
