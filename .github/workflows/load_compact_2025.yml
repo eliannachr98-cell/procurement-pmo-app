@@ -16,6 +16,7 @@ on:
           - repair-auction-aug-05-long-timeout
           - repair-auction-aug-05-by-contract-type
           - repair-auction-aug-05-supplies-by-cost
+          - repair-missing-notices-sep-oct
         default: test
 
 permissions:
@@ -104,6 +105,21 @@ jobs:
                       "max_pages": 0,
                   }
                   for cost_from, cost_to in cost_ranges
+              ]
+          elif os.environ["MODE"] == "repair-missing-notices-sep-oct":
+              windows = [
+                  {
+                      "date_from": "2025-09-10",
+                      "date_to": "2025-09-16",
+                      "source": "notice",
+                      "max_pages": 0,
+                  },
+                  {
+                      "date_from": "2025-10-08",
+                      "date_to": "2025-10-14",
+                      "source": "notice",
+                      "max_pages": 0,
+                  },
               ]
           else:
               windows = []
