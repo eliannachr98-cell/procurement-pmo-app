@@ -24,9 +24,9 @@ export async function GET(request: Request) {
 
     if (type === "contractor") {
       const rows = await supabaseRows<{ contractor_name: string }>(
-        `record_contractors_compact?select=contractor_name&contractor_name=ilike.${value}&order=contractor_name.asc&limit=60`,
+        `record_contractors_compact?select=contractor_name&contractor_name=ilike.${value}&limit=60`,
       );
-      return NextResponse.json({ options: [...new Set(rows.map((row) => row.contractor_name).filter(Boolean))].slice(0, 20) });
+      return NextResponse.json({ options: [...new Set(rows.map((row) => row.contractor_name).filter(Boolean))].sort((a, b) => a.localeCompare(b, "el")).slice(0, 20) });
     }
 
     if (type === "cpv") {
@@ -34,10 +34,10 @@ export async function GET(request: Request) {
         ? `cpv_code=ilike.${encodeURIComponent(`${query}*`)}`
         : `cpv_description=ilike.${value}`;
       const rows = await supabaseRows<{ cpv_code: string; cpv_description: string | null }>(
-        `record_cpvs_compact?select=cpv_code,cpv_description&${filter}&order=cpv_code.asc&limit=80`,
+        `record_cpvs_compact?select=cpv_code,cpv_description&${filter}&limit=80`,
       );
       const unique = new Map(rows.map((row) => [row.cpv_code, { value: row.cpv_code, label: `${row.cpv_code} — ${row.cpv_description || "Χωρίς περιγραφή"}` }]));
-      return NextResponse.json({ options: [...unique.values()].slice(0, 20) });
+      return NextResponse.json({ options: [...unique.values()].sort((a, b) => a.value.localeCompare(b.value)).slice(0, 20) });
     }
 
     return NextResponse.json({ options: [] });
