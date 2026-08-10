@@ -1,6 +1,14 @@
 name: Prepare compact sample (no database writes)
 
 on:
+  push:
+    branches: ["main"]
+    paths:
+      - "prepare_compact_data.py"
+      - "compact_transform.py"
+      - "load_compact_data.py"
+      - "test_compact_transform.py"
+      - ".github/workflows/prepare_compact_sample.yml"
   workflow_dispatch:
     inputs:
       date_from:
@@ -28,22 +36,23 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Install downloader dependency
+        run: pip install "requests>=2.32,<3"
       - name: Run transformation tests
         run: python -m unittest -v test_compact_transform.py
       - name: Prepare compact files
         run: >-
           python prepare_compact_data.py
-          --date-from "${{ inputs.date_from }}"
-          --date-to "${{ inputs.date_to }}"
+          --date-from "${{ inputs.date_from || '2025-01-01' }}"
+          --date-to "${{ inputs.date_to || '2025-01-31' }}"
           --source all
-          --max-pages "${{ inputs.max_pages }}"
+          --max-pages "${{ inputs.max_pages || '2' }}"
           --output-dir staging/compact-sample
       - name: Validate loader without writing
         run: python load_compact_data.py --input-dir staging/compact-sample
       - uses: actions/upload-artifact@v4
         with:
-          name: compact-sample-${{ inputs.date_from }}-${{ inputs.date_to }}
+          name: compact-sample-${{ inputs.date_from || '2025-01-01' }}-${{ inputs.date_to || '2025-01-31' }}
           path: staging/compact-sample
           retention-days: 7
-
 
