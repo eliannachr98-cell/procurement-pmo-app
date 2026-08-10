@@ -1,118 +1,250 @@
 import { NextResponse } from "next/server";
-import { readFile, readdir } from "node:fs/promises";
-import path from "node:path";
 
-type DbRecord = Record<string, string | number | boolean | null>;
-type CpvRow = { reference_number: string; cpv_code: string; cpv_description: string | null };
+type ProcurementRow = {
+  adam: string;
+  title: string;
+  authority_name: string | null;
+  contract_type: string | null;
+  procedure_type: string | null;
+  document_category: string | null;
+  nuts_code: string | null;
+  nuts_name: string | null;
+  publication_date: string | null;
+  opening_at: string | null;
+  budget_ex_vat: number | null;
+  budget_inc_vat: number | null;
+  budget_unknown_vat: number | null;
+  status: string | null;
+  cancelled_at: string | null;
+};
+
+type AwardRow = {
+  adam: string;
+  procurement_adam: string | null;
+  title: string | null;
+  authority_name: string | null;
+  contract_type: string | null;
+  award_date: string | null;
+  amount_ex_vat: number | null;
+  amount_inc_vat: number | null;
+  amount_unknown_vat: number | null;
+};
+
+type ContractRow = {
+  adam: string;
+  procurement_adam: string | null;
+  award_adam: string | null;
+  signed_date: string | null;
+  delivery_date: string | null;
+  amount_ex_vat: number | null;
+  amount_inc_vat: number | null;
+  amount_unknown_vat: number | null;
+};
+
+type CpvRow = {
+  record_type: "procurement" | "award" | "contract";
+  record_adam: string;
+  cpv_code: string;
+  cpv_description: string | null;
+};
+
+type ContractorRow = {
+  record_type: "award" | "contract";
+  record_adam: string;
+  position: number;
+  contractor_name: string;
+  contractor_vat: string | null;
+};
 
 const MAX_ROWS = 1000;
+const CHUNK_SIZE = 70;
 export const dynamic = "force-dynamic";
 
-async function supabaseGet(path: string) {
+function money(row: {
+  amount_inc_vat?: number | null;
+  amount_ex_vat?: number | null;
+  amount_unknown_vat?: number | null;
+  budget_inc_vat?: number | null;
+  budget_ex_vat?: number | null;
+  budget_unknown_vat?: number | null;
+}) {
+  return Number(
+    row.amount_inc_vat ?? row.amount_ex_vat ?? row.amount_unknown_vat ??
+    row.budget_inc_vat ?? row.budget_ex_vat ?? row.budget_unknown_vat ?? 0,
+  );
+}
+
+async function supabaseGet<T>(path: string): Promise<T> {
   const url = process.env.SUPABASE_URL;
   const key = process.env.SUPABASE_PUBLISHABLE_KEY;
   if (!url || !key) throw new Error("Supabase environment variables are missing");
 
   const response = await fetch(`${url}/rest/v1/${path}`, {
-    headers: { apikey: key, Prefer: "count=exact" },
-    next: { revalidate: 300 },
+    headers: { apikey: key, Authorization: `Bearer ${key}` },
+    cache: "no-store",
   });
-  if (!response.ok) throw new Error(`Supabase request failed (${response.status})`);
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(`Supabase request failed (${response.status}): ${detail.slice(0, 180)}`);
+  }
   return response.json();
 }
 
-async function cpvsFor(sourceType: "notice" | "auction", references: string[]) {
-  const rows: CpvRow[] = [];
-  for (let index = 0; index < references.length; index += 80) {
-    const chunk = references.slice(index, index + 80).map(encodeURIComponent).join(",");
-    const result = await supabaseGet(
-      `cpv_items?select=reference_number,cpv_code,cpv_description&source_type=eq.${sourceType}&reference_number=in.(${chunk})`,
-    );
-    rows.push(...result);
+async function relatedRows<T>(table: string, column: string, values: string[], select: string) {
+  const unique = [...new Set(values.filter(Boolean))];
+  const rows: T[] = [];
+  for (let index = 0; index < unique.length; index += CHUNK_SIZE) {
+    const chunk = unique.slice(index, index + CHUNK_SIZE).map(encodeURIComponent).join(",");
+    rows.push(...await supabaseGet<T[]>(
+      `${table}?select=${select}&${column}=in.(${chunk})`,
+    ));
   }
-  return new Map(rows.map((row) => [row.reference_number, row]));
+  return rows;
 }
 
-function statusFor(row: DbRecord) {
-  if (row.cancel_date) return "Ακυρωμένος";
-  const value = String(row.status ?? "").toLocaleLowerCase("el");
-  if (value.includes("complete") || value.includes("ολοκληρ")) return "Ολοκληρωμένος";
-  if (value.includes("award") || value.includes("ανατεθ")) return "Ανατεθειμένος";
-  if (value.includes("evaluat") || value.includes("αξιολόγ")) return "Αξιολόγηση";
-  return "Ενεργός";
+function groupBy<T>(rows: T[], key: (row: T) => string | null) {
+  const grouped = new Map<string, T[]>();
+  for (const row of rows) {
+    const value = key(row);
+    if (!value) continue;
+    grouped.set(value, [...(grouped.get(value) ?? []), row]);
+  }
+  return grouped;
+}
+
+function statusFor(row: ProcurementRow, awards: AwardRow[], contracts: ContractRow[]) {
+  if (row.cancelled_at || row.status === "cancelled") return "Ξ‘ΞΊΟ…ΟΟ‰ΞΌΞ­Ξ½ΞΏΟ‚";
+  if (contracts.length) return "ΞΞ»ΞΏΞΊΞ»Ξ·ΟΟ‰ΞΌΞ­Ξ½ΞΏΟ‚";
+  if (awards.length) return "Ξ‘Ξ½Ξ±Ο„ΞµΞΈΞµΞΉΞΌΞ­Ξ½ΞΏΟ‚";
+  if (row.opening_at && new Date(row.opening_at).getTime() < Date.now()) return "Ξ‘ΞΎΞΉΞΏΞ»ΟΞ³Ξ·ΟƒΞ·";
+  return "Ξ•Ξ½ΞµΟΞ³ΟΟ‚";
 }
 
 export async function GET() {
   try {
-    // The curated Excel snapshot keeps the preview usable while the Supabase
-    // project is unavailable. Re-running the extractor refreshes this file.
-    const snapshotPath = path.join(process.cwd(), "data", "excel");
-    const filenames = (await readdir(snapshotPath)).filter((name) => name.endsWith(".json")).sort();
-    const chunks = await Promise.all(
-      filenames.map(async (name) => JSON.parse(await readFile(path.join(snapshotPath, name), "utf8"))),
+    const notices = await supabaseGet<ProcurementRow[]>(
+      "procurements_compact?select=adam,title,authority_name,contract_type,procedure_type,document_category,nuts_code,nuts_name,publication_date,opening_at,budget_ex_vat,budget_inc_vat,budget_unknown_vat,status,cancelled_at" +
+      `&order=publication_date.desc.nullslast&limit=${MAX_ROWS}`,
     );
-    const snapshot = {
-      tenders: chunks.flatMap((chunk) => chunk.tenders ?? []),
-      awards: chunks.flatMap((chunk) => chunk.awards ?? []),
-      meta: {
-        source: "Master-File_06082026.xlsx",
-        year: 2024,
-        chunkCount: chunks.length,
+    const noticeAdams = notices.map((row) => row.adam);
+
+    const [awards, contracts, noticeCpvs] = await Promise.all([
+      relatedRows<AwardRow>(
+        "awards_compact", "procurement_adam", noticeAdams,
+        "adam,procurement_adam,title,authority_name,contract_type,award_date,amount_ex_vat,amount_inc_vat,amount_unknown_vat",
+      ),
+      relatedRows<ContractRow>(
+        "contracts_compact", "procurement_adam", noticeAdams,
+        "adam,procurement_adam,award_adam,signed_date,delivery_date,amount_ex_vat,amount_inc_vat,amount_unknown_vat",
+      ),
+      relatedRows<CpvRow>(
+        "record_cpvs_compact", "record_adam", noticeAdams,
+        "record_type,record_adam,cpv_code,cpv_description",
+      ),
+    ]);
+
+    const awardAdams = awards.map((row) => row.adam);
+    const contractAdams = contracts.map((row) => row.adam);
+    const [awardCpvs, awardContractors, contractContractors] = await Promise.all([
+      relatedRows<CpvRow>(
+        "record_cpvs_compact", "record_adam", awardAdams,
+        "record_type,record_adam,cpv_code,cpv_description",
+      ),
+      relatedRows<ContractorRow>(
+        "record_contractors_compact", "record_adam", awardAdams,
+        "record_type,record_adam,position,contractor_name,contractor_vat",
+      ),
+      relatedRows<ContractorRow>(
+        "record_contractors_compact", "record_adam", contractAdams,
+        "record_type,record_adam,position,contractor_name,contractor_vat",
+      ),
+    ]);
+
+    const awardsByNotice = groupBy(awards, (row) => row.procurement_adam);
+    const contractsByNotice = groupBy(contracts, (row) => row.procurement_adam);
+    const noticeCpvsByAdam = groupBy(
+      noticeCpvs.filter((row) => row.record_type === "procurement"),
+      (row) => row.record_adam,
+    );
+    const awardCpvsByAdam = groupBy(
+      awardCpvs.filter((row) => row.record_type === "award"),
+      (row) => row.record_adam,
+    );
+    const awardContractorsByAdam = groupBy(
+      awardContractors.filter((row) => row.record_type === "award"),
+      (row) => row.record_adam,
+    );
+    const contractContractorsByAdam = groupBy(
+      contractContractors.filter((row) => row.record_type === "contract"),
+      (row) => row.record_adam,
+    );
+
+    const tenders = notices.map((notice) => {
+      const linkedAwards = awardsByNotice.get(notice.adam) ?? [];
+      const linkedContracts = contractsByNotice.get(notice.adam) ?? [];
+      const cpv = noticeCpvsByAdam.get(notice.adam)?.[0];
+      const contractorNames = [
+        ...linkedAwards.flatMap((award) => awardContractorsByAdam.get(award.adam) ?? []),
+        ...linkedContracts.flatMap((contract) => contractContractorsByAdam.get(contract.adam) ?? []),
+      ].map((row) => row.contractor_name);
+
+      return {
+        adam: notice.adam,
+        title: notice.title,
+        authority: notice.authority_name ?? "β€”",
+        cpv: cpv?.cpv_code ?? "β€”",
+        cpvDescription: cpv?.cpv_description ?? "",
+        contractType: notice.contract_type ?? undefined,
+        procedureType: notice.procedure_type ?? undefined,
+        documentType: notice.document_category ?? undefined,
+        nutsCode: notice.nuts_code ?? undefined,
+        nutsName: notice.nuts_name ?? undefined,
+        status: statusFor(notice, linkedAwards, linkedContracts),
+        publicationDate: notice.publication_date,
+        deadline: notice.opening_at,
+        openingDate: notice.opening_at,
+        awardDate: linkedAwards.map((row) => row.award_date).filter(Boolean).sort()[0],
+        contractDates: linkedContracts.map((row) => row.signed_date).filter(Boolean),
+        deliveryDates: linkedContracts.map((row) => row.delivery_date).filter(Boolean),
+        contractors: [...new Set(contractorNames)],
+        awardValue: linkedAwards.reduce((sum, row) => sum + money(row), 0),
+        contractValue: linkedContracts.reduce((sum, row) => sum + money(row), 0),
+        budget: money(notice),
+      };
+    });
+
+    const awardItems = awards.flatMap((award) => {
+      const cpv = awardCpvsByAdam.get(award.adam)?.[0];
+      const contractorsForAward = awardContractorsByAdam.get(award.adam) ?? [];
+      const linkedNotice = notices.find((notice) => notice.adam === award.procurement_adam);
+      const rows = contractorsForAward.length ? contractorsForAward : [null];
+      return rows.map((contractor) => ({
+        adam: award.adam,
+        noticeAdam: award.procurement_adam ?? undefined,
+        title: award.title ?? linkedNotice?.title ?? "β€”",
+        authority: award.authority_name ?? linkedNotice?.authority_name ?? "β€”",
+        contractType: award.contract_type ?? linkedNotice?.contract_type ?? undefined,
+        cpv: cpv?.cpv_code ?? noticeCpvsByAdam.get(award.procurement_adam ?? "")?.[0]?.cpv_code ?? "β€”",
+        cpvDescription: cpv?.cpv_description ?? noticeCpvsByAdam.get(award.procurement_adam ?? "")?.[0]?.cpv_description ?? "",
+        contractor: contractor?.contractor_name ?? "Ξ§Ο‰ΟΞ―Ο‚ Ξ±Ξ½Ξ¬Ξ΄ΞΏΟ‡ΞΏ",
+        contractorVat: contractor?.contractor_vat ?? undefined,
+        awardDate: award.award_date ?? undefined,
+        value: money(award),
+      }));
+    });
+
+    return NextResponse.json(
+      {
+        tenders,
+        awards: awardItems,
+        meta: {
+          source: "Supabase compact",
+          limit: MAX_ROWS,
+          loadedAt: new Date().toISOString(),
+        },
       },
-    };
-    return NextResponse.json(snapshot, {
-      headers: { "Cache-Control": "no-store, max-age=0" },
-    });
-  } catch (snapshotError) {
-    console.warn("Excel snapshot unavailable; falling back to Supabase", snapshotError);
-  }
-
-  try {
-    const [notices, auctions] = await Promise.all([
-      supabaseGet(`notices?select=id,reference_number,title,organization_name,contract_type,publication_date,final_submission_date,opening_date,total_cost,status,cancel_date&order=publication_date.desc.nullslast&limit=${MAX_ROWS}`),
-      supabaseGet(`auctions?select=id,reference_number,notice_reference_number,title,organization_name,contract_type,award_date,total_cost,contractor_name,contractor_vat,cancel_date&order=award_date.desc.nullslast&limit=${MAX_ROWS}`),
-    ]);
-
-    const [noticeCpvs, auctionCpvs] = await Promise.all([
-      cpvsFor("notice", notices.map((row: DbRecord) => String(row.reference_number))),
-      cpvsFor("auction", auctions.map((row: DbRecord) => String(row.reference_number))),
-    ]);
-
-    return NextResponse.json({
-      tenders: notices.map((row: DbRecord) => {
-        const cpv = noticeCpvs.get(String(row.reference_number));
-        return {
-          adam: row.reference_number,
-          title: row.title,
-          authority: row.organization_name,
-          contractType: row.contract_type,
-          cpv: cpv?.cpv_code ?? "—",
-          cpvDescription: cpv?.cpv_description ?? "",
-          status: statusFor(row),
-          publicationDate: row.publication_date,
-          deadline: row.final_submission_date,
-          openingDate: row.opening_date,
-          budget: Number(row.total_cost ?? 0),
-        };
-      }),
-      awards: auctions.map((row: DbRecord) => {
-        const cpv = auctionCpvs.get(String(row.reference_number));
-        return {
-          adam: row.reference_number,
-          noticeAdam: row.notice_reference_number,
-          title: row.title,
-          authority: row.organization_name,
-          contractType: row.contract_type,
-          cpv: cpv?.cpv_code ?? "—",
-          cpvDescription: cpv?.cpv_description ?? "",
-          awardDate: row.award_date,
-          value: Number(row.total_cost ?? 0),
-          contractor: row.contractor_name ?? "Χωρίς ανάδοχο",
-          contractorVat: row.contractor_vat,
-        };
-      }),
-      meta: { source: "Supabase", limitPerSource: MAX_ROWS },
-    });
+      { headers: { "Cache-Control": "no-store, max-age=0" } },
+    );
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Unknown data error" },
