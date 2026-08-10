@@ -1,9 +1,24 @@
 import unittest
+from io import BytesIO
+from urllib.error import HTTPError
+from unittest.mock import patch
 
 from compact_transform import classify_document, transform
+from prepare_compact_data import request_page
 
 
 class CompactTransformTests(unittest.TestCase):
+    def test_transient_server_error_is_retried(self):
+        successful_response = BytesIO(b'{"content":[],"last":true}')
+        successful_response.__enter__ = lambda value: value
+        successful_response.__exit__ = lambda *args: None
+        transient = HTTPError("https://example.test", 500, "server error", {}, None)
+        with patch("prepare_compact_data.urlopen", side_effect=[transient, successful_response]) as mocked, \
+                patch("prepare_compact_data.time.sleep"):
+            result = request_page("notice", 0, b"{}")
+        self.assertTrue(result["last"])
+        self.assertEqual(mocked.call_count, 2)
+
     def test_notice_keeps_vat_bases_separate(self):
         result = transform("notice", {
             "referenceNumber": "24PROC014093798",
