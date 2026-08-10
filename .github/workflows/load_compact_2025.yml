@@ -87,7 +87,9 @@ jobs:
                   (10000, 99999),
                   (100000, 999999),
                   (1000000, 1999999),
-                  (2000000, 4999999),
+                  # Two KHMDHS rows around EUR 2.2m make every matching API
+                  # request time out. Keep the retrievable high-value row.
+                  (2500000, 2999999),
                   (5000000, 9999999),
                   (10000000, 1000000000000),
               )
