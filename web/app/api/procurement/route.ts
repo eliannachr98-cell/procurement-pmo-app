@@ -185,6 +185,33 @@ export async function GET(request: Request) {
       ),
     ]);
 
+    // Competition mapping must not depend on the currently visible tender page.
+    // Recent tenders usually have no award yet, which previously made this view empty.
+    const marketAwards = await supabaseGet<AwardRow[]>(
+      "awards_compact?select=adam,procurement_adam,title,authority_name,contract_type,award_date,amount_ex_vat,amount_inc_vat,amount_unknown_vat" +
+      "&order=award_date.desc.nullslast&limit=500",
+    );
+    const marketAwardAdams = marketAwards.map((row) => row.adam);
+    const marketNoticeAdams = marketAwards.map((row) => row.procurement_adam).filter((value): value is string => Boolean(value));
+    const [marketAwardCpvs, marketNoticeCpvs, marketAwardContractors, marketNotices] = await Promise.all([
+      relatedRows<CpvRow>(
+        "record_cpvs_compact", "record_adam", marketAwardAdams,
+        "record_type,record_adam,cpv_code,cpv_description",
+      ),
+      relatedRows<CpvRow>(
+        "record_cpvs_compact", "record_adam", marketNoticeAdams,
+        "record_type,record_adam,cpv_code,cpv_description",
+      ),
+      relatedRows<ContractorRow>(
+        "record_contractors_compact", "record_adam", marketAwardAdams,
+        "record_type,record_adam,position,contractor_name,contractor_vat",
+      ),
+      relatedRows<ProcurementRow>(
+        "procurements_compact", "adam", marketNoticeAdams,
+        "adam,title,authority_name,contract_type",
+      ),
+    ]);
+
     const awardsByNotice = groupBy(awards, (row) => row.procurement_adam);
     const contractsByNotice = groupBy(contracts, (row) => row.procurement_adam);
     const noticeCpvsByAdam = groupBy(
@@ -203,6 +230,19 @@ export async function GET(request: Request) {
       contractContractors.filter((row) => row.record_type === "contract"),
       (row) => row.record_adam,
     );
+    const marketAwardCpvsByAdam = groupBy(
+      marketAwardCpvs.filter((row) => row.record_type === "award"),
+      (row) => row.record_adam,
+    );
+    const marketNoticeCpvsByAdam = groupBy(
+      marketNoticeCpvs.filter((row) => row.record_type === "procurement"),
+      (row) => row.record_adam,
+    );
+    const marketAwardContractorsByAdam = groupBy(
+      marketAwardContractors.filter((row) => row.record_type === "award"),
+      (row) => row.record_adam,
+    );
+    const marketNoticesByAdam = new Map(marketNotices.map((row) => [row.adam, row]));
 
     const tenders = notices.map((notice) => {
       const linkedAwards = awardsByNotice.get(notice.adam) ?? [];
@@ -242,10 +282,10 @@ export async function GET(request: Request) {
       };
     });
 
-    const awardItems = awards.flatMap((award) => {
-      const cpv = awardCpvsByAdam.get(award.adam)?.[0];
-      const contractorsForAward = awardContractorsByAdam.get(award.adam) ?? [];
-      const linkedNotice = notices.find((notice) => notice.adam === award.procurement_adam);
+    const awardItems = marketAwards.flatMap((award) => {
+      const cpv = marketAwardCpvsByAdam.get(award.adam)?.[0];
+      const contractorsForAward = marketAwardContractorsByAdam.get(award.adam) ?? [];
+      const linkedNotice = marketNoticesByAdam.get(award.procurement_adam ?? "");
       const rows = contractorsForAward.length ? contractorsForAward : [null];
       return rows.map((contractor) => ({
         adam: award.adam,
@@ -253,8 +293,8 @@ export async function GET(request: Request) {
         title: award.title ?? linkedNotice?.title ?? "—",
         authority: award.authority_name ?? linkedNotice?.authority_name ?? "—",
         contractType: award.contract_type ?? linkedNotice?.contract_type ?? undefined,
-        cpv: cpv?.cpv_code ?? noticeCpvsByAdam.get(award.procurement_adam ?? "")?.[0]?.cpv_code ?? "—",
-        cpvDescription: cpv?.cpv_description ?? noticeCpvsByAdam.get(award.procurement_adam ?? "")?.[0]?.cpv_description ?? "",
+        cpv: cpv?.cpv_code ?? marketNoticeCpvsByAdam.get(award.procurement_adam ?? "")?.[0]?.cpv_code ?? "—",
+        cpvDescription: cpv?.cpv_description ?? marketNoticeCpvsByAdam.get(award.procurement_adam ?? "")?.[0]?.cpv_description ?? "",
         contractor: contractor?.contractor_name ?? "Χωρίς ανάδοχο",
         contractorVat: contractor?.contractor_vat ?? undefined,
         awardDate: award.award_date ?? undefined,
