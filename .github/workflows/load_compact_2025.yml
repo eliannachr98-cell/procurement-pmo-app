@@ -84,7 +84,7 @@ jobs:
       - name: Write to the new compact database
         env:
           DATABASE_URL: ${{ secrets.COMPACT_DATABASE_URL }}
-          EXPECTED_DB_HOST: gunzsfttzijoxteppskb
+          EXPECTED_DB_REF: gunzsfttzijoxteppskb
         run: python -u load_compact_data.py --input-dir staging/compact --write
       - name: Save failed batch for diagnosis
         if: failure()
