@@ -2,6 +2,14 @@ import { NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
 
+function contractorSearchTerm(value: string) {
+  const aliases: Record<string, string> = {
+    PWC: "PRICEWATERHOUSECOOPERS",
+    EY: "ERNST",
+  };
+  return aliases[value.trim().toLocaleUpperCase("en-US")] ?? value;
+}
+
 async function supabaseRows<T>(path: string): Promise<T[]> {
   const url = process.env.SUPABASE_URL;
   const key = process.env.SUPABASE_PUBLISHABLE_KEY;
@@ -23,8 +31,9 @@ export async function GET(request: Request) {
     const value = encodeURIComponent(`*${query}*`);
 
     if (type === "contractor") {
+      const contractorValue = encodeURIComponent(`*${contractorSearchTerm(query)}*`);
       const rows = await supabaseRows<{ contractor_name: string }>(
-        `record_contractors_compact?select=contractor_name&contractor_name=ilike.${value}&limit=60`,
+        `record_contractors_compact?select=contractor_name&contractor_name=ilike.${contractorValue}&limit=60`,
       );
       return NextResponse.json({ options: [...new Set(rows.map((row) => row.contractor_name).filter(Boolean))].sort((a, b) => a.localeCompare(b, "el")).slice(0, 20) });
     }

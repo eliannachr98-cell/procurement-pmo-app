@@ -145,8 +145,16 @@ function union(groups: string[][]) {
   return [...new Set(groups.flat())];
 }
 
+function contractorSearchTerm(value: string) {
+  const aliases: Record<string, string> = {
+    PWC: "PRICEWATERHOUSECOOPERS",
+    EY: "ERNST",
+  };
+  return aliases[value.trim().toLocaleUpperCase("en-US")] ?? value;
+}
+
 async function procurementAdamsForContractor(term: string) {
-  const value = encodeURIComponent(`*${term}*`);
+  const value = encodeURIComponent(`*${contractorSearchTerm(term)}*`);
   const contractors = await allRows<Pick<ContractorRow, "record_type" | "record_adam">>(
     `record_contractors_compact?select=record_type,record_adam&contractor_name=ilike.${value}`,
   );
