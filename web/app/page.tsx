@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 type Status = "Ενεργός" | "Αξιολόγηση" | "Ανατεθειμένος" | "Ολοκληρωμένος" | "Ακυρωμένος";
 type Tender = {
@@ -78,14 +78,16 @@ export default function Home() {
   const [year, setYear] = useState("Όλα");
   const [contractType, setContractType] = useState("Όλοι");
   const [documentType, setDocumentType] = useState("Όλοι");
+  const latestRequest = useRef(0);
 
   const loadTenderPage = useCallback((nextPage: number, append = false) => {
+    const requestId = ++latestRequest.current;
     setLoading(true);
     const params = new URLSearchParams({ page: String(nextPage), pageSize: "100" });
     if (query.trim()) params.set("q", query.trim());
     if (authority.trim() && authority !== "Όλες") params.set("authority", authority.trim());
-    if (contractor.trim()) params.set("contractor", contractor.trim());
-    if (cpv.trim()) params.set("cpv", cpv.trim());
+    contractor.split(",").map((item) => item.trim()).filter(Boolean).forEach((item) => params.append("contractor", item));
+    cpv.split(",").map((item) => item.trim()).filter(Boolean).forEach((item) => params.append("cpv", item));
     if (year !== "Όλα") params.set("year", year);
     if (contractType !== "Όλοι") params.set("contractType", contractType);
     if (documentType !== "Όλοι") params.set("documentType", documentType);
@@ -97,6 +99,7 @@ export default function Home() {
         return response.json();
       })
       .then((payload) => {
+        if (requestId !== latestRequest.current) return;
         setTenders((current) => append ? [...current, ...(payload.tenders ?? [])] : (payload.tenders ?? []));
         setAwards((current) => append ? [...current, ...(payload.awards ?? [])] : (payload.awards ?? []));
         setLoadedPage(nextPage);
@@ -104,8 +107,12 @@ export default function Home() {
         setHasMore(Boolean(payload.meta?.hasMore));
         setDataError("");
       })
-      .catch((error) => setDataError(error instanceof Error ? error.message : "Σφάλμα δεδομένων"))
-      .finally(() => setLoading(false));
+      .catch((error) => {
+        if (requestId === latestRequest.current) setDataError(error instanceof Error ? error.message : "Σφάλμα δεδομένων");
+      })
+      .finally(() => {
+        if (requestId === latestRequest.current) setLoading(false);
+      });
   }, [query, authority, contractor, cpv, year, contractType, documentType]);
 
   useEffect(() => {
@@ -115,11 +122,13 @@ export default function Home() {
 
   const filtered = useMemo(() => tenders.filter((tender) => {
     const needle = query.trim().toLocaleLowerCase("el");
+    const contractorTerms = contractor.split(",").map((item) => item.trim().toLocaleLowerCase("el")).filter(Boolean);
+    const cpvTerms = cpv.split(",").map((item) => item.trim().toLocaleLowerCase("el")).filter(Boolean);
     const matchesQuery = page !== "tenders" || !needle || `${tender.adam} ${tender.title}`.toLocaleLowerCase("el").includes(needle);
     return matchesQuery && (status === "Όλες" || tender.status === status) &&
       (!authority || authority === "Όλες" || tender.authority.toLocaleLowerCase("el").includes(authority.toLocaleLowerCase("el"))) &&
-      (!contractor || (tender.contractors ?? []).join(" ").toLocaleLowerCase("el").includes(contractor.toLocaleLowerCase("el"))) &&
-      (!cpv || `${tender.cpv} ${tender.cpvDescription}`.toLocaleLowerCase("el").includes(cpv.toLocaleLowerCase("el"))) &&
+      (!contractorTerms.length || contractorTerms.some((item) => (tender.contractors ?? []).join(" ").toLocaleLowerCase("el").includes(item))) &&
+      (!cpvTerms.length || cpvTerms.some((item) => `${tender.cpv} ${tender.cpvDescription}`.toLocaleLowerCase("el").includes(item))) &&
       (year === "Όλα" || tender.publicationDate?.startsWith(year)) &&
       (contractType === "Όλοι" || tender.contractType === contractType) &&
       (documentType === "Όλοι" || tender.documentType === documentType);
@@ -188,8 +197,8 @@ export default function Home() {
           <div className="filterHeading"><div><span>Φίλτρα</span><small>{number.format(filtered.length)} εμφανίζονται · {number.format(totalTenders)} συνολικά</small></div><button onClick={() => { setStatus("Όλες"); setAuthority(""); setContractor(""); setCpv(""); setQuery(""); setYear("Όλα"); setContractType("Όλοι"); setDocumentType("Όλοι"); }}>↻</button></div>
           <label>Έτος<select value={year} onChange={(event) => setYear(event.target.value)}><option>Όλα</option>{years.map((item) => <option key={item}>{item}</option>)}</select></label>
           <label>Αναθέτουσα Αρχή<input list="authority-options" value={authority === "Όλες" ? "" : authority} onChange={(event) => setAuthority(event.target.value)} placeholder="Γράψε ή επίλεξε αρχή" /><datalist id="authority-options">{authorities.map((item) => <option key={item} value={item} />)}</datalist></label>
-          <label>Ανάδοχος<input list="contractor-options" value={contractor} onChange={(event) => setContractor(event.target.value)} placeholder="Γράψε ή επίλεξε ανάδοχο" /><datalist id="contractor-options">{contractors.map((item) => <option key={item} value={item} />)}</datalist></label>
-          {page !== "market" && <label>CPV<input list="cpv-options" value={cpv} onChange={(event) => setCpv(event.target.value)} placeholder="Γράψε κωδικό ή περιγραφή" /><datalist id="cpv-options">{cpvOptions.map(([code,title]) => <option key={code} value={code} label={title} />)}</datalist></label>}
+          <label>Ανάδοχος<input list="contractor-options" value={contractor} onChange={(event) => setContractor(event.target.value)} placeholder="Πολλοί ανάδοχοι με κόμμα" /><datalist id="contractor-options">{contractors.map((item) => <option key={item} value={item} />)}</datalist></label>
+          {page !== "market" && <label>CPV<input list="cpv-options" value={cpv} onChange={(event) => setCpv(event.target.value)} placeholder="Πολλά CPV με κόμμα" /><datalist id="cpv-options">{cpvOptions.map(([code,title]) => <option key={code} value={code} label={title} />)}</datalist></label>}
           <label>Τύπος σύμβασης<select value={contractType} onChange={(event) => setContractType(event.target.value)}><option>Όλοι</option>{contractTypes.map((item) => <option key={item}>{item}</option>)}</select></label>
           <label>Τύπος εγγράφου<select value={documentType} onChange={(event) => setDocumentType(event.target.value)}><option>Όλοι</option>{documentTypes.map((item) => <option key={item}>{item}</option>)}</select></label>
           <label>Κατάσταση<select value={status} onChange={(event) => setStatus(event.target.value)}><option>Όλες</option>{Object.keys(statusTone).map((item) => <option key={item}>{item}</option>)}</select></label>
@@ -259,7 +268,8 @@ function mapPosition(name: string, index: number): [number, number] {
 function MarketPanel({ awards, cpv, setCpv }: { awards: Award[]; cpv: string; setCpv: (value: string) => void }) {
   const [selectedContractor, setSelectedContractor] = useState("");
   const cpvOptions = [...new Map(awards.filter((item) => item.cpv !== "—").map((item) => [item.cpv, item.cpvDescription || "Χωρίς περιγραφή"])).entries()].sort();
-  const relevant = cpv ? awards.filter((item) => `${item.cpv} ${item.cpvDescription}`.toLocaleLowerCase("el").includes(cpv.toLocaleLowerCase("el"))) : awards;
+  const cpvTerms = cpv.split(",").map((item) => item.trim().toLocaleLowerCase("el")).filter(Boolean);
+  const relevant = cpvTerms.length ? awards.filter((item) => cpvTerms.some((term) => `${item.cpv} ${item.cpvDescription}`.toLocaleLowerCase("el").includes(term))) : awards;
   const contractors = [...relevant.reduce((map, item) => {
     if (!item.contractor || item.contractor === "Χωρίς ανάδοχο") return map;
     const current = map.get(item.contractor) ?? { name: item.contractor, awards: 0, value: 0, authorities: new Set<string>() };
@@ -273,11 +283,10 @@ function MarketPanel({ awards, cpv, setCpv }: { awards: Award[]; cpv: string; se
 
   return <>
     <article className="panel marketHero">
-      <div><p className="eyebrow">COMPETITION MAPPING</p><h2>Ανάλυση ανταγωνισμού ανά CPV</h2><p>Επίλεξε CPV για να δεις τους αναδόχους, τις αναθέσεις και τη συνολική αξία.</p></div>
-      <label>CPV<input list="market-cpv-options" value={cpv} onChange={(event) => setCpv(event.target.value)} placeholder="Γράψε κωδικό ή περιγραφή CPV" /><datalist id="market-cpv-options">{cpvOptions.map(([code,title]) => <option key={code} value={code} label={title} />)}</datalist></label>
+      <div><p className="eyebrow">COMPETITION MAPPING</p><h2>Ανάλυση ανταγωνισμού ανά CPV ή ανάδοχο</h2><p>Βάλε ένα ή περισσότερα CPV για να δεις αναδόχους ή επίλεξε αναδόχους από τα φίλτρα για να δεις τα στοιχεία τους.</p></div>
+      <label>CPV<input list="market-cpv-options" value={cpv} onChange={(event) => setCpv(event.target.value)} placeholder="Πολλά CPV με κόμμα" /><datalist id="market-cpv-options">{cpvOptions.map(([code,title]) => <option key={code} value={code} label={title} />)}</datalist></label>
     </article>
     <div className="metrics marketMetrics">
-      <Metric label="Αναθέσεις" value={number.format(relevant.length)} tone="sky" />
       <Metric label="Ανάδοχοι" value={number.format(contractors.length)} tone="mint" />
       <Metric label="Αναθέτουσες Αρχές" value={number.format(new Set(relevant.map((item) => item.authority)).size)} tone="sand" />
       <Metric label="Συνολική αξία" value={euro.format(relevant.reduce((sum, item) => sum + item.value, 0))} tone="lilac" />

@@ -141,6 +141,10 @@ function intersect(left: string[] | null, right: string[]) {
   return left.filter((value) => allowed.has(value));
 }
 
+function union(groups: string[][]) {
+  return [...new Set(groups.flat())];
+}
+
 async function procurementAdamsForContractor(term: string) {
   const value = encodeURIComponent(`*${term}*`);
   const contractors = await allRows<Pick<ContractorRow, "record_type" | "record_adam">>(
@@ -210,23 +214,23 @@ export async function GET(request: Request) {
     const offset = (page - 1) * pageSize;
     const query = searchParams.get("q")?.trim() ?? "";
     const authority = searchParams.get("authority")?.trim() ?? "";
-    const contractor = searchParams.get("contractor")?.trim() ?? "";
-    const cpv = searchParams.get("cpv")?.trim() ?? "";
+    const contractors = searchParams.getAll("contractor").flatMap((value) => value.split(",")).map((value) => value.trim()).filter(Boolean);
+    const cpvs = searchParams.getAll("cpv").flatMap((value) => value.split(",")).map((value) => value.trim()).filter(Boolean);
     const year = searchParams.get("year")?.trim() ?? "";
     const contractType = searchParams.get("contractType")?.trim() ?? "";
     const documentType = searchParams.get("documentType")?.trim() ?? "";
 
     let matchingAdams: string[] | null = null;
     let matchingAwardAdams: string[] | null = null;
-    if (contractor) {
-      const matches = await procurementAdamsForContractor(contractor);
-      matchingAdams = intersect(matchingAdams, matches.procurementAdams);
-      matchingAwardAdams = intersect(matchingAwardAdams, matches.awardAdams);
+    if (contractors.length) {
+      const groups = await Promise.all(contractors.map(procurementAdamsForContractor));
+      matchingAdams = intersect(matchingAdams, union(groups.map((item) => item.procurementAdams)));
+      matchingAwardAdams = intersect(matchingAwardAdams, union(groups.map((item) => item.awardAdams)));
     }
-    if (cpv) {
-      const matches = await procurementAdamsForCpv(cpv);
-      matchingAdams = intersect(matchingAdams, matches.procurementAdams);
-      matchingAwardAdams = intersect(matchingAwardAdams, matches.awardAdams);
+    if (cpvs.length) {
+      const groups = await Promise.all(cpvs.map(procurementAdamsForCpv));
+      matchingAdams = intersect(matchingAdams, union(groups.map((item) => item.procurementAdams)));
+      matchingAwardAdams = intersect(matchingAwardAdams, union(groups.map((item) => item.awardAdams)));
     }
 
     if (matchingAdams?.length === 0) {
