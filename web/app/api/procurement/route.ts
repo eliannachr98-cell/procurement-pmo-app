@@ -168,8 +168,11 @@ async function procurementAdamsForContractor(term: string) {
 
 async function procurementAdamsForCpv(term: string) {
   const value = encodeURIComponent(`*${term}*`);
+  const cpvFilter = /^\d{8}-\d$/.test(term)
+    ? `cpv_code=eq.${encodeURIComponent(term)}`
+    : `or=(cpv_code.ilike.${value},cpv_description.ilike.${value})`;
   const cpvs = await allRows<CpvRow>(
-    `record_cpvs_compact?select=record_type,record_adam,cpv_code,cpv_description&or=(cpv_code.ilike.${value},cpv_description.ilike.${value})`,
+    `record_cpvs_compact?select=record_type,record_adam,cpv_code,cpv_description&${cpvFilter}`,
   );
   const direct = cpvs.filter((row) => row.record_type === "procurement").map((row) => row.record_adam);
   const awardAdams = cpvs.filter((row) => row.record_type === "award").map((row) => row.record_adam);
@@ -223,12 +226,14 @@ export async function GET(request: Request) {
     let matchingAdams: string[] | null = null;
     let matchingAwardAdams: string[] | null = null;
     if (contractors.length) {
-      const groups = await Promise.all(contractors.map(procurementAdamsForContractor));
+      const groups: Awaited<ReturnType<typeof procurementAdamsForContractor>>[] = [];
+      for (const item of contractors) groups.push(await procurementAdamsForContractor(item));
       matchingAdams = intersect(matchingAdams, union(groups.map((item) => item.procurementAdams)));
       matchingAwardAdams = intersect(matchingAwardAdams, union(groups.map((item) => item.awardAdams)));
     }
     if (cpvs.length) {
-      const groups = await Promise.all(cpvs.map(procurementAdamsForCpv));
+      const groups: Awaited<ReturnType<typeof procurementAdamsForCpv>>[] = [];
+      for (const item of cpvs) groups.push(await procurementAdamsForCpv(item));
       matchingAdams = intersect(matchingAdams, union(groups.map((item) => item.procurementAdams)));
       matchingAwardAdams = intersect(matchingAwardAdams, union(groups.map((item) => item.awardAdams)));
     }
