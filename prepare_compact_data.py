@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import json
 import time
+from datetime import date, timedelta
 from pathlib import Path
 
 import requests
@@ -18,6 +19,20 @@ from compact_transform import transform
 
 BASE_URL = "https://cerpp.eprocurement.gov.gr/khmdhs-opendata"
 ENDPOINTS = {"notice": "notices", "auction": "auctions", "contract": "contracts"}
+
+
+def date_windows(date_from: str, date_to: str, days: int = 7):
+    """Yield small inclusive windows so KHMDHS does not time out on long ranges."""
+    current = date.fromisoformat(date_from)
+    end = date.fromisoformat(date_to)
+    if current > end:
+        raise ValueError("date-from must be before or equal to date-to")
+    if days < 1:
+        raise ValueError("window-days must be at least 1")
+    while current <= end:
+        window_end = min(current + timedelta(days=days - 1), end)
+        yield current.isoformat(), window_end.isoformat()
+        current = window_end + timedelta(days=1)
 
 
 def request_page(source: str, page: int, payload: dict) -> dict:
@@ -68,7 +83,14 @@ def iter_records(source: str, date_from: str, date_to: str, max_pages: int | Non
         time.sleep(0.25)
 
 
-def prepare_source(source: str, date_from: str, date_to: str, output_dir: Path, max_pages: int | None) -> dict:
+def prepare_source(
+    source: str,
+    date_from: str,
+    date_to: str,
+    output_dir: Path,
+    max_pages: int | None,
+    window_days: int = 7,
+) -> dict:
     output_dir.mkdir(parents=True, exist_ok=True)
     record_path = output_dir / f"{source}.ndjson"
     cpv_path = output_dir / f"{source}_cpvs.ndjson"
@@ -78,34 +100,36 @@ def prepare_source(source: str, date_from: str, date_to: str, output_dir: Path, 
     with record_path.open("w", encoding="utf-8") as record_file, \
             cpv_path.open("w", encoding="utf-8") as cpv_file, \
             contractor_path.open("w", encoding="utf-8") as contractor_file:
-        for raw in iter_records(source, date_from, date_to, max_pages=max_pages):
-            try:
-                compact = transform(source, raw)
-            except (TypeError, ValueError) as exc:
-                counts["errors"] += 1
-                print(f"SKIP {source}: {exc}")
-                continue
+        for window_from, window_to in date_windows(date_from, date_to, window_days):
+            print(f"{source}: window {window_from} -> {window_to}")
+            for raw in iter_records(source, window_from, window_to, max_pages=max_pages):
+                try:
+                    compact = transform(source, raw)
+                except (TypeError, ValueError) as exc:
+                    counts["errors"] += 1
+                    print(f"SKIP {source}: {exc}")
+                    continue
 
-            record = compact["record"]
-            record_file.write(json.dumps(record, ensure_ascii=False, separators=(",", ":")) + "\n")
-            counts["records"] += 1
-            record_type = {"notice": "procurement", "auction": "award", "contract": "contract"}[source]
+                record = compact["record"]
+                record_file.write(json.dumps(record, ensure_ascii=False, separators=(",", ":")) + "\n")
+                counts["records"] += 1
+                record_type = {"notice": "procurement", "auction": "award", "contract": "contract"}[source]
 
-            for cpv in compact["cpvs"]:
-                cpv_file.write(json.dumps({
-                    "record_type": record_type,
-                    "record_adam": record["adam"],
-                    **cpv,
-                }, ensure_ascii=False, separators=(",", ":")) + "\n")
-                counts["cpvs"] += 1
+                for cpv in compact["cpvs"]:
+                    cpv_file.write(json.dumps({
+                        "record_type": record_type,
+                        "record_adam": record["adam"],
+                        **cpv,
+                    }, ensure_ascii=False, separators=(",", ":")) + "\n")
+                    counts["cpvs"] += 1
 
-            for contractor in compact["contractors"]:
-                contractor_file.write(json.dumps({
-                    "record_type": record_type,
-                    "record_adam": record["adam"],
-                    **contractor,
-                }, ensure_ascii=False, separators=(",", ":")) + "\n")
-                counts["contractors"] += 1
+                for contractor in compact["contractors"]:
+                    contractor_file.write(json.dumps({
+                        "record_type": record_type,
+                        "record_adam": record["adam"],
+                        **contractor,
+                    }, ensure_ascii=False, separators=(",", ":")) + "\n")
+                    counts["contractors"] += 1
 
     return counts
 
@@ -116,12 +140,20 @@ def main() -> None:
     parser.add_argument("--date-to", required=True)
     parser.add_argument("--source", choices=("all", "notice", "auction", "contract"), default="all")
     parser.add_argument("--max-pages", type=int)
+    parser.add_argument("--window-days", type=int, default=7)
     parser.add_argument("--output-dir", type=Path, default=Path("staging/compact"))
     args = parser.parse_args()
 
     sources = ("notice", "auction", "contract") if args.source == "all" else (args.source,)
     summary = {
-        source: prepare_source(source, args.date_from, args.date_to, args.output_dir, args.max_pages)
+        source: prepare_source(
+            source,
+            args.date_from,
+            args.date_to,
+            args.output_dir,
+            args.max_pages,
+            args.window_days,
+        )
         for source in sources
     }
     (args.output_dir / "summary.json").write_text(json.dumps({
