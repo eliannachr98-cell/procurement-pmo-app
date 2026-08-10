@@ -56,7 +56,8 @@ type ContractorRow = {
   contractor_vat: string | null;
 };
 
-const MAX_ROWS = 1000;
+const DEFAULT_PAGE_SIZE = 500;
+const MAX_PAGE_SIZE = 1000;
 const CHUNK_SIZE = 70;
 // Preview reads live compact rows while the historical backfill continues.
 export const dynamic = "force-dynamic";
@@ -91,6 +92,24 @@ async function supabaseGet<T>(path: string): Promise<T> {
   return response.json();
 }
 
+async function supabasePage<T>(path: string): Promise<{ rows: T; total: number }> {
+  const url = process.env.SUPABASE_URL;
+  const key = process.env.SUPABASE_PUBLISHABLE_KEY;
+  if (!url || !key) throw new Error("Supabase environment variables are missing");
+
+  const response = await fetch(`${url}/rest/v1/${path}`, {
+    headers: { apikey: key, Prefer: "count=exact" },
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(`Supabase request failed (${response.status}): ${detail.slice(0, 180)}`);
+  }
+  const contentRange = response.headers.get("content-range") ?? "";
+  const total = Number(contentRange.split("/")[1] ?? 0);
+  return { rows: await response.json(), total: Number.isFinite(total) ? total : 0 };
+}
+
 async function relatedRows<T>(table: string, column: string, values: string[], select: string) {
   const unique = [...new Set(values.filter(Boolean))];
   const rows: T[] = [];
@@ -121,12 +140,17 @@ function statusFor(row: ProcurementRow, awards: AwardRow[], contracts: ContractR
   return "Ενεργός";
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    const notices = await supabaseGet<ProcurementRow[]>(
+    const searchParams = new URL(request.url).searchParams;
+    const page = Math.max(1, Number(searchParams.get("page") ?? 1) || 1);
+    const pageSize = Math.min(MAX_PAGE_SIZE, Math.max(50, Number(searchParams.get("pageSize") ?? DEFAULT_PAGE_SIZE) || DEFAULT_PAGE_SIZE));
+    const offset = (page - 1) * pageSize;
+    const noticePage = await supabasePage<ProcurementRow[]>(
       "procurements_compact?select=adam,title,authority_name,contract_type,procedure_type,document_category,nuts_code,nuts_name,publication_date,opening_at,budget_ex_vat,budget_inc_vat,budget_unknown_vat,status,cancelled_at" +
-      `&order=publication_date.desc.nullslast&limit=${MAX_ROWS}`,
+      `&order=publication_date.desc.nullslast&limit=${pageSize}&offset=${offset}`,
     );
+    const notices = noticePage.rows;
     const noticeAdams = notices.map((row) => row.adam);
 
     const [awards, contracts, noticeCpvs] = await Promise.all([
@@ -244,7 +268,10 @@ export async function GET() {
         awards: awardItems,
         meta: {
           source: "Supabase compact",
-          limit: MAX_ROWS,
+          page,
+          pageSize,
+          total: noticePage.total,
+          hasMore: offset + notices.length < noticePage.total,
           loadedAt: new Date().toISOString(),
         },
       },

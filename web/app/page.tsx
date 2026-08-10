@@ -66,6 +66,9 @@ export default function Home() {
   const [awards, setAwards] = useState<Award[]>([]);
   const [loading, setLoading] = useState(true);
   const [dataError, setDataError] = useState("");
+  const [loadedPage, setLoadedPage] = useState(1);
+  const [totalTenders, setTotalTenders] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
   const [page, setPage] = useState("overview");
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("Όλες");
@@ -76,19 +79,27 @@ export default function Home() {
   const [contractType, setContractType] = useState("Όλοι");
   const [documentType, setDocumentType] = useState("Όλοι");
 
-  useEffect(() => {
-    fetch("/api/procurement")
+  const loadTenderPage = (nextPage: number, append = false) => {
+    setLoading(true);
+    fetch(`/api/procurement?page=${nextPage}&pageSize=500`)
       .then(async (response) => {
         if (!response.ok) throw new Error("Δεν ήταν δυνατή η φόρτωση της Supabase");
         return response.json();
       })
       .then((payload) => {
-        setTenders(payload.tenders ?? []);
-        setAwards(payload.awards ?? []);
+        setTenders((current) => append ? [...current, ...(payload.tenders ?? [])] : (payload.tenders ?? []));
+        setAwards((current) => append ? [...current, ...(payload.awards ?? [])] : (payload.awards ?? []));
+        setLoadedPage(nextPage);
+        setTotalTenders(payload.meta?.total ?? payload.tenders?.length ?? 0);
+        setHasMore(Boolean(payload.meta?.hasMore));
         setDataError("");
       })
       .catch((error) => setDataError(error instanceof Error ? error.message : "Σφάλμα δεδομένων"))
       .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    loadTenderPage(1);
   }, []);
 
   const filtered = useMemo(() => tenders.filter((tender) => {
@@ -152,13 +163,18 @@ export default function Home() {
             <TenderTable rows={[...filtered].sort((a,b) => (b.publicationDate || "").localeCompare(a.publicationDate || "")).slice(0,10)} title="Πρόσφατοι διαγωνισμοί" caption="Οι 10 πιο πρόσφατες εγγραφές" onViewAll={() => setPage("tenders")} />
           </>}
 
-          {page === "tenders" && <TenderTable rows={filtered} expanded />}
+          {page === "tenders" && <>
+            <TenderTable rows={filtered} expanded />
+            {hasMore && <button className="viewAll" disabled={loading} onClick={() => loadTenderPage(loadedPage + 1, true)}>
+              {loading ? "Φόρτωση…" : `Φόρτωση περισσότερων (${number.format(tenders.length)} από ${number.format(totalTenders)})`}
+            </button>}
+          </>}
           {page === "market" && <MarketPanel awards={awards} cpv={cpv} setCpv={setCpv} />}
           {page === "alerts" && <EmptyState icon="♢" title="Ειδοποιήσεις CPV" text="Οι ειδοποιήσεις θα ενεργοποιηθούν μαζί με τους λογαριασμούς χρηστών στη Supabase." />}
         </section>
 
         <aside className="filters">
-          <div className="filterHeading"><div><span>Φίλτρα</span><small>{number.format(filtered.length)} αποτελέσματα</small></div><button onClick={() => { setStatus("Όλες"); setAuthority(""); setContractor(""); setCpv(""); setQuery(""); setYear("Όλα"); setContractType("Όλοι"); setDocumentType("Όλοι"); }}>↻</button></div>
+          <div className="filterHeading"><div><span>Φίλτρα</span><small>{number.format(filtered.length)} εμφανίζονται · {number.format(totalTenders)} συνολικά</small></div><button onClick={() => { setStatus("Όλες"); setAuthority(""); setContractor(""); setCpv(""); setQuery(""); setYear("Όλα"); setContractType("Όλοι"); setDocumentType("Όλοι"); }}>↻</button></div>
           <label>Έτος<select value={year} onChange={(event) => setYear(event.target.value)}><option>Όλα</option>{years.map((item) => <option key={item}>{item}</option>)}</select></label>
           <label>Αναθέτουσα Αρχή<input list="authority-options" value={authority === "Όλες" ? "" : authority} onChange={(event) => setAuthority(event.target.value)} placeholder="Γράψε ή επίλεξε αρχή" /><datalist id="authority-options">{authorities.map((item) => <option key={item} value={item} />)}</datalist></label>
           <label>Ανάδοχος<input list="contractor-options" value={contractor} onChange={(event) => setContractor(event.target.value)} placeholder="Γράψε ή επίλεξε ανάδοχο" /><datalist id="contractor-options">{contractors.map((item) => <option key={item} value={item} />)}</datalist></label>
