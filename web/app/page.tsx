@@ -73,8 +73,8 @@ export default function Home() {
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("Όλες");
   const [authority, setAuthority] = useState("Όλες");
-  const [contractor, setContractor] = useState("");
-  const [cpv, setCpv] = useState("");
+  const [contractor, setContractor] = useState<string[]>([]);
+  const [cpv, setCpv] = useState<string[]>([]);
   const [year, setYear] = useState("Όλα");
   const [contractType, setContractType] = useState("Όλοι");
   const [documentType, setDocumentType] = useState("Όλοι");
@@ -86,8 +86,8 @@ export default function Home() {
     const params = new URLSearchParams({ page: String(nextPage), pageSize: "100" });
     if (query.trim()) params.set("q", query.trim());
     if (authority.trim() && authority !== "Όλες") params.set("authority", authority.trim());
-    contractor.split(",").map((item) => item.trim()).filter(Boolean).forEach((item) => params.append("contractor", item));
-    cpv.split(",").map((item) => item.trim()).filter(Boolean).forEach((item) => params.append("cpv", item));
+    contractor.forEach((item) => params.append("contractor", item));
+    cpv.forEach((item) => params.append("cpv", item));
     if (year !== "Όλα") params.set("year", year);
     if (contractType !== "Όλοι") params.set("contractType", contractType);
     if (documentType !== "Όλοι") params.set("documentType", documentType);
@@ -122,8 +122,8 @@ export default function Home() {
 
   const filtered = useMemo(() => tenders.filter((tender) => {
     const needle = query.trim().toLocaleLowerCase("el");
-    const contractorTerms = contractor.split(",").map((item) => item.trim().toLocaleLowerCase("el")).filter(Boolean);
-    const cpvTerms = cpv.split(",").map((item) => item.trim().toLocaleLowerCase("el")).filter(Boolean);
+    const contractorTerms = contractor.map((item) => item.toLocaleLowerCase("el"));
+    const cpvTerms = cpv.map((item) => item.toLocaleLowerCase("el"));
     const matchesQuery = page !== "tenders" || !needle || `${tender.adam} ${tender.title}`.toLocaleLowerCase("el").includes(needle);
     return matchesQuery && (status === "Όλες" || tender.status === status) &&
       (!authority || authority === "Όλες" || tender.authority.toLocaleLowerCase("el").includes(authority.toLocaleLowerCase("el"))) &&
@@ -135,11 +135,9 @@ export default function Home() {
   }), [tenders, query, status, authority, contractor, cpv, year, contractType, documentType, page]);
 
   const authorities = [...new Set(tenders.map((item) => item.authority).filter(Boolean))].sort();
-  const contractors = [...new Set(tenders.flatMap((item) => item.contractors ?? []).filter(Boolean))].sort();
   const years = [...new Set(tenders.map((item) => item.publicationDate?.slice(0, 4)).filter(Boolean))].sort().reverse();
   const contractTypes = [...new Set(tenders.map((item) => item.contractType).filter(Boolean))].sort();
   const documentTypes = ["Διακήρυξη", "Τροποποίηση", "Απόφαση", "Διευκρίνιση", "Παράταση", "Ακύρωση", "Λοιπό"];
-  const cpvOptions = [...new Map(tenders.filter((item) => item.cpv && item.cpv !== "—").map((item) => [item.cpv, item.cpvDescription || "Χωρίς περιγραφή"])).entries()].sort();
   const statusCount = (value: Status) => filtered.filter((item) => item.status === value).length;
 
   return (
@@ -194,11 +192,11 @@ export default function Home() {
         </section>
 
         <aside className="filters">
-          <div className="filterHeading"><div><span>Φίλτρα</span><small>{number.format(filtered.length)} εμφανίζονται · {number.format(totalTenders)} συνολικά</small></div><button onClick={() => { setStatus("Όλες"); setAuthority(""); setContractor(""); setCpv(""); setQuery(""); setYear("Όλα"); setContractType("Όλοι"); setDocumentType("Όλοι"); }}>↻</button></div>
+          <div className="filterHeading"><div><span>Φίλτρα</span><small>{number.format(filtered.length)} εμφανίζονται · {number.format(totalTenders)} συνολικά</small></div><button onClick={() => { setStatus("Όλες"); setAuthority(""); setContractor([]); setCpv([]); setQuery(""); setYear("Όλα"); setContractType("Όλοι"); setDocumentType("Όλοι"); }}>↻</button></div>
           <label>Έτος<select value={year} onChange={(event) => setYear(event.target.value)}><option>Όλα</option>{years.map((item) => <option key={item}>{item}</option>)}</select></label>
           <label>Αναθέτουσα Αρχή<input list="authority-options" value={authority === "Όλες" ? "" : authority} onChange={(event) => setAuthority(event.target.value)} placeholder="Γράψε ή επίλεξε αρχή" /><datalist id="authority-options">{authorities.map((item) => <option key={item} value={item} />)}</datalist></label>
-          <label>Ανάδοχος<input list="contractor-options" value={contractor} onChange={(event) => setContractor(event.target.value)} placeholder="Πολλοί ανάδοχοι με κόμμα" /><datalist id="contractor-options">{contractors.map((item) => <option key={item} value={item} />)}</datalist></label>
-          {page !== "market" && <label>CPV<input list="cpv-options" value={cpv} onChange={(event) => setCpv(event.target.value)} placeholder="Πολλά CPV με κόμμα" /><datalist id="cpv-options">{cpvOptions.map(([code,title]) => <option key={code} value={code} label={title} />)}</datalist></label>}
+          <MultiSearchInput label="Ανάδοχος" type="contractor" values={contractor} onChange={setContractor} placeholder="Αναζήτησε και επίλεξε αναδόχους" />
+          {page !== "market" && <MultiSearchInput label="CPV" type="cpv" values={cpv} onChange={setCpv} placeholder="Αναζήτησε κωδικό ή περιγραφή CPV" />}
           <label>Τύπος σύμβασης<select value={contractType} onChange={(event) => setContractType(event.target.value)}><option>Όλοι</option>{contractTypes.map((item) => <option key={item}>{item}</option>)}</select></label>
           <label>Τύπος εγγράφου<select value={documentType} onChange={(event) => setDocumentType(event.target.value)}><option>Όλοι</option>{documentTypes.map((item) => <option key={item}>{item}</option>)}</select></label>
           <label>Κατάσταση<select value={status} onChange={(event) => setStatus(event.target.value)}><option>Όλες</option>{Object.keys(statusTone).map((item) => <option key={item}>{item}</option>)}</select></label>
@@ -265,10 +263,60 @@ function mapPosition(name: string, index: number): [number, number] {
   return [[36,31],[54,35],[38,51],[62,43],[51,72]][index % 5] as [number,number];
 }
 
-function MarketPanel({ awards, cpv, setCpv }: { awards: Award[]; cpv: string; setCpv: (value: string) => void }) {
+type SearchOption = { value: string; label: string };
+
+function MultiSearchInput({ label, type, values, onChange, placeholder }: {
+  label: string;
+  type: "contractor" | "cpv";
+  values: string[];
+  onChange: (values: string[]) => void;
+  placeholder: string;
+}) {
+  const [text, setText] = useState("");
+  const [options, setOptions] = useState<SearchOption[]>([]);
+  const [searching, setSearching] = useState(false);
+
+  useEffect(() => {
+    const query = text.trim();
+    if (query.length < 2) { setOptions([]); setSearching(false); return; }
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      setSearching(true);
+      fetch(`/api/options?type=${type}&q=${encodeURIComponent(query)}`, { signal: controller.signal })
+        .then((response) => response.ok ? response.json() : { options: [] })
+        .then((payload) => {
+          const normalized = (payload.options ?? []).map((item: string | SearchOption) =>
+            typeof item === "string" ? { value: item, label: item } : item,
+          );
+          setOptions(normalized.filter((item: SearchOption) => !values.includes(item.value)));
+        })
+        .catch(() => setOptions([]))
+        .finally(() => setSearching(false));
+    }, 250);
+    return () => { window.clearTimeout(timer); controller.abort(); };
+  }, [text, type, values]);
+
+  const select = (option: SearchOption) => {
+    if (!values.includes(option.value)) onChange([...values, option.value]);
+    setText("");
+    setOptions([]);
+  };
+
+  return <label className="multiSearch">{label}
+    <div className="multiBox">
+      {values.map((value) => <span className="filterChip" key={value}>{value}<button type="button" aria-label={`Αφαίρεση ${value}`} onClick={() => onChange(values.filter((item) => item !== value))}>×</button></span>)}
+      <input value={text} onChange={(event) => setText(event.target.value)} placeholder={values.length ? "Πρόσθεσε ακόμη μία επιλογή" : placeholder} />
+    </div>
+    {(searching || options.length > 0) && <div className="suggestions">
+      {searching && <span>Αναζήτηση…</span>}
+      {!searching && options.map((option) => <button type="button" key={option.value} onClick={() => select(option)}>{option.label}</button>)}
+    </div>}
+  </label>;
+}
+
+function MarketPanel({ awards, cpv, setCpv }: { awards: Award[]; cpv: string[]; setCpv: (value: string[]) => void }) {
   const [selectedContractor, setSelectedContractor] = useState("");
-  const cpvOptions = [...new Map(awards.filter((item) => item.cpv !== "—").map((item) => [item.cpv, item.cpvDescription || "Χωρίς περιγραφή"])).entries()].sort();
-  const cpvTerms = cpv.split(",").map((item) => item.trim().toLocaleLowerCase("el")).filter(Boolean);
+  const cpvTerms = cpv.map((item) => item.toLocaleLowerCase("el"));
   const relevant = cpvTerms.length ? awards.filter((item) => cpvTerms.some((term) => `${item.cpv} ${item.cpvDescription}`.toLocaleLowerCase("el").includes(term))) : awards;
   const contractors = [...relevant.reduce((map, item) => {
     if (!item.contractor || item.contractor === "Χωρίς ανάδοχο") return map;
@@ -284,7 +332,7 @@ function MarketPanel({ awards, cpv, setCpv }: { awards: Award[]; cpv: string; se
   return <>
     <article className="panel marketHero">
       <div><p className="eyebrow">COMPETITION MAPPING</p><h2>Ανάλυση ανταγωνισμού ανά CPV ή ανάδοχο</h2><p>Βάλε ένα ή περισσότερα CPV για να δεις αναδόχους ή επίλεξε αναδόχους από τα φίλτρα για να δεις τα στοιχεία τους.</p></div>
-      <label>CPV<input list="market-cpv-options" value={cpv} onChange={(event) => setCpv(event.target.value)} placeholder="Πολλά CPV με κόμμα" /><datalist id="market-cpv-options">{cpvOptions.map(([code,title]) => <option key={code} value={code} label={title} />)}</datalist></label>
+      <MultiSearchInput label="CPV" type="cpv" values={cpv} onChange={setCpv} placeholder="Αναζήτησε και επίλεξε CPV" />
     </article>
     <div className="metrics marketMetrics">
       <Metric label="Ανάδοχοι" value={number.format(contractors.length)} tone="mint" />
