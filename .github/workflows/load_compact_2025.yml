@@ -10,13 +10,14 @@ on:
         options:
           - test
           - full
+          - repair-june-11
         default: test
 
 permissions:
   contents: read
 
 concurrency:
-  group: compact-2025-load
+  group: ${{ inputs.mode == 'repair-june-11' && 'compact-2025-repair' || 'compact-2025-load' }}
   cancel-in-progress: false
 
 jobs:
@@ -36,6 +37,8 @@ jobs:
           sources = ("notice", "auction", "contract")
           if os.environ["MODE"] == "test":
               windows = [{"date_from": "2025-01-01", "date_to": "2025-01-01", "source": source, "max_pages": 1} for source in sources]
+          elif os.environ["MODE"] == "repair-june-11":
+              windows = [{"date_from": "2025-06-11", "date_to": "2025-06-17", "source": "notice", "max_pages": 0}]
           else:
               windows = []
               current, end = date(2025, 1, 1), date(2025, 12, 31)
