@@ -33,6 +33,10 @@ class CompactTransformTests(unittest.TestCase):
         self.assertEqual(result["publication_date"], "2024-01-03")
         self.assertEqual(result["opening_at"], "2024-02-05T10:00:00")
 
+    def test_notice_without_title_gets_safe_label(self):
+        result = transform("notice", {"referenceNumber": "25PROC017023699"})["record"]
+        self.assertEqual(result["title"], "Χωρίς διαθέσιμο τίτλο")
+
     def test_unknown_budget_is_not_mislabeled(self):
         result = transform("notice", {
             "referenceNumber": "25PROC1",
