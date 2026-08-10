@@ -125,6 +125,65 @@ async function relatedRows<T>(table: string, column: string, values: string[], s
   return rows;
 }
 
+async function allRows<T>(path: string) {
+  const rows: T[] = [];
+  const separator = path.includes("?") ? "&" : "?";
+  for (let offset = 0; ; offset += 1000) {
+    const page = await supabaseGet<T[]>(`${path}${separator}limit=1000&offset=${offset}`);
+    rows.push(...page);
+    if (page.length < 1000) return rows;
+  }
+}
+
+function intersect(left: string[] | null, right: string[]) {
+  if (left === null) return [...new Set(right)];
+  const allowed = new Set(right);
+  return left.filter((value) => allowed.has(value));
+}
+
+async function procurementAdamsForContractor(term: string) {
+  const value = encodeURIComponent(`*${term}*`);
+  const contractors = await allRows<Pick<ContractorRow, "record_type" | "record_adam">>(
+    `record_contractors_compact?select=record_type,record_adam&contractor_name=ilike.${value}`,
+  );
+  const awardAdams = contractors.filter((row) => row.record_type === "award").map((row) => row.record_adam);
+  const contractAdams = contractors.filter((row) => row.record_type === "contract").map((row) => row.record_adam);
+  const [linkedAwards, linkedContracts] = await Promise.all([
+    relatedRows<Pick<AwardRow, "adam" | "procurement_adam">>(
+      "awards_compact", "adam", awardAdams, "adam,procurement_adam",
+    ),
+    relatedRows<Pick<ContractRow, "adam" | "procurement_adam" | "award_adam">>(
+      "contracts_compact", "adam", contractAdams, "adam,procurement_adam,award_adam",
+    ),
+  ]);
+  return {
+    procurementAdams: [...new Set([...linkedAwards, ...linkedContracts].map((row) => row.procurement_adam).filter((item): item is string => Boolean(item)))],
+    awardAdams: [...new Set([...awardAdams, ...linkedContracts.map((row) => row.award_adam)].filter((item): item is string => Boolean(item)))],
+  };
+}
+
+async function procurementAdamsForCpv(term: string) {
+  const value = encodeURIComponent(`*${term}*`);
+  const cpvs = await allRows<CpvRow>(
+    `record_cpvs_compact?select=record_type,record_adam,cpv_code,cpv_description&or=(cpv_code.ilike.${value},cpv_description.ilike.${value})`,
+  );
+  const direct = cpvs.filter((row) => row.record_type === "procurement").map((row) => row.record_adam);
+  const awardAdams = cpvs.filter((row) => row.record_type === "award").map((row) => row.record_adam);
+  const contractAdams = cpvs.filter((row) => row.record_type === "contract").map((row) => row.record_adam);
+  const [linkedAwards, linkedContracts] = await Promise.all([
+    relatedRows<Pick<AwardRow, "adam" | "procurement_adam">>(
+      "awards_compact", "adam", awardAdams, "adam,procurement_adam",
+    ),
+    relatedRows<Pick<ContractRow, "adam" | "procurement_adam" | "award_adam">>(
+      "contracts_compact", "adam", contractAdams, "adam,procurement_adam,award_adam",
+    ),
+  ]);
+  return {
+    procurementAdams: [...new Set([...direct, ...linkedAwards.map((row) => row.procurement_adam), ...linkedContracts.map((row) => row.procurement_adam)].filter((item): item is string => Boolean(item)))],
+    awardAdams: [...new Set([...awardAdams, ...linkedContracts.map((row) => row.award_adam)].filter((item): item is string => Boolean(item)))],
+  };
+}
+
 function groupBy<T>(rows: T[], key: (row: T) => string | null) {
   const grouped = new Map<string, T[]>();
   for (const row of rows) {
@@ -149,8 +208,47 @@ export async function GET(request: Request) {
     const page = Math.max(1, Number(searchParams.get("page") ?? 1) || 1);
     const pageSize = Math.min(MAX_PAGE_SIZE, Math.max(50, Number(searchParams.get("pageSize") ?? DEFAULT_PAGE_SIZE) || DEFAULT_PAGE_SIZE));
     const offset = (page - 1) * pageSize;
+    const query = searchParams.get("q")?.trim() ?? "";
+    const authority = searchParams.get("authority")?.trim() ?? "";
+    const contractor = searchParams.get("contractor")?.trim() ?? "";
+    const cpv = searchParams.get("cpv")?.trim() ?? "";
+    const year = searchParams.get("year")?.trim() ?? "";
+    const contractType = searchParams.get("contractType")?.trim() ?? "";
+    const documentType = searchParams.get("documentType")?.trim() ?? "";
+
+    let matchingAdams: string[] | null = null;
+    let matchingAwardAdams: string[] | null = null;
+    if (contractor) {
+      const matches = await procurementAdamsForContractor(contractor);
+      matchingAdams = intersect(matchingAdams, matches.procurementAdams);
+      matchingAwardAdams = intersect(matchingAwardAdams, matches.awardAdams);
+    }
+    if (cpv) {
+      const matches = await procurementAdamsForCpv(cpv);
+      matchingAdams = intersect(matchingAdams, matches.procurementAdams);
+      matchingAwardAdams = intersect(matchingAwardAdams, matches.awardAdams);
+    }
+
+    if (matchingAdams?.length === 0) {
+      return NextResponse.json({ tenders: [], awards: [], meta: { source: "Supabase compact", page, pageSize, total: 0, hasMore: false, loadedAt: new Date().toISOString() } });
+    }
+
+    const filters: string[] = [];
+    if (query) {
+      const value = encodeURIComponent(`*${query}*`);
+      filters.push(`or=(adam.ilike.${value},title.ilike.${value})`);
+    }
+    if (authority) filters.push(`authority_name=ilike.${encodeURIComponent(`*${authority}*`)}`);
+    if (/^\d{4}$/.test(year)) {
+      filters.push(`publication_date=gte.${year}-01-01`, `publication_date=lte.${year}-12-31`);
+    }
+    if (contractType) filters.push(`contract_type=eq.${encodeURIComponent(contractType)}`);
+    if (documentType) filters.push(`document_category=eq.${encodeURIComponent(documentType)}`);
+    if (matchingAdams) filters.push(`adam=in.(${matchingAdams.map(encodeURIComponent).join(",")})`);
+
     const noticePage = await supabasePage<ProcurementRow[]>(
       "procurements_compact?select=adam,title,authority_name,contract_type,procedure_type,document_category,nuts_code,nuts_name,publication_date,opening_at,budget_ex_vat,budget_inc_vat,budget_unknown_vat,status,cancelled_at" +
+      (filters.length ? `&${filters.join("&")}` : "") +
       `&order=publication_date.desc.nullslast&limit=${pageSize}&offset=${offset}`,
     );
     const notices = noticePage.rows;
@@ -196,9 +294,10 @@ export async function GET(request: Request) {
     // Recent tenders usually have no award yet, which previously made this view empty.
     const marketAwards = await supabaseGet<AwardRow[]>(
       "awards_compact?select=adam,procurement_adam,title,authority_name,contract_type,award_date,amount_ex_vat,amount_inc_vat,amount_unknown_vat" +
+      (matchingAwardAdams ? `&adam=in.(${matchingAwardAdams.map(encodeURIComponent).join(",")})` : "") +
       // `adam` is the primary key, so this avoids sorting the full awards table
       // by an unindexed date on every dashboard request.
-      "&order=adam.desc&limit=200",
+      `&order=adam.desc&limit=${matchingAwardAdams ? 1000 : 200}`,
     );
     const marketAwardAdams = marketAwards.map((row) => row.adam);
     const marketNoticeAdams = marketAwards.map((row) => row.procurement_adam).filter((value): value is string => Boolean(value));

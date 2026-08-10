@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 type Status = "Ενεργός" | "Αξιολόγηση" | "Ανατεθειμένος" | "Ολοκληρωμένος" | "Ακυρωμένος";
 type Tender = {
@@ -79,11 +79,19 @@ export default function Home() {
   const [contractType, setContractType] = useState("Όλοι");
   const [documentType, setDocumentType] = useState("Όλοι");
 
-  const loadTenderPage = (nextPage: number, append = false) => {
+  const loadTenderPage = useCallback((nextPage: number, append = false) => {
     setLoading(true);
+    const params = new URLSearchParams({ page: String(nextPage), pageSize: "100" });
+    if (query.trim()) params.set("q", query.trim());
+    if (authority.trim() && authority !== "Όλες") params.set("authority", authority.trim());
+    if (contractor.trim()) params.set("contractor", contractor.trim());
+    if (cpv.trim()) params.set("cpv", cpv.trim());
+    if (year !== "Όλα") params.set("year", year);
+    if (contractType !== "Όλοι") params.set("contractType", contractType);
+    if (documentType !== "Όλοι") params.set("documentType", documentType);
     // Pages are intentionally small; users can continue through the complete
     // dataset without downloading the whole historical database at once.
-    fetch(`/api/procurement?page=${nextPage}&pageSize=100`)
+    fetch(`/api/procurement?${params.toString()}`)
       .then(async (response) => {
         if (!response.ok) throw new Error("Δεν ήταν δυνατή η φόρτωση της Supabase");
         return response.json();
@@ -98,11 +106,12 @@ export default function Home() {
       })
       .catch((error) => setDataError(error instanceof Error ? error.message : "Σφάλμα δεδομένων"))
       .finally(() => setLoading(false));
-  };
+  }, [query, authority, contractor, cpv, year, contractType, documentType]);
 
   useEffect(() => {
-    loadTenderPage(1);
-  }, []);
+    const timer = window.setTimeout(() => loadTenderPage(1), 350);
+    return () => window.clearTimeout(timer);
+  }, [loadTenderPage]);
 
   const filtered = useMemo(() => tenders.filter((tender) => {
     const needle = query.trim().toLocaleLowerCase("el");
