@@ -1,0 +1,49 @@
+name: Prepare compact sample (no database writes)
+
+on:
+  workflow_dispatch:
+    inputs:
+      date_from:
+        description: Start date
+        required: true
+        default: "2025-01-01"
+      date_to:
+        description: End date
+        required: true
+        default: "2025-01-31"
+      max_pages:
+        description: Pages per source for the sample
+        required: true
+        default: "2"
+
+permissions:
+  contents: read
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Run transformation tests
+        run: python -m unittest -v test_compact_transform.py
+      - name: Prepare compact files
+        run: >-
+          python prepare_compact_data.py
+          --date-from "${{ inputs.date_from }}"
+          --date-to "${{ inputs.date_to }}"
+          --source all
+          --max-pages "${{ inputs.max_pages }}"
+          --output-dir staging/compact-sample
+      - name: Validate loader without writing
+        run: python load_compact_data.py --input-dir staging/compact-sample
+      - uses: actions/upload-artifact@v4
+        with:
+          name: compact-sample-${{ inputs.date_from }}-${{ inputs.date_to }}
+          path: staging/compact-sample
+          retention-days: 7
+
+
