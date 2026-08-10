@@ -113,13 +113,13 @@ async function supabasePage<T>(path: string): Promise<{ rows: T; total: number }
   return { rows: await response.json(), total: Number.isFinite(total) ? total : 0 };
 }
 
-async function relatedRows<T>(table: string, column: string, values: string[], select: string) {
+async function relatedRows<T>(table: string, column: string, values: string[], select: string, filter = "") {
   const unique = [...new Set(values.filter(Boolean))];
   const rows: T[] = [];
   for (let index = 0; index < unique.length; index += CHUNK_SIZE) {
     const chunk = unique.slice(index, index + CHUNK_SIZE).map(encodeURIComponent).join(",");
     rows.push(...await supabaseGet<T[]>(
-      `${table}?select=${select}&${column}=in.(${chunk})`,
+      `${table}?select=${select}${filter ? `&${filter}` : ""}&${column}=in.(${chunk})`,
     ));
   }
   return rows;
@@ -168,6 +168,7 @@ export async function GET(request: Request) {
       relatedRows<CpvRow>(
         "record_cpvs_compact", "record_adam", noticeAdams,
         "record_type,record_adam,cpv_code,cpv_description",
+        "record_type=eq.procurement",
       ),
     ]);
 
@@ -177,14 +178,17 @@ export async function GET(request: Request) {
       relatedRows<CpvRow>(
         "record_cpvs_compact", "record_adam", awardAdams,
         "record_type,record_adam,cpv_code,cpv_description",
+        "record_type=eq.award",
       ),
       relatedRows<ContractorRow>(
         "record_contractors_compact", "record_adam", awardAdams,
         "record_type,record_adam,position,contractor_name,contractor_vat",
+        "record_type=eq.award",
       ),
       relatedRows<ContractorRow>(
         "record_contractors_compact", "record_adam", contractAdams,
         "record_type,record_adam,position,contractor_name,contractor_vat",
+        "record_type=eq.contract",
       ),
     ]);
 
@@ -202,14 +206,17 @@ export async function GET(request: Request) {
       relatedRows<CpvRow>(
         "record_cpvs_compact", "record_adam", marketAwardAdams,
         "record_type,record_adam,cpv_code,cpv_description",
+        "record_type=eq.award",
       ),
       relatedRows<CpvRow>(
         "record_cpvs_compact", "record_adam", marketNoticeAdams,
         "record_type,record_adam,cpv_code,cpv_description",
+        "record_type=eq.procurement",
       ),
       relatedRows<ContractorRow>(
         "record_contractors_compact", "record_adam", marketAwardAdams,
         "record_type,record_adam,position,contractor_name,contractor_vat",
+        "record_type=eq.award",
       ),
       relatedRows<ProcurementRow>(
         "procurements_compact", "adam", marketNoticeAdams,
