@@ -12,6 +12,7 @@ on:
           - full
           - repair-june-11
           - repair-july-30
+          - repair-auction-daily-july-30
         default: test
 
 permissions:
@@ -44,6 +45,17 @@ jobs:
               windows = [
                   {"date_from": "2025-07-30", "date_to": "2025-08-05", "source": source, "max_pages": 0}
                   for source in ("notice", "auction")
+              ]
+          elif os.environ["MODE"] == "repair-auction-daily-july-30":
+              start = date(2025, 7, 30)
+              windows = [
+                  {
+                      "date_from": (start + timedelta(days=offset)).isoformat(),
+                      "date_to": (start + timedelta(days=offset)).isoformat(),
+                      "source": "auction",
+                      "max_pages": 0,
+                  }
+                  for offset in range(7)
               ]
           else:
               windows = []
