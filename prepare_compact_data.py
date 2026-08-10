@@ -75,11 +75,17 @@ def iter_records(
     date_to: str,
     max_pages: int | None = None,
     contract_type: str | None = None,
+    estimated_cost_from: int | None = None,
+    estimated_cost_to: int | None = None,
 ):
     page = 0
     payload = {"dateFrom": date_from, "dateTo": date_to}
     if contract_type:
         payload["contractType"] = contract_type
+    if estimated_cost_from is not None:
+        payload["estTotalCostFrom"] = estimated_cost_from
+    if estimated_cost_to is not None:
+        payload["estTotalCostTo"] = estimated_cost_to
     while True:
         data = request_page(source, page, payload)
         content = data.get("content") or []
@@ -101,6 +107,8 @@ def prepare_source(
     max_pages: int | None,
     window_days: int = 7,
     contract_type: str | None = None,
+    estimated_cost_from: int | None = None,
+    estimated_cost_to: int | None = None,
 ) -> dict:
     output_dir.mkdir(parents=True, exist_ok=True)
     record_path = output_dir / f"{source}.ndjson"
@@ -119,6 +127,8 @@ def prepare_source(
                 window_to,
                 max_pages=max_pages,
                 contract_type=contract_type,
+                estimated_cost_from=estimated_cost_from,
+                estimated_cost_to=estimated_cost_to,
             ):
                 try:
                     compact = transform(source, raw)
@@ -159,6 +169,8 @@ def main() -> None:
     parser.add_argument("--max-pages", type=int)
     parser.add_argument("--window-days", type=int, default=7)
     parser.add_argument("--contract-type")
+    parser.add_argument("--estimated-cost-from", type=int)
+    parser.add_argument("--estimated-cost-to", type=int)
     parser.add_argument("--output-dir", type=Path, default=Path("staging/compact"))
     args = parser.parse_args()
 
@@ -172,6 +184,8 @@ def main() -> None:
             args.max_pages,
             args.window_days,
             args.contract_type,
+            args.estimated_cost_from,
+            args.estimated_cost_to,
         )
         for source in sources
     }

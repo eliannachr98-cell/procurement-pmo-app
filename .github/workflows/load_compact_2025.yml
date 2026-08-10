@@ -15,6 +15,7 @@ on:
           - repair-auction-daily-july-30
           - repair-auction-aug-05-long-timeout
           - repair-auction-aug-05-by-contract-type
+          - repair-auction-aug-05-supplies-by-cost
         default: test
 
 permissions:
@@ -77,6 +78,29 @@ jobs:
                   }
                   for contract_type in ("9", "10", "12", "13", "14")
               ]
+          elif os.environ["MODE"] == "repair-auction-aug-05-supplies-by-cost":
+              cost_ranges = (
+                  (0, 999),
+                  (1000, 2999),
+                  (3000, 5999),
+                  (6000, 9999),
+                  (10000, 99999),
+                  (100000, 999999),
+                  (1000000, 9999999),
+                  (10000000, 1000000000000),
+              )
+              windows = [
+                  {
+                      "date_from": "2025-08-05",
+                      "date_to": "2025-08-05",
+                      "source": "auction",
+                      "contract_type": "13",
+                      "estimated_cost_from": cost_from,
+                      "estimated_cost_to": cost_to,
+                      "max_pages": 0,
+                  }
+                  for cost_from, cost_to in cost_ranges
+              ]
           else:
               windows = []
               current, end = date(2025, 1, 1), date(2025, 12, 31)
@@ -101,7 +125,7 @@ jobs:
       fail-fast: false
       max-parallel: 2
       matrix: ${{ fromJson(needs.prepare.outputs.matrix) }}
-    name: ${{ matrix.source }} ${{ matrix.date_from }} to ${{ matrix.date_to }} type ${{ matrix.contract_type }}
+    name: ${{ matrix.source }} ${{ matrix.date_from }} type ${{ matrix.contract_type }} cost ${{ matrix.estimated_cost_from }}-${{ matrix.estimated_cost_to }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -113,6 +137,8 @@ jobs:
         env:
           KHMDHS_READ_TIMEOUT: ${{ inputs.mode == 'repair-auction-aug-05-long-timeout' && '180' || '60' }}
           CONTRACT_TYPE: ${{ matrix.contract_type }}
+          ESTIMATED_COST_FROM: ${{ matrix.estimated_cost_from }}
+          ESTIMATED_COST_TO: ${{ matrix.estimated_cost_to }}
         shell: bash
         run: |
           args=(
@@ -126,6 +152,12 @@ jobs:
           fi
           if [ -n "$CONTRACT_TYPE" ]; then
             args+=(--contract-type "$CONTRACT_TYPE")
+          fi
+          if [ -n "$ESTIMATED_COST_FROM" ]; then
+            args+=(--estimated-cost-from "$ESTIMATED_COST_FROM")
+          fi
+          if [ -n "$ESTIMATED_COST_TO" ]; then
+            args+=(--estimated-cost-to "$ESTIMATED_COST_TO")
           fi
           python -u prepare_compact_data.py "${args[@]}"
       - name: Write to the new compact database
