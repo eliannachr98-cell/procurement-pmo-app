@@ -10,7 +10,6 @@ import argparse
 import json
 import os
 from pathlib import Path
-from urllib.parse import urlparse
 
 
 TABLES = {
@@ -69,12 +68,11 @@ def main() -> None:
     database_url = os.environ.get("DATABASE_URL")
     if not database_url:
         raise SystemExit("DATABASE_URL is required with --write")
-    expected_host = os.environ.get("EXPECTED_DB_HOST")
-    actual_host = urlparse(database_url).hostname or ""
-    if expected_host and expected_host not in actual_host:
+    expected_ref = os.environ.get("EXPECTED_DB_REF")
+    if expected_ref and expected_ref not in database_url:
         raise SystemExit(
-            f"Safety stop: DATABASE_URL host {actual_host!r} does not match "
-            f"EXPECTED_DB_HOST {expected_host!r}"
+            "Safety stop: DATABASE_URL does not belong to the expected "
+            f"Supabase project {expected_ref!r}"
         )
     import psycopg
 
