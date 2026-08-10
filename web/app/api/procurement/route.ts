@@ -247,8 +247,10 @@ export async function GET() {
       { headers: { "Cache-Control": "no-store, max-age=0" } },
     );
   } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown data error";
+    console.error(`[procurement-api] ${message}`);
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Unknown data error" },
+      { error: message },
       { status: 500 },
     );
   }
