@@ -81,7 +81,7 @@ async function supabaseGet<T>(path: string): Promise<T> {
   if (!url || !key) throw new Error("Supabase environment variables are missing");
 
   const response = await fetch(`${url}/rest/v1/${path}`, {
-    headers: { apikey: key, Authorization: `Bearer ${key}` },
+    headers: { apikey: key },
     cache: "no-store",
   });
   if (!response.ok) {
