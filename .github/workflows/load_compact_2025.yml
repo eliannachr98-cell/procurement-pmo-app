@@ -14,6 +14,7 @@ on:
           - repair-july-30
           - repair-auction-daily-july-30
           - repair-auction-aug-05-long-timeout
+          - repair-auction-aug-05-by-contract-type
         default: test
 
 permissions:
@@ -65,6 +66,17 @@ jobs:
                   "source": "auction",
                   "max_pages": 0,
               }]
+          elif os.environ["MODE"] == "repair-auction-aug-05-by-contract-type":
+              windows = [
+                  {
+                      "date_from": "2025-08-05",
+                      "date_to": "2025-08-05",
+                      "source": "auction",
+                      "contract_type": contract_type,
+                      "max_pages": 0,
+                  }
+                  for contract_type in ("9", "10", "12", "13", "14")
+              ]
           else:
               windows = []
               current, end = date(2025, 1, 1), date(2025, 12, 31)
@@ -89,7 +101,7 @@ jobs:
       fail-fast: false
       max-parallel: 2
       matrix: ${{ fromJson(needs.prepare.outputs.matrix) }}
-    name: ${{ matrix.source }} ${{ matrix.date_from }} to ${{ matrix.date_to }}
+    name: ${{ matrix.source }} ${{ matrix.date_from }} to ${{ matrix.date_to }} type ${{ matrix.contract_type }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -100,6 +112,7 @@ jobs:
       - name: Prepare compact data
         env:
           KHMDHS_READ_TIMEOUT: ${{ inputs.mode == 'repair-auction-aug-05-long-timeout' && '180' || '60' }}
+          CONTRACT_TYPE: ${{ matrix.contract_type }}
         shell: bash
         run: |
           args=(
@@ -110,6 +123,9 @@ jobs:
           )
           if [ "${{ matrix.max_pages }}" -gt 0 ]; then
             args+=(--max-pages "${{ matrix.max_pages }}")
+          fi
+          if [ -n "$CONTRACT_TYPE" ]; then
+            args+=(--contract-type "$CONTRACT_TYPE")
           fi
           python -u prepare_compact_data.py "${args[@]}"
       - name: Write to the new compact database

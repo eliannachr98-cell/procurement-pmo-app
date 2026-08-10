@@ -69,9 +69,17 @@ def request_page(source: str, page: int, payload: dict) -> dict:
     raise RuntimeError("unreachable retry state")
 
 
-def iter_records(source: str, date_from: str, date_to: str, max_pages: int | None = None):
+def iter_records(
+    source: str,
+    date_from: str,
+    date_to: str,
+    max_pages: int | None = None,
+    contract_type: str | None = None,
+):
     page = 0
     payload = {"dateFrom": date_from, "dateTo": date_to}
+    if contract_type:
+        payload["contractType"] = contract_type
     while True:
         data = request_page(source, page, payload)
         content = data.get("content") or []
@@ -92,6 +100,7 @@ def prepare_source(
     output_dir: Path,
     max_pages: int | None,
     window_days: int = 7,
+    contract_type: str | None = None,
 ) -> dict:
     output_dir.mkdir(parents=True, exist_ok=True)
     record_path = output_dir / f"{source}.ndjson"
@@ -104,7 +113,13 @@ def prepare_source(
             contractor_path.open("w", encoding="utf-8") as contractor_file:
         for window_from, window_to in date_windows(date_from, date_to, window_days):
             print(f"{source}: window {window_from} -> {window_to}")
-            for raw in iter_records(source, window_from, window_to, max_pages=max_pages):
+            for raw in iter_records(
+                source,
+                window_from,
+                window_to,
+                max_pages=max_pages,
+                contract_type=contract_type,
+            ):
                 try:
                     compact = transform(source, raw)
                 except (TypeError, ValueError) as exc:
@@ -143,6 +158,7 @@ def main() -> None:
     parser.add_argument("--source", choices=("all", "notice", "auction", "contract"), default="all")
     parser.add_argument("--max-pages", type=int)
     parser.add_argument("--window-days", type=int, default=7)
+    parser.add_argument("--contract-type")
     parser.add_argument("--output-dir", type=Path, default=Path("staging/compact"))
     args = parser.parse_args()
 
@@ -155,6 +171,7 @@ def main() -> None:
             args.output_dir,
             args.max_pages,
             args.window_days,
+            args.contract_type,
         )
         for source in sources
     }
