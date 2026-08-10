@@ -10,6 +10,7 @@ import argparse
 import json
 import os
 from pathlib import Path
+from urllib.parse import urlparse
 
 
 TABLES = {
@@ -68,6 +69,13 @@ def main() -> None:
     database_url = os.environ.get("DATABASE_URL")
     if not database_url:
         raise SystemExit("DATABASE_URL is required with --write")
+    expected_host = os.environ.get("EXPECTED_DB_HOST")
+    actual_host = urlparse(database_url).hostname or ""
+    if expected_host and expected_host not in actual_host:
+        raise SystemExit(
+            f"Safety stop: DATABASE_URL host {actual_host!r} does not match "
+            f"EXPECTED_DB_HOST {expected_host!r}"
+        )
     import psycopg
 
     with psycopg.connect(database_url) as connection, connection.cursor() as cursor:
@@ -95,5 +103,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
 
