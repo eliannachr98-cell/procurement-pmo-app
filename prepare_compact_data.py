@@ -52,6 +52,9 @@ def request_page(source: str, page: int, payload: dict) -> dict:
                 json=payload,
                 timeout=read_timeout,
             )
+            # KHMDHS returns 404 for some valid filtered searches with no rows.
+            if response.status_code == 404 and page == 0:
+                return {"content": [], "totalPages": 0, "last": True}
             if response.status_code not in (429, 500, 502, 503, 504):
                 response.raise_for_status()
                 return response.json()
