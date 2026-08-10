@@ -9,10 +9,9 @@ from __future__ import annotations
 import argparse
 import json
 import time
-from urllib.parse import urlencode
-from urllib.request import Request, urlopen
-from urllib.error import HTTPError, URLError
 from pathlib import Path
+
+import requests
 
 from compact_transform import transform
 
@@ -21,24 +20,30 @@ BASE_URL = "https://cerpp.eprocurement.gov.gr/khmdhs-opendata"
 ENDPOINTS = {"notice": "notices", "auction": "auctions", "contract": "contracts"}
 
 
-def request_page(source: str, page: int, payload: bytes) -> dict:
-    url = f"{BASE_URL}/{ENDPOINTS[source]}?{urlencode({'page': page})}"
-    request = Request(url, data=payload, headers={
-        "Accept": "application/json",
-        "Content-Type": "application/json",
-        "User-Agent": "procurement-pmo-app/compact-1.1",
-    }, method="POST")
+def request_page(source: str, page: int, payload: dict) -> dict:
+    url = f"{BASE_URL}/{ENDPOINTS[source]}"
     for attempt in range(1, 6):
         try:
-            with urlopen(request, timeout=60) as response:
-                return json.load(response)
-        except HTTPError as exc:
-            if exc.code not in (429, 500, 502, 503, 504) or attempt == 5:
-                raise
+            response = requests.post(
+                url,
+                params={"page": page},
+                headers={
+                    "Accept": "application/json",
+                    "Content-Type": "application/json",
+                    "User-Agent": "procurement-pmo-app/compact-1.2",
+                },
+                json=payload,
+                timeout=60,
+            )
+            if response.status_code not in (429, 500, 502, 503, 504):
+                response.raise_for_status()
+                return response.json()
+            if attempt == 5:
+                response.raise_for_status()
             wait = min(45, 5 * (2 ** (attempt - 1)))
-            print(f"{source}: HTTP {exc.code} on page {page + 1}; retry {attempt}/5 in {wait}s")
+            print(f"{source}: HTTP {response.status_code} on page {page + 1}; retry {attempt}/5 in {wait}s")
             time.sleep(wait)
-        except (URLError, TimeoutError) as exc:
+        except requests.RequestException as exc:
             if attempt == 5:
                 raise
             wait = min(45, 5 * (2 ** (attempt - 1)))
@@ -49,7 +54,7 @@ def request_page(source: str, page: int, payload: bytes) -> dict:
 
 def iter_records(source: str, date_from: str, date_to: str, max_pages: int | None = None):
     page = 0
-    payload = json.dumps({"dateFrom": date_from, "dateTo": date_to}).encode("utf-8")
+    payload = {"dateFrom": date_from, "dateTo": date_to}
     while True:
         data = request_page(source, page, payload)
         content = data.get("content") or []
