@@ -148,7 +148,7 @@ export default function Home() {
               <article className="panel"><PanelHeader title="Διαγωνισμοί ανά στάδιο" caption="Τρέχουσα εικόνα" /><StatusBars rows={filtered} /></article>
               <article className="panel"><PanelHeader title="CPV Distribution" caption="Κορυφαίες κατηγορίες" /><CpvDonut rows={filtered} /></article>
             </div>
-            <NutsMap rows={filtered.filter((item) => item.status === "Ενεργός")} />
+            <NutsMap rows={filtered} />
             <TenderTable rows={[...filtered].sort((a,b) => (b.publicationDate || "").localeCompare(a.publicationDate || "")).slice(0,10)} title="Πρόσφατοι διαγωνισμοί" caption="Οι 10 πιο πρόσφατες εγγραφές" onViewAll={() => setPage("tenders")} />
           </>}
 
@@ -204,7 +204,7 @@ function TenderTable({ rows, expanded = false, title = "Λίστα διαγων�
 
 function TenderDetail({ tender, onBack }: { tender: Tender; onBack: () => void }) {
   const milestones = [
-    ["Δημοσίευση", tender.publicationDate], ["Αποσφράγιση", tender.openingDate], ["Ανάθεση", tender.awardDate],
+    ["Δημοσίευση", tender.publicationDate], ["Καταληκτική υποβολής", tender.openingDate], ["Ανάθεση", tender.awardDate],
     ["Σύμβαση", tender.contractDates?.[0]], ["Παράδοση", tender.deliveryDates?.[0]],
   ].filter((item): item is [string, string] => Boolean(item[1]));
   const dates = milestones.map((item) => new Date(item[1]).getTime()).filter(Number.isFinite);
@@ -216,7 +216,7 @@ function NutsMap({ rows }: { rows: Tender[] }) {
   const stats = rows.reduce((map, item) => { const key = item.nutsName || item.nutsCode || "Χωρίς NUTS"; const current = map.get(key) ?? { count: 0, authorities: new Set<string>(), cpvs: new Map<string,number>() }; current.count += 1; current.authorities.add(item.authority); current.cpvs.set(item.cpv,(current.cpvs.get(item.cpv) ?? 0)+1); map.set(key,current); return map; }, new Map<string,{count:number;authorities:Set<string>;cpvs:Map<string,number>}>());
   const regions = [...stats.entries()].sort((a,b) => b[1].count-a[1].count);
   const max = Math.max(1,...regions.map((item) => item[1].count));
-  return <article className="panel nutsPanel"><PanelHeader title="Ενεργοί διαγωνισμοί ανά NUTS" caption={`${number.format(rows.length)} ενεργοί διαγωνισμοί`} /><div className="nutsMap"><div className="realMap"><iframe title="Χάρτης Ελλάδας" loading="lazy" src="https://www.openstreetmap.org/export/embed.html?bbox=18.4%2C34.4%2C30.4%2C42.2&amp;layer=mapnik" />{regions.slice(0,12).map(([name,data],index) => { const [left,top] = mapPosition(name,index); const topCpv=[...data.cpvs.entries()].sort((a,b)=>b[1]-a[1])[0]?.[0] ?? "—"; return <span className="mapPin" key={name} style={{left:`${left}%`,top:`${top}%`,width:`${22+(data.count/max)*20}px`,height:`${22+(data.count/max)*20}px`}}><b>{data.count}</b><span className="mapTooltip"><strong>{name}</strong><em>{data.count} ενεργοί διαγωνισμοί</em><em>{data.authorities.size} αναθέτουσες αρχές</em><em>Κορυφαίο CPV: {topCpv}</em></span></span>; })}<a className="mapCredit" href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">© OpenStreetMap</a></div><div className="nutsLegend">{regions.slice(0,10).map(([name,data]) => <div key={name}><span title={name}>{name}</span><i><b style={{width:`${(data.count/max)*100}%`}} /></i><strong>{number.format(data.count)}</strong></div>)}</div></div></article>;
+  return <article className="panel nutsPanel"><PanelHeader title="Διαγωνισμοί ανά NUTS" caption={`${number.format(rows.length)} διαγωνισμοί με τα τρέχοντα φίλτρα`} /><div className="nutsMap"><div className="realMap"><iframe title="Χάρτης Ελλάδας" loading="lazy" src="https://www.openstreetmap.org/export/embed.html?bbox=18.4%2C34.4%2C30.4%2C42.2&amp;layer=mapnik" />{regions.slice(0,12).map(([name,data],index) => { const [left,top] = mapPosition(name,index); const topCpv=[...data.cpvs.entries()].sort((a,b)=>b[1]-a[1])[0]?.[0] ?? "—"; return <span className="mapPin" key={name} style={{left:`${left}%`,top:`${top}%`,width:`${22+(data.count/max)*20}px`,height:`${22+(data.count/max)*20}px`}}><b>{data.count}</b><span className="mapTooltip"><strong>{name}</strong><em>{data.count} διαγωνισμοί</em><em>{data.authorities.size} αναθέτουσες αρχές</em><em>Κορυφαίο CPV: {topCpv}</em></span></span>; })}<a className="mapCredit" href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">© OpenStreetMap</a></div><div className="nutsLegend">{regions.slice(0,10).map(([name,data]) => <div key={name}><span title={name}>{name}</span><i><b style={{width:`${(data.count/max)*100}%`}} /></i><strong>{number.format(data.count)}</strong></div>)}</div></div></article>;
 }
 
 function mapPosition(name: string, index: number): [number, number] {
