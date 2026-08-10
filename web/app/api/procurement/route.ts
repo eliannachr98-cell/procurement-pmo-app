@@ -114,11 +114,11 @@ function groupBy<T>(rows: T[], key: (row: T) => string | null) {
 }
 
 function statusFor(row: ProcurementRow, awards: AwardRow[], contracts: ContractRow[]) {
-  if (row.cancelled_at || row.status === "cancelled") return "Ξ‘ΞΊΟ…ΟΟ‰ΞΌΞ­Ξ½ΞΏΟ‚";
-  if (contracts.length) return "ΞΞ»ΞΏΞΊΞ»Ξ·ΟΟ‰ΞΌΞ­Ξ½ΞΏΟ‚";
-  if (awards.length) return "Ξ‘Ξ½Ξ±Ο„ΞµΞΈΞµΞΉΞΌΞ­Ξ½ΞΏΟ‚";
-  if (row.opening_at && new Date(row.opening_at).getTime() < Date.now()) return "Ξ‘ΞΎΞΉΞΏΞ»ΟΞ³Ξ·ΟƒΞ·";
-  return "Ξ•Ξ½ΞµΟΞ³ΟΟ‚";
+  if (row.cancelled_at || row.status === "cancelled") return "Ακυρωμένος";
+  if (contracts.length) return "Ολοκληρωμένος";
+  if (awards.length) return "Ανατεθειμένος";
+  if (row.opening_at && new Date(row.opening_at).getTime() < Date.now()) return "Αξιολόγηση";
+  return "Ενεργός";
 }
 
 export async function GET() {
@@ -192,8 +192,8 @@ export async function GET() {
       return {
         adam: notice.adam,
         title: notice.title,
-        authority: notice.authority_name ?? "β€”",
-        cpv: cpv?.cpv_code ?? "β€”",
+        authority: notice.authority_name ?? "—",
+        cpv: cpv?.cpv_code ?? "—",
         cpvDescription: cpv?.cpv_description ?? "",
         contractType: notice.contract_type ?? undefined,
         procedureType: notice.procedure_type ?? undefined,
@@ -222,12 +222,12 @@ export async function GET() {
       return rows.map((contractor) => ({
         adam: award.adam,
         noticeAdam: award.procurement_adam ?? undefined,
-        title: award.title ?? linkedNotice?.title ?? "β€”",
-        authority: award.authority_name ?? linkedNotice?.authority_name ?? "β€”",
+        title: award.title ?? linkedNotice?.title ?? "—",
+        authority: award.authority_name ?? linkedNotice?.authority_name ?? "—",
         contractType: award.contract_type ?? linkedNotice?.contract_type ?? undefined,
-        cpv: cpv?.cpv_code ?? noticeCpvsByAdam.get(award.procurement_adam ?? "")?.[0]?.cpv_code ?? "β€”",
+        cpv: cpv?.cpv_code ?? noticeCpvsByAdam.get(award.procurement_adam ?? "")?.[0]?.cpv_code ?? "—",
         cpvDescription: cpv?.cpv_description ?? noticeCpvsByAdam.get(award.procurement_adam ?? "")?.[0]?.cpv_description ?? "",
-        contractor: contractor?.contractor_name ?? "Ξ§Ο‰ΟΞ―Ο‚ Ξ±Ξ½Ξ¬Ξ΄ΞΏΟ‡ΞΏ",
+        contractor: contractor?.contractor_name ?? "Χωρίς ανάδοχο",
         contractorVat: contractor?.contractor_vat ?? undefined,
         awardDate: award.award_date ?? undefined,
         value: money(award),
