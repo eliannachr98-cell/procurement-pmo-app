@@ -139,7 +139,7 @@ def transform(source: str, item: dict) -> dict:
     contract_type = keyed(item.get("contractType"))[1] or keyed(item.get("contractType"))[0]
     base = {
         "adam": adam,
-        "title": text(item.get("title")),
+        "title": text(item.get("title")) or "Χωρίς διαθέσιμο τίτλο",
         "authority_id": authority_id,
         "authority_name": authority_name,
         "contract_type": contract_type,
