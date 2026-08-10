@@ -33,6 +33,15 @@ def datetime_value(value: Any) -> str | None:
     return text(value)
 
 
+def valid_deadline(publication_date: str | None, deadline: str | None) -> str | None:
+    """Hide source deadlines that predate the record's publication timeline."""
+    if not deadline:
+        return None
+    if publication_date and deadline[:10] < publication_date:
+        return None
+    return deadline
+
+
 def keyed(value: Any) -> tuple[str | None, str | None]:
     if isinstance(value, dict):
         return text(value.get("key")), text(value.get("value"))
@@ -149,13 +158,17 @@ def transform(source: str, item: dict) -> dict:
     if source == "notice":
         nuts_code, nuts_name = nuts(item)
         procedure_type = keyed(item.get("procedureType"))[1] or keyed(item.get("procedureType"))[0]
+        publication_date = date_value(first(item, "submissionDate", "signedDate"))
+        submission_deadline = datetime_value(item.get("finalSubmissionDate"))
         row = base | {
             "procedure_type": procedure_type,
             "document_category": classify_document(base["title"], item.get("documentType")),
             "nuts_code": nuts_code,
             "nuts_name": nuts_name,
-            "publication_date": date_value(first(item, "submissionDate", "signedDate")),
-            "opening_at": datetime_value(item.get("finalSubmissionDate")),
+            "publication_date": publication_date,
+            # Existing column name retained for schema compatibility. This is
+            # the offer-submission deadline, not the bid-opening date.
+            "opening_at": valid_deadline(publication_date, submission_deadline),
             "status": "cancelled" if item.get("cancelled") else "active",
         } | amounts(item, "budget")
     elif source == "auction":
