@@ -76,7 +76,9 @@ def main() -> None:
         )
     import psycopg
 
-    with psycopg.connect(database_url) as connection, connection.cursor() as cursor:
+    # Supabase transaction pooler cannot safely retain named prepared
+    # statements between pooled sessions. Disable automatic preparation.
+    with psycopg.connect(database_url, prepare_threshold=None) as connection, connection.cursor() as cursor:
         for source, (table, columns) in TABLES.items():
             upsert_rows(cursor, table, columns, read_ndjson(args.input_dir / f"{source}.ndjson"))
 
