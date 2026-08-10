@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import time
 from datetime import date, timedelta
 from pathlib import Path
@@ -37,6 +38,7 @@ def date_windows(date_from: str, date_to: str, days: int = 7):
 
 def request_page(source: str, page: int, payload: dict) -> dict:
     url = f"{BASE_URL}/{ENDPOINTS[source]}"
+    read_timeout = float(os.environ.get("KHMDHS_READ_TIMEOUT", "60"))
     for attempt in range(1, 6):
         try:
             response = requests.post(
@@ -48,7 +50,7 @@ def request_page(source: str, page: int, payload: dict) -> dict:
                     "User-Agent": "procurement-pmo-app/compact-1.2",
                 },
                 json=payload,
-                timeout=60,
+                timeout=read_timeout,
             )
             if response.status_code not in (429, 500, 502, 503, 504):
                 response.raise_for_status()

@@ -13,6 +13,7 @@ on:
           - repair-june-11
           - repair-july-30
           - repair-auction-daily-july-30
+          - repair-auction-aug-05-long-timeout
         default: test
 
 permissions:
@@ -57,6 +58,13 @@ jobs:
                   }
                   for offset in range(7)
               ]
+          elif os.environ["MODE"] == "repair-auction-aug-05-long-timeout":
+              windows = [{
+                  "date_from": "2025-08-05",
+                  "date_to": "2025-08-05",
+                  "source": "auction",
+                  "max_pages": 0,
+              }]
           else:
               windows = []
               current, end = date(2025, 1, 1), date(2025, 12, 31)
@@ -90,6 +98,8 @@ jobs:
       - name: Install pinned dependencies
         run: pip install "requests>=2.32,<3" "psycopg[binary]>=3.2,<4"
       - name: Prepare compact data
+        env:
+          KHMDHS_READ_TIMEOUT: ${{ inputs.mode == 'repair-auction-aug-05-long-timeout' && '180' || '60' }}
         shell: bash
         run: |
           args=(
