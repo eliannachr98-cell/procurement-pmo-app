@@ -146,12 +146,15 @@ export default function Home() {
     contractType.forEach((item) => params.append("contractType", item));
     if (documentType !== "Όλοι") params.set("documentType", documentType);
     fetch(`/api/dashboard?${params.toString()}`)
-      .then((response) => response.ok ? response.json() : null)
+      .then((response) => response.ok ? response.json() : Promise.reject(new Error("dashboard request failed")))
       .then((payload) => {
-        if (requestId !== latestDashboardRequest.current || !payload) return;
+        if (requestId !== latestDashboardRequest.current) return;
         setDashboard(payload);
       })
       .catch(() => {
+        // A very broad, unfiltered-by-year combination can still time out
+        // server-side -- show nothing rather than silently stale numbers
+        // from the previous filter selection.
         if (requestId === latestDashboardRequest.current) setDashboard(emptyDashboard);
       });
   }, [query, authority, contractor, cpv, year, contractType, documentType]);
