@@ -35,6 +35,11 @@ jobs:
           path = Path(os.environ["SQL_FILE"])
           sql = path.read_text(encoding="utf-8")
           with psycopg.connect(os.environ["DATABASE_URL"], autocommit=True) as connection:
-              connection.execute(sql)
+              connection.execute("set statement_timeout = '120000'")
+              cursor = connection.execute(sql)
+              if cursor.description:
+                  columns = [col.name for col in cursor.description]
+                  for row in cursor.fetchall():
+                      print(dict(zip(columns, row)))
           print(f"applied: {path}")
           PY
