@@ -44,8 +44,12 @@ begin
       select p.adam, p.opening_at, p.cancelled_at, p.status as raw_status,
              p.nuts_name, p.nuts_code
       from public.procurements_compact p
-      where target_year is null
-         or (p.publication_date >= (target_year || '-01-01')::date and p.publication_date <= (target_year || '-12-31')::date)
+      -- Only count original tender notices, not follow-up documents
+      -- (amendment/clarification/extension/summary/decision) about the same
+      -- tender -- otherwise one tender inflates into several "διαγωνισμοί".
+      where p.document_category in ('declaration', 'announcement')
+        and (target_year is null
+         or (p.publication_date >= (target_year || '-01-01')::date and p.publication_date <= (target_year || '-12-31')::date))
     ),
     has_award as (
       select distinct a.procurement_adam as adam
@@ -157,6 +161,10 @@ begin
   end if;
   if p_document_type is not null then
     conditions := conditions || format('p.document_category = %L', p_document_type);
+  else
+    -- No explicit document-type filter: default to real tenders only, same
+    -- as the cached (unfiltered / year-only) path -- see refresh_dashboard_caches().
+    conditions := conditions || $q$p.document_category in ('declaration', 'announcement')$q$;
   end if;
 
   if array_length(conditions, 1) > 0 then
