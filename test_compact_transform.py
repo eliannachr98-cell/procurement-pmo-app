@@ -75,12 +75,6 @@ class CompactTransformTests(unittest.TestCase):
             "declaration",
         )
 
-    def test_document_classification_cancelled_overrides_notice_type(self):
-        self.assertEqual(
-            classify_document("\u0394\u03b9\u03b1\u03ba\u03ae\u03c1\u03c5\u03be\u03b7", {"key": "3"}, cancelled=True),
-            "cancellation",
-        )
-
     def test_document_classification_title_keywords_beat_notice_type(self):
         # These sub-types only show up in the title -- noticeType alone
         # (e.g. key=3 \u0394\u03b9\u03b1\u03ba\u03ae\u03c1\u03c5\u03be\u03b7) can't tell a plain notice apart from a
@@ -101,9 +95,11 @@ class CompactTransformTests(unittest.TestCase):
             classify_document("\u0394\u03b9\u03cc\u03c1\u03b8\u03c9\u03c3\u03b7 \u03c3\u03c6\u03ac\u03bb\u03bc\u03b1\u03c4\u03bf\u03c2 \u03b4\u03b9\u03b1\u03ba\u03ae\u03c1\u03c5\u03be\u03b7\u03c2", {"key": "3"}),
             "amendment",
         )
+        # \u039c\u03b1\u03c4\u03b1\u03af\u03c9\u03c3\u03b7/\u0391\u03ba\u03cd\u03c1\u03c9\u03c3\u03b7 is not a document_category -- cancellation already
+        # has its own status field, so this falls through to declaration.
         self.assertEqual(
-            classify_document("\u039c\u03b1\u03c4\u03b1\u03af\u03c9\u03c3\u03b7 \u03b4\u03b9\u03b1\u03b3\u03c9\u03bd\u03b9\u03c3\u03bc\u03bf\u03cd", {"key": "3"}, cancelled=False),
-            "cancellation",
+            classify_document("\u039c\u03b1\u03c4\u03b1\u03af\u03c9\u03c3\u03b7 \u03b4\u03b9\u03b1\u03b3\u03c9\u03bd\u03b9\u03c3\u03bc\u03bf\u03cd", {"key": "3"}),
+            "declaration",
         )
         self.assertEqual(
             classify_document("\u0391\u03c0\u03cc\u03c6\u03b1\u03c3\u03b7 \u03ad\u03b3\u03ba\u03c1\u03b9\u03c3\u03b7\u03c2 \u03c0\u03c1\u03b1\u03ba\u03c4\u03b9\u03ba\u03bf\u03cd", {"key": "3"}),

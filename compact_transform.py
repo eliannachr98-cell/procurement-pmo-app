@@ -61,11 +61,11 @@ def first(item: dict, *keys: str) -> Any:
 # Requested final categories: \u0394\u03b9\u03b1\u03ba\u03ae\u03c1\u03c5\u03be\u03b7, \u03a0\u03c1\u03bf\u03ba\u03ae\u03c1\u03c5\u03be\u03b7, \u03a0\u03b5\u03c1\u03af\u03bb\u03b7\u03c8\u03b7, \u0394\u03b9\u03b5\u03c5\u03ba\u03c1\u03b9\u03bd\u03af\u03c3\u03b5\u03b9\u03c2,
 # \u03a0\u03b1\u03c1\u03ac\u03c4\u03b1\u03c3\u03b7/\u039c\u03b5\u03c4\u03ac\u03b8\u03b5\u03c3\u03b7, \u03a4\u03c1\u03bf\u03c0\u03bf\u03c0\u03bf\u03b9\u03ae\u03c3\u03b5\u03b9\u03c2. \u03a0\u03c1\u03cc\u03c3\u03ba\u03bb\u03b7\u03c3\u03b7 (any variant) and anything
 # left over fold into \u0394\u03b9\u03b1\u03ba\u03ae\u03c1\u03c5\u03be\u03b7; \u0394\u03b9\u03cc\u03c1\u03b8\u03c9\u03c3\u03b7 folds into \u03a4\u03c1\u03bf\u03c0\u03bf\u03c0\u03bf\u03b9\u03ae\u03c3\u03b5\u03b9\u03c2 (both are
-# corrections to an existing notice). \u039c\u03b1\u03c4\u03b1\u03af\u03c9\u03c3\u03b7/\u0391\u03c0\u03cc\u03c6\u03b1\u03c3\u03b7 stay as their own
-# categories since they're genuinely different documents, not requested to
-# be merged, and cancellation already has a reliable non-title signal.
+# corrections to an existing notice). \u039c\u03b1\u03c4\u03b1\u03af\u03c9\u03c3\u03b7/\u0391\u03ba\u03cd\u03c1\u03c9\u03c3\u03b7 is deliberately not a
+# document_category here -- cancellation is already exposed as its own
+# lifecycle status (see the separate "status"/"cancelled_at" columns), so a
+# document-type filter for it would just duplicate that.
 KEYWORD_CATEGORIES = (
-    ("cancellation", ("\u03bc\u03b1\u03c4\u03b1\u03af\u03c9",)),
     ("amendment", ("\u03c4\u03c1\u03bf\u03c0\u03bf\u03c0\u03bf\u03b9", "\u03b4\u03b9\u03cc\u03c1\u03b8\u03c9", "\u03bf\u03c1\u03b8\u03ae \u03b5\u03c0\u03b1\u03bd\u03ac\u03bb\u03b7\u03c8\u03b7")),
     ("extension", ("\u03c0\u03b1\u03c1\u03ac\u03c4\u03b1\u03c3", "\u03bc\u03b5\u03c4\u03ac\u03b8\u03b5\u03c3")),
     ("clarification", ("\u03b4\u03b9\u03b5\u03c5\u03ba\u03c1\u03b9\u03bd",)),
@@ -82,14 +82,7 @@ def _strip_accents(value: str) -> str:
     return "".join(char for char in unicodedata.normalize("NFD", value) if unicodedata.category(char) != "Mn")
 
 
-def classify_document(
-    title: str | None,
-    notice_type: Any = None,
-    cancelled: bool = False,
-) -> str:
-    if cancelled:
-        return "cancellation"
-
+def classify_document(title: str | None, notice_type: Any = None) -> str:
     source = _strip_accents(" ".join(filter(None, [text(title)])).lower())
     for category, needles in KEYWORD_CATEGORIES:
         normalized_needles = (_strip_accents(needle) for needle in needles)
@@ -187,11 +180,7 @@ def transform(source: str, item: dict) -> dict:
         procedure_type = keyed(item.get("procedureType"))[1] or keyed(item.get("procedureType"))[0]
         row = base | {
             "procedure_type": procedure_type,
-            "document_category": classify_document(
-                base["title"],
-                item.get("noticeType"),
-                cancelled=bool(item.get("cancelled")),
-            ),
+            "document_category": classify_document(base["title"], item.get("noticeType")),
             "nuts_code": nuts_code,
             "nuts_name": nuts_name,
             "publication_date": date_value(first(item, "submissionDate", "signedDate")),
