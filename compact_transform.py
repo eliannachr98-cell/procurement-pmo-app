@@ -177,7 +177,10 @@ def transform(source: str, item: dict) -> dict:
     }
     if source == "notice":
         nuts_code, nuts_name = nuts(item)
-        procedure_type = keyed(item.get("procedureType"))[1] or keyed(item.get("procedureType"))[0]
+        # "procedureType" does not exist on live KHMDHS notice records (confirmed
+        # against the API) -- the real field is "typeOfProcedure", e.g.
+        # {"key": "1", "value": "Ανοιχτή διαδικασία (αρ.27/αρ.264)"}.
+        procedure_type = keyed(item.get("typeOfProcedure"))[1] or keyed(item.get("typeOfProcedure"))[0]
         row = base | {
             "procedure_type": procedure_type,
             "document_category": classify_document(base["title"], item.get("noticeType")),
