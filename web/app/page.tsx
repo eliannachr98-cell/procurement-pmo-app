@@ -43,6 +43,8 @@ const fallbackTenders: Tender[] = [
   { adam: "25PROC017081252", title: "Υπηρεσίες συμβούλου για τον ψηφιακό μετασχηματισμό", authority: "Υπουργείο Ψηφιακής Διακυβέρνησης", cpv: "72262000-9", status: "Ενεργός", publicationDate: "2025-06-24", budget: 860000 },
 ];
 
+const contractTypeOptions = ["Έργα", "Μελέτες", "Προμήθειες", "Τεχνικές ή λοιπές συναφείς υπηρεσίες", "Υπηρεσίες"];
+
 const navItems = [
   ["overview", "▦", "Επισκόπηση"],
   ["tenders", "☷", "Διαγωνισμοί"],
@@ -61,9 +63,19 @@ const statusTone: Record<Status, string> = {
 const number = new Intl.NumberFormat("el-GR");
 const euro = new Intl.NumberFormat("el-GR", { style: "currency", currency: "EUR", maximumFractionDigits: 0 });
 
+type DashboardBreakdown = {
+  total: number;
+  status: { status: string; count: number }[];
+  cpv: { cpv_code: string; cpv_description: string | null; count: number }[];
+  nuts: { nuts_name: string; count: number }[];
+};
+const emptyDashboard: DashboardBreakdown = { total: 0, status: [], cpv: [], nuts: [] };
+
 export default function Home() {
   const [tenders, setTenders] = useState<Tender[]>(fallbackTenders);
   const [awards, setAwards] = useState<Award[]>([]);
+  const [dashboard, setDashboard] = useState<DashboardBreakdown>(emptyDashboard);
+  const [years, setYears] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [dataError, setDataError] = useState("");
   const [loadedPage, setLoadedPage] = useState(1);
@@ -76,9 +88,17 @@ export default function Home() {
   const [contractor, setContractor] = useState<string[]>([]);
   const [cpv, setCpv] = useState<string[]>([]);
   const [year, setYear] = useState("Όλα");
-  const [contractType, setContractType] = useState("Όλοι");
+  const [contractType, setContractType] = useState<string[]>([]);
   const [documentType, setDocumentType] = useState("Όλοι");
   const latestRequest = useRef(0);
+  const latestDashboardRequest = useRef(0);
+
+  useEffect(() => {
+    fetch("/api/options?type=year")
+      .then((response) => response.ok ? response.json() : { options: [] })
+      .then((payload) => setYears(payload.options ?? []))
+      .catch(() => setYears([]));
+  }, []);
 
   const loadTenderPage = useCallback((nextPage: number, append = false) => {
     const requestId = ++latestRequest.current;
@@ -89,7 +109,7 @@ export default function Home() {
     contractor.forEach((item) => params.append("contractor", item));
     cpv.forEach((item) => params.append("cpv", item));
     if (year !== "Όλα") params.set("year", year);
-    if (contractType !== "Όλοι") params.set("contractType", contractType);
+    contractType.forEach((item) => params.append("contractType", item));
     if (documentType !== "Όλοι") params.set("documentType", documentType);
     // Pages are intentionally small; users can continue through the complete
     // dataset without downloading the whole historical database at once.
@@ -115,10 +135,31 @@ export default function Home() {
       });
   }, [query, authority, contractor, cpv, year, contractType, documentType]);
 
+  const loadDashboard = useCallback(() => {
+    const requestId = ++latestDashboardRequest.current;
+    const params = new URLSearchParams();
+    if (query.trim()) params.set("q", query.trim());
+    if (authority.trim() && authority !== "Όλες") params.set("authority", authority.trim());
+    contractor.forEach((item) => params.append("contractor", item));
+    cpv.forEach((item) => params.append("cpv", item));
+    if (year !== "Όλα") params.set("year", year);
+    contractType.forEach((item) => params.append("contractType", item));
+    if (documentType !== "Όλοι") params.set("documentType", documentType);
+    fetch(`/api/dashboard?${params.toString()}`)
+      .then((response) => response.ok ? response.json() : null)
+      .then((payload) => {
+        if (requestId !== latestDashboardRequest.current || !payload) return;
+        setDashboard(payload);
+      })
+      .catch(() => {
+        if (requestId === latestDashboardRequest.current) setDashboard(emptyDashboard);
+      });
+  }, [query, authority, contractor, cpv, year, contractType, documentType]);
+
   useEffect(() => {
-    const timer = window.setTimeout(() => loadTenderPage(1), 350);
+    const timer = window.setTimeout(() => { loadTenderPage(1); loadDashboard(); }, 350);
     return () => window.clearTimeout(timer);
-  }, [loadTenderPage]);
+  }, [loadTenderPage, loadDashboard]);
 
   const filtered = useMemo(() => tenders.filter((tender) => {
     const needle = query.trim().toLocaleLowerCase("el");
@@ -130,13 +171,11 @@ export default function Home() {
       (!contractorTerms.length || contractorTerms.some((item) => (tender.contractors ?? []).join(" ").toLocaleLowerCase("el").includes(item))) &&
       (!cpvTerms.length || cpvTerms.some((item) => `${tender.cpv} ${tender.cpvDescription}`.toLocaleLowerCase("el").includes(item))) &&
       (year === "Όλα" || tender.publicationDate?.startsWith(year)) &&
-      (contractType === "Όλοι" || tender.contractType === contractType) &&
+      (contractType.length === 0 || contractType.includes(tender.contractType ?? "")) &&
       (documentType === "Όλοι" || tender.documentType === documentType);
   }), [tenders, query, status, authority, contractor, cpv, year, contractType, documentType, page]);
 
   const authorities = [...new Set(tenders.map((item) => item.authority).filter(Boolean))].sort();
-  const years = [...new Set(tenders.map((item) => item.publicationDate?.slice(0, 4)).filter(Boolean))].sort().reverse();
-  const contractTypes = [...new Set(tenders.map((item) => item.contractType).filter(Boolean))].sort();
   const documentTypes = [
     ["declaration", "Διακήρυξη"],
     ["announcement", "Προκήρυξη"],
@@ -149,7 +188,7 @@ export default function Home() {
     ["cancellation", "Ματαίωση / ακύρωση"],
     ["other", "Λοιπό"],
   ];
-  const statusCount = (value: Status) => filtered.filter((item) => item.status === value).length;
+  const statusCount = (value: Status) => dashboard.status.find((item) => item.status === value)?.count ?? 0;
 
   return (
     <main className="shell">
@@ -178,17 +217,17 @@ export default function Home() {
 
           {page === "overview" && <>
             <div className="metrics">
-              <Metric label="Διαγωνισμοί" value={number.format(totalTenders || filtered.length)} tone="sky" />
+              <Metric label="Διαγωνισμοί" value={number.format(dashboard.total)} tone="sky" />
               <Metric label="Ενεργοί" value={number.format(statusCount("Ενεργός"))} tone="mint" />
               <Metric label="Σε αξιολόγηση" value={number.format(statusCount("Αξιολόγηση"))} tone="sand" />
               <Metric label="Ανατεθειμένοι" value={number.format(statusCount("Ανατεθειμένος"))} tone="lilac" />
-              <Metric label="Συνολικός Π/Υ" value={euro.format(filtered.reduce((sum, item) => sum + item.budget, 0))} tone="sage" />
+              <Metric label="Συνολικός Π/Υ (τρέχουσα σελίδα)" value={euro.format(filtered.reduce((sum, item) => sum + item.budget, 0))} tone="sage" />
             </div>
             <div className="chartGrid">
-              <article className="panel"><PanelHeader title="Διαγωνισμοί ανά στάδιο" caption="Τρέχουσα εικόνα" /><StatusBars rows={filtered} /></article>
-              <article className="panel"><PanelHeader title="CPV Distribution" caption="Κορυφαίες κατηγορίες" /><CpvDonut rows={filtered} /></article>
+              <article className="panel"><PanelHeader title="Διαγωνισμοί ανά στάδιο" caption={`Σύνολο ${number.format(dashboard.total)} διαγωνισμών`} /><StatusBars counts={dashboard.status} /></article>
+              <article className="panel"><PanelHeader title="CPV Distribution" caption="Κορυφαίες κατηγορίες (σύνολο βάσης)" /><CpvDonut counts={dashboard.cpv} total={dashboard.total} /></article>
             </div>
-            <NutsMap rows={filtered} />
+            <NutsMap counts={dashboard.nuts} />
             <TenderTable rows={[...filtered].sort((a,b) => (b.publicationDate || "").localeCompare(a.publicationDate || "")).slice(0,10)} title="Πρόσφατοι διαγωνισμοί" caption="Οι 10 πιο πρόσφατες εγγραφές" onViewAll={() => setPage("tenders")} />
           </>}
 
@@ -203,12 +242,24 @@ export default function Home() {
         </section>
 
         <aside className="filters">
-          <div className="filterHeading"><div><span>Φίλτρα</span><small>{number.format(filtered.length)} εμφανίζονται · {number.format(totalTenders)} συνολικά</small></div><button onClick={() => { setStatus("Όλες"); setAuthority(""); setContractor([]); setCpv([]); setQuery(""); setYear("Όλα"); setContractType("Όλοι"); setDocumentType("Όλοι"); }}>↻</button></div>
+          <div className="filterHeading"><div><span>Φίλτρα</span><small>{number.format(tenders.length)} φορτωμένα · {number.format(dashboard.total || totalTenders)} συνολικά</small></div><button onClick={() => { setStatus("Όλες"); setAuthority(""); setContractor([]); setCpv([]); setQuery(""); setYear("Όλα"); setContractType([]); setDocumentType("Όλοι"); }}>↻</button></div>
           <label>Έτος<select value={year} onChange={(event) => setYear(event.target.value)}><option>Όλα</option>{years.map((item) => <option key={item}>{item}</option>)}</select></label>
           <label>Αναθέτουσα Αρχή<input list="authority-options" value={authority === "Όλες" ? "" : authority} onChange={(event) => setAuthority(event.target.value)} placeholder="Γράψε ή επίλεξε αρχή" /><datalist id="authority-options">{authorities.map((item) => <option key={item} value={item} />)}</datalist></label>
           <MultiSearchInput label="Ανάδοχος" type="contractor" values={contractor} onChange={setContractor} placeholder="Αναζήτησε και επίλεξε αναδόχους" />
           {page !== "market" && <MultiSearchInput label="CPV" type="cpv" values={cpv} onChange={setCpv} placeholder="Αναζήτησε κωδικό ή περιγραφή CPV" />}
-          <label>Τύπος σύμβασης<select value={contractType} onChange={(event) => setContractType(event.target.value)}><option>Όλοι</option>{contractTypes.map((item) => <option key={item}>{item}</option>)}</select></label>
+          <div className="checkboxGroup">
+            <span className="checkboxGroupLabel">Τύπος σύμβασης{contractType.length > 0 && <span className="multiSearchCount">{contractType.length} επιλεγμέν{contractType.length === 1 ? "ος" : "οι"}</span>}</span>
+            {contractTypeOptions.map((item) => (
+              <label key={item} className="checkboxRow">
+                <input
+                  type="checkbox"
+                  checked={contractType.includes(item)}
+                  onChange={(event) => setContractType(event.target.checked ? [...contractType, item] : contractType.filter((value) => value !== item))}
+                />
+                {item}
+              </label>
+            ))}
+          </div>
           <label>Τύπος εγγράφου<select value={documentType} onChange={(event) => setDocumentType(event.target.value)}><option value="Όλοι">Όλοι</option>{documentTypes.map(([value,label]) => <option key={value} value={value}>{label}</option>)}</select></label>
           <label>Κατάσταση<select value={status} onChange={(event) => setStatus(event.target.value)}><option>Όλες</option>{Object.keys(statusTone).map((item) => <option key={item}>{item}</option>)}</select></label>
           <div className="filterNote"><span>i</span><p>Τα ίδια φίλτρα εφαρμόζονται στην Επισκόπηση και στους Διαγωνισμούς.</p></div>
@@ -226,19 +277,19 @@ function PanelHeader({ title, caption }: { title: string; caption: string }) {
   return <header className="panelHeader"><div><h2>{title}</h2><p>{caption}</p></div><button>•••</button></header>;
 }
 
-function StatusBars({ rows }: { rows: Tender[] }) {
+function StatusBars({ counts }: { counts: { status: string; count: number }[] }) {
   const statuses: Status[] = ["Ενεργός", "Αξιολόγηση", "Ανατεθειμένος", "Ολοκληρωμένος", "Ακυρωμένος"];
-  const maximum = Math.max(1, ...statuses.map((item) => rows.filter((row) => row.status === item).length));
-  return <div className="bars">{statuses.map((item) => { const count = rows.filter((row) => row.status === item).length; return <div className="barRow" key={item}><span>{item}</span><div><i className={statusTone[item]} style={{ width: `${(count / maximum) * 100}%` }} /></div><strong>{number.format(count)}</strong></div>; })}</div>;
+  const byStatus = new Map(counts.map((item) => [item.status, item.count]));
+  const maximum = Math.max(1, ...statuses.map((item) => byStatus.get(item) ?? 0));
+  return <div className="bars">{statuses.map((item) => { const count = byStatus.get(item) ?? 0; return <div className="barRow" key={item}><span>{item}</span><div><i className={statusTone[item]} style={{ width: `${(count / maximum) * 100}%` }} /></div><strong>{number.format(count)}</strong></div>; })}</div>;
 }
 
-function CpvDonut({ rows }: { rows: Tender[] }) {
-  const counts = [...rows.reduce((map, item) => map.set(item.cpv, (map.get(item.cpv) ?? 0) + 1), new Map<string, number>())]
-    .sort((a, b) => b[1] - a[1]);
+function CpvDonut({ counts, total }: { counts: { cpv_code: string; cpv_description: string | null; count: number }[]; total: number }) {
   const top = counts.slice(0, 3);
-  const other = counts.slice(3).reduce((sum, item) => sum + item[1], 0);
-  const total = Math.max(rows.length, 1);
-  return <div className="donutWrap"><div className="donut"><span><strong>{number.format(counts.length)}</strong><small>CPV</small></span></div><ul>{top.map(([code, count], index) => { const row = rows.find((item) => item.cpv === code); return <li key={code} title={row?.cpvDescription}><i className={["navy", "teal", "gold"][index]} /><span><b>{code}</b><small>{row?.cpvDescription || "Χωρίς περιγραφή"}</small></span><b>{Math.round(count / total * 100)}%</b></li>; })}{other > 0 && <li><i className="pale" />Λοιπά <b>{Math.round(other / total * 100)}%</b></li>}</ul></div>;
+  const topSum = top.reduce((sum, item) => sum + item.count, 0);
+  const other = Math.max(0, counts.reduce((sum, item) => sum + item.count, 0) - topSum);
+  const denominator = Math.max(total, 1);
+  return <div className="donutWrap"><div className="donut"><span><strong>{number.format(counts.length)}</strong><small>CPV</small></span></div><ul>{top.map((item, index) => <li key={item.cpv_code} title={item.cpv_description ?? undefined}><i className={["navy", "teal", "gold"][index]} /><span><b>{item.cpv_code}</b><small>{item.cpv_description || "Χωρίς περιγραφή"}</small></span><b>{Math.round(item.count / denominator * 100)}%</b></li>)}{other > 0 && <li><i className="pale" />Λοιπά <b>{Math.round(other / denominator * 100)}%</b></li>}</ul></div>;
 }
 
 function TenderTable({ rows, expanded = false, title = "Λίστα διαγωνισμών", caption, onViewAll }: { rows: Tender[]; expanded?: boolean; title?: string; caption?: string; onViewAll?: () => void }) {
@@ -257,11 +308,11 @@ function TenderDetail({ tender, onBack }: { tender: Tender; onBack: () => void }
   return <article className="panel tenderDetail"><button className="back" onClick={onBack}>← Πίσω στη λίστα</button><p className="eyebrow">ΚΑΡΤΕΛΑ ΔΙΑΓΩΝΙΣΜΟΥ</p><h2>{tender.title}</h2><p className="detailMeta">{tender.adam} · {tender.authority} · {tender.cpv} {tender.cpvDescription}</p><div className="detailMetrics"><Metric label="Προϋπολογισμός" value={euro.format(tender.budget)} tone="sky" /><Metric label="Αξία ανάθεσης" value={euro.format(tender.awardValue ?? 0)} tone="sand" /><Metric label="Αξία σύμβασης" value={euro.format(tender.contractValue ?? 0)} tone="mint" /></div><section className="gantt"><h3>Χρονοδιάγραμμα διαγωνισμού</h3>{milestones.map(([label,date], index) => <div className="ganttRow" key={`${label}-${date}`}><span>{label}</span><div><i style={{left:`${((new Date(date).getTime()-start)/span)*88}%`,width:index === milestones.length-1 ? "12%" : `${Math.max(8,((new Date(milestones[Math.min(index+1,milestones.length-1)][1]).getTime()-new Date(date).getTime())/span)*88)}%`}} /></div><time>{formatDate(date)}</time></div>)}</section><div className="detailFacts"><p><b>Ανάδοχος:</b> {tender.contractors?.join(", ") || "Δεν έχει καταχωριστεί"}</p><p><b>Τύπος διαδικασίας:</b> {tender.procedureType || "—"}</p><p><b>NUTS:</b> {[tender.nutsCode,tender.nutsName].filter(Boolean).join(" · ") || "—"}</p></div></article>;
 }
 
-function NutsMap({ rows }: { rows: Tender[] }) {
-  const stats = rows.reduce((map, item) => { const key = item.nutsName || item.nutsCode || "Χωρίς NUTS"; const current = map.get(key) ?? { count: 0, authorities: new Set<string>(), cpvs: new Map<string,number>() }; current.count += 1; current.authorities.add(item.authority); current.cpvs.set(item.cpv,(current.cpvs.get(item.cpv) ?? 0)+1); map.set(key,current); return map; }, new Map<string,{count:number;authorities:Set<string>;cpvs:Map<string,number>}>());
-  const regions = [...stats.entries()].sort((a,b) => b[1].count-a[1].count);
-  const max = Math.max(1,...regions.map((item) => item[1].count));
-  return <article className="panel nutsPanel"><PanelHeader title="Διαγωνισμοί ανά NUTS" caption={`${number.format(rows.length)} διαγωνισμοί με τα τρέχοντα φίλτρα`} /><div className="nutsMap"><div className="realMap"><iframe title="Χάρτης Ελλάδας" loading="lazy" src="https://www.openstreetmap.org/export/embed.html?bbox=18.4%2C34.4%2C30.4%2C42.2&amp;layer=mapnik" />{regions.slice(0,12).map(([name,data],index) => { const [left,top] = mapPosition(name,index); const topCpv=[...data.cpvs.entries()].sort((a,b)=>b[1]-a[1])[0]?.[0] ?? "—"; return <span className="mapPin" key={name} style={{left:`${left}%`,top:`${top}%`,width:`${22+(data.count/max)*20}px`,height:`${22+(data.count/max)*20}px`}}><b>{data.count}</b><span className="mapTooltip"><strong>{name}</strong><em>{data.count} διαγωνισμοί</em><em>{data.authorities.size} αναθέτουσες αρχές</em><em>Κορυφαίο CPV: {topCpv}</em></span></span>; })}<a className="mapCredit" href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">© OpenStreetMap</a></div><div className="nutsLegend">{regions.slice(0,10).map(([name,data]) => <div key={name}><span title={name}>{name}</span><i><b style={{width:`${(data.count/max)*100}%`}} /></i><strong>{number.format(data.count)}</strong></div>)}</div></div></article>;
+function NutsMap({ counts }: { counts: { nuts_name: string; count: number }[] }) {
+  const regions = [...counts].sort((a, b) => b.count - a.count);
+  const total = regions.reduce((sum, item) => sum + item.count, 0);
+  const max = Math.max(1, ...regions.map((item) => item.count));
+  return <article className="panel nutsPanel"><PanelHeader title="Διαγωνισμοί ανά NUTS" caption={`${number.format(total)} διαγωνισμοί με τα τρέχοντα φίλτρα`} /><div className="nutsMap"><div className="realMap"><iframe title="Χάρτης Ελλάδας" loading="lazy" src="https://www.openstreetmap.org/export/embed.html?bbox=18.4%2C34.4%2C30.4%2C42.2&amp;layer=mapnik" />{regions.slice(0,12).map((item,index) => { const [left,top] = mapPosition(item.nuts_name,index); return <span className="mapPin" key={item.nuts_name} style={{left:`${left}%`,top:`${top}%`,width:`${22+(item.count/max)*20}px`,height:`${22+(item.count/max)*20}px`}}><b>{item.count}</b><span className="mapTooltip"><strong>{item.nuts_name}</strong><em>{item.count} διαγωνισμοί</em></span></span>; })}<a className="mapCredit" href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">© OpenStreetMap</a></div><div className="nutsLegend">{regions.slice(0,10).map((item) => <div key={item.nuts_name}><span title={item.nuts_name}>{item.nuts_name}</span><i><b style={{width:`${(item.count/max)*100}%`}} /></i><strong>{number.format(item.count)}</strong></div>)}</div></div></article>;
 }
 
 function mapPosition(name: string, index: number): [number, number] {

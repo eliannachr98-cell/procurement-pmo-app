@@ -24,7 +24,7 @@ export async function GET(request: Request) {
     const contractors = searchParams.getAll("contractor").flatMap((value) => value.split(",")).map((value) => value.trim()).filter(Boolean);
     const cpvs = searchParams.getAll("cpv").flatMap((value) => value.split(",")).map((value) => value.trim()).filter(Boolean);
     const year = searchParams.get("year")?.trim() ?? "";
-    const contractType = searchParams.get("contractType")?.trim() ?? "";
+    const contractTypes = searchParams.getAll("contractType").flatMap((value) => value.split(",")).map((value) => value.trim()).filter(Boolean);
     const documentType = searchParams.get("documentType")?.trim() ?? "";
 
     let matchingAdams: string[] | null = null;
@@ -47,7 +47,7 @@ export async function GET(request: Request) {
       p_query: query || null,
       p_authority: authority || null,
       p_year: /^\d{4}$/.test(year) ? year : null,
-      p_contract_type: contractType || null,
+      p_contract_type: contractTypes.length ? contractTypes : null,
       p_document_type: documentType || null,
       p_adams: matchingAdams,
     });
