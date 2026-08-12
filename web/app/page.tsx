@@ -187,7 +187,6 @@ export default function Home() {
     ["extension", "Παράταση / μετάθεση"],
     ["amendment", "Τροποποίηση"],
     ["decision", "Απόφαση / έγκριση"],
-    ["cancellation", "Ματαίωση / ακύρωση"],
   ];
   const statusCount = (value: Status) => dashboard.status.find((item) => item.status === value)?.count ?? 0;
 
