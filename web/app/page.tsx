@@ -38,6 +38,19 @@ type Award = {
   awardDate?: string;
   value: number;
 };
+type Contract = {
+  adam: string;
+  noticeAdam?: string;
+  title: string;
+  authority: string;
+  cpv: string;
+  cpvDescription?: string;
+  contractor: string;
+  contractorVat?: string;
+  signedDate?: string;
+  deliveryDate?: string;
+  value: number;
+};
 
 const fallbackTenders: Tender[] = [
   { adam: "25PROC017081252", title: "Υπηρεσίες συμβούλου για τον ψηφιακό μετασχηματισμό", authority: "Υπουργείο Ψηφιακής Διακυβέρνησης", cpv: "72262000-9", status: "Ενεργός", publicationDate: "2025-06-24", budget: 860000 },
@@ -74,6 +87,7 @@ const emptyDashboard: DashboardBreakdown = { total: 0, status: [], cpv: [], nuts
 export default function Home() {
   const [tenders, setTenders] = useState<Tender[]>(fallbackTenders);
   const [awards, setAwards] = useState<Award[]>([]);
+  const [contracts, setContracts] = useState<Contract[]>([]);
   const [dashboard, setDashboard] = useState<DashboardBreakdown>(emptyDashboard);
   const [years, setYears] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
@@ -122,6 +136,7 @@ export default function Home() {
         if (requestId !== latestRequest.current) return;
         setTenders((current) => append ? [...current, ...(payload.tenders ?? [])] : (payload.tenders ?? []));
         setAwards((current) => append ? [...current, ...(payload.awards ?? [])] : (payload.awards ?? []));
+        setContracts((current) => append ? [...current, ...(payload.contracts ?? [])] : (payload.contracts ?? []));
         setLoadedPage(nextPage);
         setTotalTenders(payload.meta?.total ?? payload.tenders?.length ?? 0);
         setHasMore(Boolean(payload.meta?.hasMore));
@@ -237,7 +252,7 @@ export default function Home() {
               {loading ? "Φόρτωση…" : `Φόρτωση περισσότερων (${number.format(tenders.length)} από ${number.format(totalTenders)})`}
             </button>}
           </>}
-          {page === "market" && <MarketPanel awards={awards} cpv={cpv} setCpv={setCpv} contractor={contractor} />}
+          {page === "market" && <MarketPanel awards={awards} contracts={contracts} cpv={cpv} setCpv={setCpv} contractor={contractor} />}
           {page === "alerts" && <EmptyState icon="♢" title="Ειδοποιήσεις CPV" text="Οι ειδοποιήσεις θα ενεργοποιηθούν μαζί με τους λογαριασμούς χρηστών στη Supabase." />}
         </section>
 
@@ -404,43 +419,134 @@ function MultiSearchInput({ label, type, values, onChange, placeholder }: {
   </label>;
 }
 
-function MarketPanel({ awards, cpv, setCpv, contractor }: { awards: Award[]; cpv: string[]; setCpv: (value: string[]) => void; contractor: string[] }) {
+type ContractorSummary = { name: string; tenders: number; contracts: number; authorities: number; value: number };
+
+function MarketPanel({ awards, contracts, cpv, setCpv, contractor }: {
+  awards: Award[]; contracts: Contract[]; cpv: string[]; setCpv: (value: string[]) => void; contractor: string[];
+}) {
   const [selectedContractor, setSelectedContractor] = useState("");
+  const [contractorSearch, setContractorSearch] = useState("");
   const cpvTerms = cpv.map((item) => item.toLocaleLowerCase("el"));
-  const relevant = cpvTerms.length ? awards.filter((item) => cpvTerms.some((term) => `${item.cpv} ${item.cpvDescription}`.toLocaleLowerCase("el").includes(term))) : awards;
-  const contractors = [...relevant.reduce((map, item) => {
-    if (!item.contractor || item.contractor === "Χωρίς ανάδοχο") return map;
-    const current = map.get(item.contractor) ?? { name: item.contractor, awards: 0, value: 0, authorities: new Set<string>() };
-    current.awards += 1;
-    current.value += item.value;
-    current.authorities.add(item.authority);
-    map.set(item.contractor, current);
-    return map;
-  }, new Map<string, { name: string; awards: number; value: number; authorities: Set<string> }>()).values()]
-    .sort((a, b) => a.name.localeCompare(b.name, "el")).slice(0, 50);
+  const matchesCpv = (item: { cpv: string; cpvDescription?: string }) =>
+    !cpvTerms.length || cpvTerms.some((term) => `${item.cpv} ${item.cpvDescription}`.toLocaleLowerCase("el").includes(term));
+  const relevantAwards = awards.filter(matchesCpv);
+  const relevantContracts = contracts.filter(matchesCpv);
+
+  const byContractor = new Map<string, { name: string; tenders: Set<string>; contracts: Set<string>; authorities: Set<string>; valueByTender: Map<string, number> }>();
+  const ensure = (name: string) => {
+    let row = byContractor.get(name);
+    if (!row) { row = { name, tenders: new Set(), contracts: new Set(), authorities: new Set(), valueByTender: new Map() }; byContractor.set(name, row); }
+    return row;
+  };
+  for (const item of relevantAwards) {
+    if (!item.contractor || item.contractor === "Χωρίς ανάδοχο") continue;
+    const row = ensure(item.contractor);
+    const tenderKey = item.noticeAdam ?? item.adam;
+    row.tenders.add(tenderKey);
+    row.authorities.add(item.authority);
+    // A contract for the same tender (added below) overrides this placeholder.
+    if (!row.valueByTender.has(tenderKey)) row.valueByTender.set(tenderKey, item.value);
+  }
+  for (const item of relevantContracts) {
+    if (!item.contractor || item.contractor === "Χωρίς ανάδοχο") continue;
+    const row = ensure(item.contractor);
+    const tenderKey = item.noticeAdam ?? item.adam;
+    row.tenders.add(tenderKey);
+    row.contracts.add(item.adam);
+    row.authorities.add(item.authority);
+    row.valueByTender.set(tenderKey, item.value);
+  }
+  const search = contractorSearch.trim().toLocaleLowerCase("el");
+  const contractorRows: ContractorSummary[] = [...byContractor.values()]
+    .map((row) => ({
+      name: row.name,
+      tenders: row.tenders.size,
+      contracts: row.contracts.size,
+      authorities: row.authorities.size,
+      value: [...row.valueByTender.values()].reduce((sum, item) => sum + item, 0),
+    }))
+    .filter((row) => !search || row.name.toLocaleLowerCase("el").includes(search))
+    .sort((a, b) => b.value - a.value);
 
   const hasSelection = cpv.length > 0 || contractor.length > 0;
+  const selectedSummary = contractorRows.find((row) => row.name === selectedContractor);
 
   return <>
     <article className="panel marketHero">
-      <div><p className="eyebrow">COMPETITION MAPPING</p><h2>Ανάλυση ανταγωνισμού ανά CPV ή ανάδοχο</h2><p>Βάλε ένα ή περισσότερα CPV για να δεις αναδόχους ή επίλεξε αναδόχους από τα φίλτρα για να δεις τα στοιχεία τους.</p></div>
+      <div><p className="eyebrow">COMPETITION MAPPING</p><h2>Ανάλυση ανταγωνισμού ανά CPV</h2><p>Επίλεξε ένα ή περισσότερα CPV για να δεις την αγορά, τους αναδόχους, και τις συνδεδεμένες συμβάσεις.</p></div>
       <MultiSearchInput label="CPV" type="cpv" values={cpv} onChange={setCpv} placeholder="Αναζήτησε και επίλεξε CPV" />
     </article>
     {!hasSelection && <article className="panel empty marketStart"><span>⌕</span><h2>Επίλεξε CPV ή ανάδοχο</h2><p>Τα αποτελέσματα ανταγωνισμού θα εμφανιστούν μόνο μετά τη δική σου επιλογή.</p></article>}
     {hasSelection && <>
-    <div className="metrics marketMetrics">
-      <Metric label="Ανάδοχοι" value={number.format(contractors.length)} tone="mint" />
-      <Metric label="Αναθέτουσες Αρχές" value={number.format(new Set(relevant.map((item) => item.authority)).size)} tone="sand" />
-      <Metric label="Συνολική αξία" value={euro.format(relevant.reduce((sum, item) => sum + item.value, 0))} tone="lilac" />
-    </div>
-    <article className="panel tablePanel"><PanelHeader title="Ανάδοχοι και στοιχεία" caption="Πάτησε έναν ανάδοχο για να δεις τις σχετικές εγγραφές" /><div className="tableScroll"><table><thead><tr><th>Ανάδοχος</th><th>Σχετικές εγγραφές</th><th>Αναθέτουσες Αρχές</th><th>Συνολική αξία</th></tr></thead><tbody>{contractors.map((item) => <tr key={item.name} className={selectedContractor === item.name ? "selectedRow" : ""} onClick={() => setSelectedContractor(item.name)}><td><button className="contractorLink">{item.name}</button></td><td>{number.format(item.awards)}</td><td>{number.format(item.authorities.size)}</td><td>{euro.format(item.value)}</td></tr>)}</tbody></table></div>{!contractors.length && <p className="noRows">Δεν βρέθηκαν αποτελέσματα για τις επιλογές σου.</p>}</article>
-    {selectedContractor && <ContractorAwards name={selectedContractor} rows={relevant.filter((item) => item.contractor === selectedContractor)} onClose={() => setSelectedContractor("")} />}
+      <label className="search marketContractorSearch"><span>⌕</span><input value={contractorSearch} onChange={(event) => setContractorSearch(event.target.value)} placeholder="Αναζήτηση αναδόχου" /></label>
+      <article className="panel tablePanel">
+        <PanelHeader title="Ανάδοχοι" caption="Πάτησε πάνω σε έναν ανάδοχο για να δεις τους διαγωνισμούς και τις συμβάσεις του." />
+        <div className="tableScroll"><table>
+          <thead><tr><th /><th>Ανάδοχος</th><th>Διαγωνισμοί</th><th>Συμβάσεις</th><th>Συνολική αξία</th><th>Αναθέτουσες Αρχές</th></tr></thead>
+          <tbody>{contractorRows.map((item) => (
+            <tr key={item.name} className={selectedContractor === item.name ? "selectedRow" : ""} onClick={() => setSelectedContractor(item.name === selectedContractor ? "" : item.name)}>
+              <td><input type="checkbox" checked={selectedContractor === item.name} readOnly /></td>
+              <td><button className="contractorLink" type="button">{item.name}</button></td>
+              <td>{number.format(item.tenders)}</td>
+              <td>{number.format(item.contracts)}</td>
+              <td>{euro.format(item.value)}</td>
+              <td>{number.format(item.authorities)}</td>
+            </tr>
+          ))}</tbody>
+        </table></div>
+        {!contractorRows.length && <p className="noRows">Δεν βρέθηκαν αποτελέσματα για τις επιλογές σου.</p>}
+      </article>
+      {selectedContractor && selectedSummary && <ContractorProfile
+        name={selectedContractor}
+        summary={selectedSummary}
+        awards={relevantAwards.filter((item) => item.contractor === selectedContractor)}
+        contracts={relevantContracts.filter((item) => item.contractor === selectedContractor)}
+        onClose={() => setSelectedContractor("")}
+      />}
     </>}
   </>;
 }
 
-function ContractorAwards({ name, rows, onClose }: { name: string; rows: Award[]; onClose: () => void }) {
-  return <article className="panel contractorAwards"><header><div><p className="eyebrow">ΑΝΑΘΕΣΕΙΣ ΑΝΑΔΟΧΟΥ</p><h2>{name}</h2><p>{number.format(rows.length)} εγγραφές · {euro.format(rows.reduce((sum,item) => sum + item.value,0))}</p></div><button onClick={onClose}>Κλείσιμο ×</button></header><div className="tableScroll"><table><thead><tr><th>ΑΔΑΜ</th><th>Τίτλος ανάθεσης / διαγωνισμού</th><th>Αναθέτουσα Αρχή</th><th>CPV</th><th>Ημερομηνία</th><th>Αξία</th></tr></thead><tbody>{rows.map((item) => <tr key={`${item.adam}-${item.title}`}><td className="adam">{item.adam}</td><td>{item.title}</td><td>{item.authority}</td><td><strong>{item.cpv}</strong><small className="cellSub">{item.cpvDescription}</small></td><td>{formatDate(item.awardDate)}</td><td>{euro.format(item.value)}</td></tr>)}</tbody></table></div></article>;
+function ContractorProfile({ name, summary, awards, contracts, onClose }: {
+  name: string; summary: ContractorSummary; awards: Award[]; contracts: Contract[]; onClose: () => void;
+}) {
+  const [tab, setTab] = useState<"tenders" | "contracts" | "distribution">("tenders");
+
+  const tenderMap = new Map<string, { adam: string; title: string; authority: string; cpv: string; cpvDescription?: string }>();
+  for (const item of awards) {
+    const key = item.noticeAdam ?? item.adam;
+    if (!tenderMap.has(key)) tenderMap.set(key, { adam: item.noticeAdam ?? item.adam, title: item.title, authority: item.authority, cpv: item.cpv, cpvDescription: item.cpvDescription });
+  }
+  for (const item of contracts) {
+    const key = item.noticeAdam ?? item.adam;
+    tenderMap.set(key, { adam: item.noticeAdam ?? item.adam, title: item.title, authority: item.authority, cpv: item.cpv, cpvDescription: item.cpvDescription });
+  }
+  const tenderRows = [...tenderMap.values()];
+
+  const distribution = [...[...awards, ...contracts].reduce((map, item) => {
+    const label = item.cpvDescription ? `${item.cpv} — ${item.cpvDescription}` : item.cpv;
+    map.set(label, (map.get(label) ?? 0) + item.value);
+    return map;
+  }, new Map<string, number>())].sort((a, b) => b[1] - a[1]);
+  const distributionTotal = distribution.reduce((sum, [, value]) => sum + value, 0) || 1;
+
+  return <article className="panel contractorProfile">
+    <header><div><p className="eyebrow">ΠΡΟΦΙΛ ΑΝΑΔΟΧΟΥ</p><h2>{name}</h2></div><button onClick={onClose}>Κλείσιμο ×</button></header>
+    <div className="metrics marketMetrics">
+      <Metric label="Διαγωνισμοί" value={number.format(summary.tenders)} tone="sky" />
+      <Metric label="Συμβάσεις" value={number.format(summary.contracts)} tone="mint" />
+      <Metric label="Αναθέτουσες Αρχές" value={number.format(summary.authorities)} tone="sand" />
+      <Metric label="Συνολική αξία" value={euro.format(summary.value)} tone="lilac" />
+    </div>
+    <div className="tabRow">
+      <button type="button" className={tab === "tenders" ? "active" : ""} onClick={() => setTab("tenders")}>Διαγωνισμοί</button>
+      <button type="button" className={tab === "contracts" ? "active" : ""} onClick={() => setTab("contracts")}>Συμβάσεις</button>
+      <button type="button" className={tab === "distribution" ? "active" : ""} onClick={() => setTab("distribution")}>Κατανομή</button>
+    </div>
+    {tab === "tenders" && <div className="tableScroll"><table><thead><tr><th>ΑΔΑΜ Διακήρυξης</th><th>Τίτλος διαγωνισμού</th><th>Αναθέτουσα Αρχή</th><th>CPV</th></tr></thead><tbody>{tenderRows.map((row) => <tr key={row.adam}><td className="adam">{row.adam}</td><td>{row.title}</td><td>{row.authority}</td><td><strong>{row.cpv}</strong><small className="cellSub">{row.cpvDescription}</small></td></tr>)}</tbody></table>{!tenderRows.length && <p className="noRows">Δεν βρέθηκαν διαγωνισμοί.</p>}</div>}
+    {tab === "contracts" && <div className="tableScroll"><table><thead><tr><th>ΑΔΑΜ Σύμβασης</th><th>Τίτλος</th><th>Αναθέτουσα Αρχή</th><th>Ημ. υπογραφής</th><th>Αξία</th></tr></thead><tbody>{contracts.map((item) => <tr key={item.adam}><td className="adam">{item.adam}</td><td>{item.title}</td><td>{item.authority}</td><td>{formatDate(item.signedDate)}</td><td>{euro.format(item.value)}</td></tr>)}</tbody></table>{!contracts.length && <p className="noRows">Δεν βρέθηκαν συμβάσεις.</p>}</div>}
+    {tab === "distribution" && <div className="bars">{distribution.slice(0, 10).map(([label, value]) => <div className="barRow" key={label}><span title={label}>{label}</span><div><i className="teal" style={{ width: `${(value / distributionTotal) * 100}%` }} /></div><strong>{euro.format(value)}</strong></div>)}{!distribution.length && <p className="noRows">Δεν υπάρχουν δεδομένα κατανομής.</p>}</div>}
+  </article>;
 }
 
 function formatDate(value?: string) {

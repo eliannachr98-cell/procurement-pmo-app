@@ -43,6 +43,9 @@ type ContractRow = {
   adam: string;
   procurement_adam: string | null;
   award_adam: string | null;
+  title: string | null;
+  authority_name: string | null;
+  contract_type: string | null;
   signed_date: string | null;
   delivery_date: string | null;
   amount_ex_vat: number | null;
@@ -139,21 +142,24 @@ export async function GET(request: Request) {
 
     let matchingAdams: string[] | null = null;
     let matchingAwardAdams: string[] | null = null;
+    let matchingContractAdams: string[] | null = null;
     if (contractors.length) {
       const groups: Awaited<ReturnType<typeof procurementAdamsForContractor>>[] = [];
       for (const item of contractors) groups.push(await procurementAdamsForContractor(item));
       matchingAdams = intersect(matchingAdams, union(groups.map((item) => item.procurementAdams)));
       matchingAwardAdams = intersect(matchingAwardAdams, union(groups.map((item) => item.awardAdams)));
+      matchingContractAdams = intersect(matchingContractAdams, union(groups.map((item) => item.contractAdams)));
     }
     if (cpvs.length) {
       const groups: Awaited<ReturnType<typeof procurementAdamsForCpv>>[] = [];
       for (const item of cpvs) groups.push(await procurementAdamsForCpv(item));
       matchingAdams = intersect(matchingAdams, union(groups.map((item) => item.procurementAdams)));
       matchingAwardAdams = intersect(matchingAwardAdams, union(groups.map((item) => item.awardAdams)));
+      matchingContractAdams = intersect(matchingContractAdams, union(groups.map((item) => item.contractAdams)));
     }
 
     if (matchingAdams?.length === 0) {
-      return NextResponse.json({ tenders: [], awards: [], meta: { source: "Supabase compact", page, pageSize, total: 0, hasMore: false, loadedAt: new Date().toISOString() } });
+      return NextResponse.json({ tenders: [], awards: [], contracts: [], meta: { source: "Supabase compact", page, pageSize, total: 0, hasMore: false, loadedAt: new Date().toISOString() } });
     }
 
     const filters: string[] = [];
@@ -184,7 +190,7 @@ export async function GET(request: Request) {
       ),
       relatedRows<ContractRow>(
         "contracts_compact", "procurement_adam", noticeAdams,
-        "adam,procurement_adam,award_adam,signed_date,delivery_date,amount_ex_vat,amount_inc_vat,amount_unknown_vat",
+        "adam,procurement_adam,award_adam,title,authority_name,contract_type,signed_date,delivery_date,amount_ex_vat,amount_inc_vat,amount_unknown_vat",
       ),
       relatedRows<CpvRow>(
         "record_cpvs_compact", "record_adam", noticeAdams,
@@ -215,20 +221,36 @@ export async function GET(request: Request) {
 
     // Competition mapping must not depend on the currently visible tender page.
     // Recent tenders usually have no award yet, which previously made this view empty.
-    const marketAwards = await supabaseGet<AwardRow[]>(
-      "awards_compact?select=adam,procurement_adam,title,authority_name,contract_type,award_date,amount_ex_vat,amount_inc_vat,amount_unknown_vat" +
-      (matchingAwardAdams ? `&adam=in.(${matchingAwardAdams.map(encodeURIComponent).join(",")})` : "") +
-      // `adam` is the primary key, so this avoids sorting the full awards table
-      // by an unindexed date on every dashboard request.
-      `&order=adam.desc&limit=${matchingAwardAdams ? 1000 : 200}`,
-    );
+    const [marketAwards, marketContracts] = await Promise.all([
+      supabaseGet<AwardRow[]>(
+        "awards_compact?select=adam,procurement_adam,title,authority_name,contract_type,award_date,amount_ex_vat,amount_inc_vat,amount_unknown_vat" +
+        (matchingAwardAdams ? `&adam=in.(${matchingAwardAdams.map(encodeURIComponent).join(",")})` : "") +
+        // `adam` is the primary key, so this avoids sorting the full awards table
+        // by an unindexed date on every dashboard request.
+        `&order=adam.desc&limit=${matchingAwardAdams ? 1000 : 200}`,
+      ),
+      supabaseGet<ContractRow[]>(
+        "contracts_compact?select=adam,procurement_adam,award_adam,title,authority_name,contract_type,signed_date,delivery_date,amount_ex_vat,amount_inc_vat,amount_unknown_vat" +
+        (matchingContractAdams ? `&adam=in.(${matchingContractAdams.map(encodeURIComponent).join(",")})` : "") +
+        `&order=adam.desc&limit=${matchingContractAdams ? 1000 : 200}`,
+      ),
+    ]);
     const marketAwardAdams = marketAwards.map((row) => row.adam);
-    const marketNoticeAdams = marketAwards.map((row) => row.procurement_adam).filter((value): value is string => Boolean(value));
-    const [marketAwardCpvs, marketNoticeCpvs, marketAwardContractors, marketNotices] = await Promise.all([
+    const marketContractAdams = marketContracts.map((row) => row.adam);
+    const marketNoticeAdams = [...new Set([
+      ...marketAwards.map((row) => row.procurement_adam),
+      ...marketContracts.map((row) => row.procurement_adam),
+    ].filter((value): value is string => Boolean(value)))];
+    const [marketAwardCpvs, marketContractCpvs, marketNoticeCpvs, marketAwardContractors, marketContractContractors, marketNotices] = await Promise.all([
       relatedRows<CpvRow>(
         "record_cpvs_compact", "record_adam", marketAwardAdams,
         "record_type,record_adam,cpv_code,cpv_description",
         "record_type=eq.award",
+      ),
+      relatedRows<CpvRow>(
+        "record_cpvs_compact", "record_adam", marketContractAdams,
+        "record_type,record_adam,cpv_code,cpv_description",
+        "record_type=eq.contract",
       ),
       relatedRows<CpvRow>(
         "record_cpvs_compact", "record_adam", marketNoticeAdams,
@@ -239,6 +261,11 @@ export async function GET(request: Request) {
         "record_contractors_compact", "record_adam", marketAwardAdams,
         "record_type,record_adam,position,contractor_name,contractor_vat",
         "record_type=eq.award",
+      ),
+      relatedRows<ContractorRow>(
+        "record_contractors_compact", "record_adam", marketContractAdams,
+        "record_type,record_adam,position,contractor_name,contractor_vat",
+        "record_type=eq.contract",
       ),
       relatedRows<ProcurementRow>(
         "procurements_compact", "adam", marketNoticeAdams,
@@ -276,7 +303,16 @@ export async function GET(request: Request) {
       marketAwardContractors.filter((row) => row.record_type === "award"),
       (row) => row.record_adam,
     );
+    const marketContractCpvsByAdam = groupBy(
+      marketContractCpvs.filter((row) => row.record_type === "contract"),
+      (row) => row.record_adam,
+    );
+    const marketContractContractorsByAdam = groupBy(
+      marketContractContractors.filter((row) => row.record_type === "contract"),
+      (row) => row.record_adam,
+    );
     const marketNoticesByAdam = new Map(marketNotices.map((row) => [row.adam, row]));
+    const marketAwardsByAdam = new Map(marketAwards.map((row) => [row.adam, row]));
 
     const tenders = notices.map((notice) => {
       const linkedAwards = awardsByNotice.get(notice.adam) ?? [];
@@ -336,10 +372,38 @@ export async function GET(request: Request) {
       }));
     });
 
+    const contractItems = marketContracts.flatMap((contract) => {
+      const cpv = marketContractCpvsByAdam.get(contract.adam)?.[0];
+      const linkedAward = marketAwardsByAdam.get(contract.award_adam ?? "");
+      const linkedNotice = marketNoticesByAdam.get(contract.procurement_adam ?? "");
+      // A contract's own contractor rows sometimes aren't repeated from its
+      // award -- fall back to the award's contractors when the contract has
+      // none of its own.
+      const contractorsForContract = marketContractContractorsByAdam.get(contract.adam)
+        ?? (linkedAward ? marketAwardContractorsByAdam.get(linkedAward.adam) : undefined)
+        ?? [];
+      const rows = contractorsForContract.length ? contractorsForContract : [null];
+      return rows.map((contractor) => ({
+        adam: contract.adam,
+        noticeAdam: contract.procurement_adam ?? undefined,
+        title: contract.title ?? linkedAward?.title ?? linkedNotice?.title ?? "—",
+        authority: contract.authority_name ?? linkedAward?.authority_name ?? linkedNotice?.authority_name ?? "—",
+        contractType: contract.contract_type ?? linkedAward?.contract_type ?? linkedNotice?.contract_type ?? undefined,
+        cpv: cpv?.cpv_code ?? marketNoticeCpvsByAdam.get(contract.procurement_adam ?? "")?.[0]?.cpv_code ?? "—",
+        cpvDescription: cpv?.cpv_description ?? marketNoticeCpvsByAdam.get(contract.procurement_adam ?? "")?.[0]?.cpv_description ?? "",
+        contractor: contractor?.contractor_name ?? "Χωρίς ανάδοχο",
+        contractorVat: contractor?.contractor_vat ?? undefined,
+        signedDate: contract.signed_date ?? undefined,
+        deliveryDate: contract.delivery_date ?? undefined,
+        value: money(contract),
+      }));
+    });
+
     return NextResponse.json(
       {
         tenders,
         awards: awardItems,
+        contracts: contractItems,
         meta: {
           source: "Supabase compact",
           page,

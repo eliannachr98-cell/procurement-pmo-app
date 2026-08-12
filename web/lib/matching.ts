@@ -107,18 +107,24 @@ export async function procurementAdamsForContractor(term: string) {
     `record_contractors_compact?select=record_type,record_adam&contractor_name=ilike.${value}`,
   );
   const awardAdams = contractors.filter((row) => row.record_type === "award").map((row) => row.record_adam);
-  const contractAdams = contractors.filter((row) => row.record_type === "contract").map((row) => row.record_adam);
-  const [linkedAwards, linkedContracts] = await Promise.all([
+  const directContractAdams = contractors.filter((row) => row.record_type === "contract").map((row) => row.record_adam);
+  const [linkedAwards, linkedContracts, contractsFromAwards] = await Promise.all([
     relatedRows<Pick<AwardRow, "adam" | "procurement_adam">>(
       "awards_compact", "adam", awardAdams, "adam,procurement_adam",
     ),
     relatedRows<Pick<ContractRow, "adam" | "procurement_adam" | "award_adam">>(
-      "contracts_compact", "adam", contractAdams, "adam,procurement_adam,award_adam",
+      "contracts_compact", "adam", directContractAdams, "adam,procurement_adam,award_adam",
+    ),
+    // A contractor match on the award also covers the contract it led to,
+    // even if that contract's own contractor rows don't repeat the name.
+    relatedRows<Pick<ContractRow, "adam" | "procurement_adam" | "award_adam">>(
+      "contracts_compact", "award_adam", awardAdams, "adam,procurement_adam,award_adam",
     ),
   ]);
   return {
-    procurementAdams: [...new Set([...linkedAwards, ...linkedContracts].map((row) => row.procurement_adam).filter((item): item is string => Boolean(item)))],
+    procurementAdams: [...new Set([...linkedAwards, ...linkedContracts, ...contractsFromAwards].map((row) => row.procurement_adam).filter((item): item is string => Boolean(item)))],
     awardAdams: [...new Set([...awardAdams, ...linkedContracts.map((row) => row.award_adam)].filter((item): item is string => Boolean(item)))],
+    contractAdams: [...new Set([...directContractAdams, ...contractsFromAwards.map((row) => row.adam)])],
   };
 }
 
@@ -132,17 +138,26 @@ export async function procurementAdamsForCpv(term: string) {
   );
   const direct = cpvs.filter((row) => row.record_type === "procurement").map((row) => row.record_adam);
   const awardAdams = cpvs.filter((row) => row.record_type === "award").map((row) => row.record_adam);
-  const contractAdams = cpvs.filter((row) => row.record_type === "contract").map((row) => row.record_adam);
-  const [linkedAwards, linkedContracts] = await Promise.all([
+  const directContractAdams = cpvs.filter((row) => row.record_type === "contract").map((row) => row.record_adam);
+  const [linkedAwards, linkedContracts, contractsFromAwards] = await Promise.all([
     relatedRows<Pick<AwardRow, "adam" | "procurement_adam">>(
       "awards_compact", "adam", awardAdams, "adam,procurement_adam",
     ),
     relatedRows<Pick<ContractRow, "adam" | "procurement_adam" | "award_adam">>(
-      "contracts_compact", "adam", contractAdams, "adam,procurement_adam,award_adam",
+      "contracts_compact", "adam", directContractAdams, "adam,procurement_adam,award_adam",
+    ),
+    relatedRows<Pick<ContractRow, "adam" | "procurement_adam" | "award_adam">>(
+      "contracts_compact", "award_adam", awardAdams, "adam,procurement_adam,award_adam",
     ),
   ]);
   return {
-    procurementAdams: [...new Set([...direct, ...linkedAwards.map((row) => row.procurement_adam), ...linkedContracts.map((row) => row.procurement_adam)].filter((item): item is string => Boolean(item)))],
+    procurementAdams: [...new Set([
+      ...direct,
+      ...linkedAwards.map((row) => row.procurement_adam),
+      ...linkedContracts.map((row) => row.procurement_adam),
+      ...contractsFromAwards.map((row) => row.procurement_adam),
+    ].filter((item): item is string => Boolean(item)))],
     awardAdams: [...new Set([...awardAdams, ...linkedContracts.map((row) => row.award_adam)].filter((item): item is string => Boolean(item)))],
+    contractAdams: [...new Set([...directContractAdams, ...contractsFromAwards.map((row) => row.adam)])],
   };
 }
