@@ -164,7 +164,7 @@ begin
   else
     -- No explicit document-type filter: default to real tenders only, same
     -- as the cached (unfiltered / year-only) path -- see refresh_dashboard_caches().
-    conditions := conditions || $q$p.document_category in ('declaration', 'announcement')$q$;
+    conditions := conditions || $q$p.document_category in ('declaration', 'announcement')$q$::text;
   end if;
 
   if array_length(conditions, 1) > 0 then
