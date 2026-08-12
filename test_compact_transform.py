@@ -52,6 +52,34 @@ class CompactTransformTests(unittest.TestCase):
         self.assertEqual(classify_document("\u03a4\u03b5\u03cd\u03c7\u03bf\u03c2 \u03b4\u03b9\u03b5\u03c5\u03ba\u03c1\u03b9\u03bd\u03af\u03c3\u03b5\u03c9\u03bd"), "clarification")
         self.assertEqual(classify_document("\u0394\u03b9\u03b1\u03ba\u03ae\u03c1\u03c5\u03be\u03b7 \u03b1\u03bd\u03bf\u03b9\u03ba\u03c4\u03bf\u03cd \u03b4\u03b9\u03b1\u03b3\u03c9\u03bd\u03b9\u03c3\u03bc\u03bf\u03cd"), "declaration")
 
+    def test_document_classification_uses_khmdhs_notice_type(self):
+        # noticeType is authoritative: a title with no recognizable keyword
+        # ("\u03a0\u03c1\u03bf\u03bc\u03ae\u03b8\u03b5\u03b9\u03b1 \u03c4\u03c1\u03bf\u03c6\u03af\u03bc\u03c9\u03bd") must still classify correctly when tagged.
+        self.assertEqual(
+            classify_document("\u03a0\u03c1\u03bf\u03bc\u03ae\u03b8\u03b5\u03b9\u03b1 \u03c4\u03c1\u03bf\u03c6\u03af\u03bc\u03c9\u03bd", {"key": "2", "value": "\u03a0\u03c1\u03bf\u03ba\u03ae\u03c1\u03c5\u03be\u03b7"}),
+            "announcement",
+        )
+        self.assertEqual(
+            classify_document("\u03a0\u03c1\u03bf\u03bc\u03ae\u03b8\u03b5\u03b9\u03b1 \u03c4\u03c1\u03bf\u03c6\u03af\u03bc\u03c9\u03bd", {"key": "3", "value": "\u0394\u03b9\u03b1\u03ba\u03ae\u03c1\u03c5\u03be\u03b7"}),
+            "declaration",
+        )
+        self.assertEqual(
+            classify_document("\u03a0\u03c1\u03bf\u03bc\u03ae\u03b8\u03b5\u03b9\u03b1 \u03c4\u03c1\u03bf\u03c6\u03af\u03bc\u03c9\u03bd", {"key": "6", "value": "..."}),
+            "interest_invitation",
+        )
+
+    def test_document_classification_cancelled_overrides_notice_type(self):
+        self.assertEqual(
+            classify_document("\u0394\u03b9\u03b1\u03ba\u03ae\u03c1\u03c5\u03be\u03b7", {"key": "3"}, cancelled=True),
+            "cancellation",
+        )
+
+    def test_document_classification_amendment_subtype_from_title(self):
+        self.assertEqual(
+            classify_document("\u03a0\u03b1\u03c1\u03ac\u03c4\u03b1\u03c3\u03b7 \u03c0\u03c1\u03bf\u03b8\u03b5\u03c3\u03bc\u03af\u03b1\u03c2", {"key": "3"}, amend_previous=True),
+            "extension",
+        )
+
     def test_contract_preserves_multiple_contractors(self):
         result = transform("contract", {
             "referenceNumber": "24SYMV1",

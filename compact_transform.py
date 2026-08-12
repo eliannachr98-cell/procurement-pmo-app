@@ -46,21 +46,64 @@ def first(item: dict, *keys: str) -> Any:
     return None
 
 
-def classify_document(title: str | None, source_type: Any = None) -> str:
-    source = " ".join(filter(None, [text(title), keyed(source_type)[1], keyed(source_type)[0]])).lower()
-    source = "".join(char for char in unicodedata.normalize("NFD", source) if unicodedata.category(char) != "Mn")
-    # Unicode escapes keep the matching rules stable across Windows code pages.
+# KHMDHS labels the primary type of every notice in the noticeType.key field.
+# Confirmed against live API samples (Jan-Mar 2025): 2=\u03a0\u03c1\u03bf\u03ba\u03ae\u03c1\u03c5\u03be\u03b7, 3=\u0394\u03b9\u03b1\u03ba\u03ae\u03c1\u03c5\u03be\u03b7,
+# 4=\u03a0\u03c1\u03cc\u03c3\u03ba\u03bb\u03b7\u03c3\u03b7, 6=\u03a0\u03c1\u03cc\u03c3\u03ba\u03bb\u03b7\u03c3\u03b7 \u03b5\u03ba\u03b4\u03ae\u03bb\u03c9\u03c3\u03b7\u03c2 \u03b5\u03bd\u03b4\u03b9\u03b1\u03c6\u03ad\u03c1\u03bf\u03bd\u03c4\u03bf\u03c2. Older code looked for a
+# nonexistent "documentType" field and silently fell back to guessing from the
+# title, which mis-bucketed roughly half of all notices as "other".
+NOTICE_TYPE_CATEGORIES = {
+    "2": "announcement",
+    "3": "declaration",
+    "4": "invitation",
+    "6": "interest_invitation",
+}
+
+
+def _strip_accents(value: str) -> str:
+    return "".join(char for char in unicodedata.normalize("NFD", value) if unicodedata.category(char) != "Mn")
+
+
+def classify_document(
+    title: str | None,
+    notice_type: Any = None,
+    cancelled: bool = False,
+    amend_previous: bool = False,
+) -> str:
+    if cancelled:
+        return "cancellation"
+
+    notice_type_key, _ = keyed(notice_type)
+    if amend_previous:
+        # Amendments are still only distinguishable from each other by title;
+        # KHMDHS does not expose a finer-grained field for this subset.
+        source = _strip_accents(" ".join(filter(None, [text(title)])).lower())
+        groups = (
+            ("clarification", ("\u03b4\u03b9\u03b5\u03c5\u03ba\u03c1\u03b9\u03bd", "\u03b5\u03c1\u03ce\u03c4", "\u03b1\u03c0\u03ac\u03bd\u03c4")),
+            ("extension", ("\u03bc\u03b5\u03c4\u03ac\u03b8\u03b5\u03c3", "\u03c0\u03b1\u03c1\u03ac\u03c4\u03b1\u03c3")),
+            ("decision", ("\u03b1\u03c0\u03cc\u03c6\u03b1\u03c3\u03b7", "\u03ad\u03b3\u03ba\u03c1\u03b9\u03c3\u03b7")),
+        )
+        for category, needles in groups:
+            normalized_needles = (_strip_accents(needle) for needle in needles)
+            if any(needle in source for needle in normalized_needles):
+                return category
+        return "amendment"
+
+    if notice_type_key in NOTICE_TYPE_CATEGORIES:
+        return NOTICE_TYPE_CATEGORIES[notice_type_key]
+
+    # No noticeType available (e.g. direct unit-test calls): fall back to
+    # guessing from the title so existing callers keep working.
+    source = _strip_accents(" ".join(filter(None, [text(title)])).lower())
     groups = (
         ("clarification", ("\u03b4\u03b9\u03b5\u03c5\u03ba\u03c1\u03b9\u03bd", "\u03b5\u03c1\u03ce\u03c4", "\u03b1\u03c0\u03ac\u03bd\u03c4")),
-        ("amendment", ("\u03c4\u03c1\u03bf\u03c0\u03bf\u03c0\u03bf\u03b9", "\u03bc\u03b5\u03c4\u03ac\u03b8\u03b5\u03c3", "\u03c0\u03b1\u03c1\u03ac\u03c4\u03b1\u03c3", "\u03bf\u03c1\u03b8\u03ae \u03b5\u03c0\u03b1\u03bd\u03ac\u03bb\u03b7\u03c8\u03b7")),
-        ("decision", ("\u03b1\u03c0\u03cc\u03c6\u03b1\u03c3\u03b7", "\u03ad\u03b3\u03ba\u03c1\u03b9\u03c3\u03b7", "\u03bc\u03b1\u03c4\u03b1\u03af\u03c9\u03c3\u03b7", "\u03b1\u03bd\u03ac\u03ba\u03bb\u03b7\u03c3\u03b7")),
-        ("declaration", ("\u03b4\u03b9\u03b1\u03ba\u03ae\u03c1\u03c5\u03be", "\u03c0\u03c1\u03cc\u03c3\u03ba\u03bb\u03b7\u03c3\u03b7", "\u03c0\u03c1\u03bf\u03ba\u03ae\u03c1\u03c5\u03be")),
+        ("amendment", ("\u03c4\u03c1\u03bf\u03c0\u03bf\u03c0\u03bf\u03b9", "\u03bf\u03c1\u03b8\u03ae \u03b5\u03c0\u03b1\u03bd\u03ac\u03bb\u03b7\u03c8\u03b7")),
+        ("extension", ("\u03bc\u03b5\u03c4\u03ac\u03b8\u03b5\u03c3", "\u03c0\u03b1\u03c1\u03ac\u03c4\u03b1\u03c3")),
+        ("decision", ("\u03b1\u03c0\u03cc\u03c6\u03b1\u03c3\u03b7", "\u03ad\u03b3\u03ba\u03c1\u03b9\u03c3\u03b7")),
+        ("announcement", ("\u03c0\u03c1\u03bf\u03ba\u03ae\u03c1\u03c5\u03be",)),
+        ("declaration", ("\u03b4\u03b9\u03b1\u03ba\u03ae\u03c1\u03c5\u03be", "\u03c0\u03c1\u03cc\u03c3\u03ba\u03bb\u03b7\u03c3\u03b7")),
     )
     for category, needles in groups:
-        normalized_needles = (
-            "".join(char for char in unicodedata.normalize("NFD", needle) if unicodedata.category(char) != "Mn")
-            for needle in needles
-        )
+        normalized_needles = (_strip_accents(needle) for needle in needles)
         if any(needle in source for needle in normalized_needles):
             return category
     return "other"
@@ -151,7 +194,12 @@ def transform(source: str, item: dict) -> dict:
         procedure_type = keyed(item.get("procedureType"))[1] or keyed(item.get("procedureType"))[0]
         row = base | {
             "procedure_type": procedure_type,
-            "document_category": classify_document(base["title"], item.get("documentType")),
+            "document_category": classify_document(
+                base["title"],
+                item.get("noticeType"),
+                cancelled=bool(item.get("cancelled")),
+                amend_previous=bool(item.get("amendPreviousNotice")),
+            ),
             "nuts_code": nuts_code,
             "nuts_name": nuts_name,
             "publication_date": date_value(first(item, "submissionDate", "signedDate")),
