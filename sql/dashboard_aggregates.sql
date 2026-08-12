@@ -17,9 +17,7 @@
 -- query inline (>120s vs ~18s, confirmed via EXPLAIN ANALYZE) -- the
 -- functions below always inline the full query themselves.
 
-drop table if exists public.dashboard_cache;
-
-create table public.dashboard_cache (
+create table if not exists public.dashboard_cache (
   cache_key text primary key,
   payload json not null,
   refreshed_at timestamptz not null default now()
