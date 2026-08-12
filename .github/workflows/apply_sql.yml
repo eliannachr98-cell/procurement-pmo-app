@@ -34,12 +34,18 @@ jobs:
 
           path = Path(os.environ["SQL_FILE"])
           sql = path.read_text(encoding="utf-8")
+          # Statements like VACUUM refuse to run inside a transaction block,
+          # which a single multi-statement execute() implicitly opens -- so
+          # split into one execute() per statement. Files with dollar-quoted
+          # function bodies (containing ";" internally) must stay as one call.
+          statements = [sql] if "$$" in sql else [s.strip() for s in sql.split(";") if s.strip()]
           with psycopg.connect(os.environ["DATABASE_URL"], autocommit=True) as connection:
               connection.execute("set statement_timeout = '120000'")
-              cursor = connection.execute(sql)
-              if cursor.description:
-                  columns = [col.name for col in cursor.description]
-                  for row in cursor.fetchall():
-                      print(dict(zip(columns, row)))
+              for statement in statements:
+                  cursor = connection.execute(statement)
+                  if cursor.description:
+                      columns = [col.name for col in cursor.description]
+                      for row in cursor.fetchall():
+                          print(dict(zip(columns, row)))
           print(f"applied: {path}")
           PY
