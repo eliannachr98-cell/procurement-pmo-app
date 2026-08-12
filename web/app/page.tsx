@@ -182,14 +182,12 @@ export default function Home() {
   const documentTypes = [
     ["declaration", "Διακήρυξη"],
     ["announcement", "Προκήρυξη"],
-    ["invitation", "Πρόσκληση"],
-    ["interest_invitation", "Πρόσκληση εκδήλωσης ενδιαφέροντος"],
+    ["summary", "Περίληψη"],
     ["clarification", "Διευκρίνιση"],
-    ["extension", "Παράταση / μετάθεση προθεσμίας"],
-    ["decision", "Απόφαση / έγκριση"],
+    ["extension", "Παράταση / μετάθεση"],
     ["amendment", "Τροποποίηση"],
+    ["decision", "Απόφαση / έγκριση"],
     ["cancellation", "Ματαίωση / ακύρωση"],
-    ["other", "Λοιπό"],
   ];
   const statusCount = (value: Status) => dashboard.status.find((item) => item.status === value)?.count ?? 0;
 
