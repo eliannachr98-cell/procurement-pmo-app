@@ -139,6 +139,9 @@ export default function Home() {
   const contractTypes = [...new Set(tenders.map((item) => item.contractType).filter(Boolean))].sort();
   const documentTypes = [
     ["declaration", "Διακήρυξη"],
+    ["announcement", "Προκήρυξη"],
+    ["invitation", "Πρόσκληση"],
+    ["interest_invitation", "Πρόσκληση εκδήλωσης ενδιαφέροντος"],
     ["clarification", "Διευκρίνιση"],
     ["extension", "Παράταση / μετάθεση προθεσμίας"],
     ["decision", "Απόφαση / έγκριση"],
