@@ -22,10 +22,30 @@ async function supabaseRows<T>(path: string): Promise<T[]> {
   return response.json();
 }
 
+async function supabaseRpc<T>(fn: string, args: Record<string, unknown> = {}): Promise<T> {
+  const url = process.env.SUPABASE_URL;
+  const key = process.env.SUPABASE_PUBLISHABLE_KEY;
+  if (!url || !key) throw new Error("Supabase environment variables are missing");
+  const response = await fetch(`${url}/rest/v1/rpc/${fn}`, {
+    method: "POST",
+    headers: { apikey: key, "Content-Type": "application/json" },
+    body: JSON.stringify(args),
+    cache: "no-store",
+  });
+  if (!response.ok) throw new Error(`Supabase RPC ${fn} failed (${response.status})`);
+  return response.json();
+}
+
 export async function GET(request: Request) {
   try {
     const params = new URL(request.url).searchParams;
     const type = params.get("type");
+
+    if (type === "year") {
+      const rows = await supabaseRpc<{ year: string }[]>("available_years");
+      return NextResponse.json({ options: rows.map((row) => row.year) });
+    }
+
     const query = params.get("q")?.trim() ?? "";
     if (query.length < 2) return NextResponse.json({ options: [] });
     const value = encodeURIComponent(`*${query}*`);

@@ -1,4 +1,13 @@
 import { NextResponse } from "next/server";
+import {
+  allRows,
+  intersect,
+  procurementAdamsForContractor,
+  procurementAdamsForCpv,
+  relatedRows,
+  supabaseGet,
+  union,
+} from "@/lib/matching";
 
 type ProcurementRow = {
   adam: string;
@@ -58,7 +67,6 @@ type ContractorRow = {
 
 const DEFAULT_PAGE_SIZE = 500;
 const MAX_PAGE_SIZE = 1000;
-const CHUNK_SIZE = 70;
 // Preview reads live compact rows while the historical backfill continues.
 export const dynamic = "force-dynamic";
 
@@ -74,22 +82,6 @@ function money(row: {
     row.amount_inc_vat ?? row.amount_ex_vat ?? row.amount_unknown_vat ??
     row.budget_inc_vat ?? row.budget_ex_vat ?? row.budget_unknown_vat ?? 0,
   );
-}
-
-async function supabaseGet<T>(path: string): Promise<T> {
-  const url = process.env.SUPABASE_URL;
-  const key = process.env.SUPABASE_PUBLISHABLE_KEY;
-  if (!url || !key) throw new Error("Supabase environment variables are missing");
-
-  const response = await fetch(`${url}/rest/v1/${path}`, {
-    headers: { apikey: key },
-    cache: "no-store",
-  });
-  if (!response.ok) {
-    const detail = await response.text();
-    throw new Error(`Supabase request failed (${response.status}): ${detail.slice(0, 180)}`);
-  }
-  return response.json();
 }
 
 async function supabasePage<T>(path: string): Promise<{ rows: T; total: number }> {
@@ -111,92 +103,6 @@ async function supabasePage<T>(path: string): Promise<{ rows: T; total: number }
   const contentRange = response.headers.get("content-range") ?? "";
   const total = Number(contentRange.split("/")[1] ?? 0);
   return { rows: await response.json(), total: Number.isFinite(total) ? total : 0 };
-}
-
-async function relatedRows<T>(table: string, column: string, values: string[], select: string, filter = "") {
-  const unique = [...new Set(values.filter(Boolean))];
-  const rows: T[] = [];
-  for (let index = 0; index < unique.length; index += CHUNK_SIZE) {
-    const chunk = unique.slice(index, index + CHUNK_SIZE).map(encodeURIComponent).join(",");
-    rows.push(...await supabaseGet<T[]>(
-      `${table}?select=${select}${filter ? `&${filter}` : ""}&${column}=in.(${chunk})`,
-    ));
-  }
-  return rows;
-}
-
-async function allRows<T>(path: string) {
-  const rows: T[] = [];
-  const separator = path.includes("?") ? "&" : "?";
-  for (let offset = 0; ; offset += 1000) {
-    const page = await supabaseGet<T[]>(`${path}${separator}limit=1000&offset=${offset}`);
-    rows.push(...page);
-    if (page.length < 1000) return rows;
-  }
-}
-
-function intersect(left: string[] | null, right: string[]) {
-  if (left === null) return [...new Set(right)];
-  const allowed = new Set(right);
-  return left.filter((value) => allowed.has(value));
-}
-
-function union(groups: string[][]) {
-  return [...new Set(groups.flat())];
-}
-
-function contractorSearchTerm(value: string) {
-  const aliases: Record<string, string> = {
-    PWC: "PRICEWATERHOUSECOOPERS",
-    EY: "ERNST",
-  };
-  return aliases[value.trim().toLocaleUpperCase("en-US")] ?? value;
-}
-
-async function procurementAdamsForContractor(term: string) {
-  const value = encodeURIComponent(`*${contractorSearchTerm(term)}*`);
-  const contractors = await allRows<Pick<ContractorRow, "record_type" | "record_adam">>(
-    `record_contractors_compact?select=record_type,record_adam&contractor_name=ilike.${value}`,
-  );
-  const awardAdams = contractors.filter((row) => row.record_type === "award").map((row) => row.record_adam);
-  const contractAdams = contractors.filter((row) => row.record_type === "contract").map((row) => row.record_adam);
-  const [linkedAwards, linkedContracts] = await Promise.all([
-    relatedRows<Pick<AwardRow, "adam" | "procurement_adam">>(
-      "awards_compact", "adam", awardAdams, "adam,procurement_adam",
-    ),
-    relatedRows<Pick<ContractRow, "adam" | "procurement_adam" | "award_adam">>(
-      "contracts_compact", "adam", contractAdams, "adam,procurement_adam,award_adam",
-    ),
-  ]);
-  return {
-    procurementAdams: [...new Set([...linkedAwards, ...linkedContracts].map((row) => row.procurement_adam).filter((item): item is string => Boolean(item)))],
-    awardAdams: [...new Set([...awardAdams, ...linkedContracts.map((row) => row.award_adam)].filter((item): item is string => Boolean(item)))],
-  };
-}
-
-async function procurementAdamsForCpv(term: string) {
-  const value = encodeURIComponent(`*${term}*`);
-  const cpvFilter = /^\d{8}-\d$/.test(term)
-    ? `cpv_code=eq.${encodeURIComponent(term)}`
-    : `or=(cpv_code.ilike.${value},cpv_description.ilike.${value})`;
-  const cpvs = await allRows<CpvRow>(
-    `record_cpvs_compact?select=record_type,record_adam,cpv_code,cpv_description&${cpvFilter}`,
-  );
-  const direct = cpvs.filter((row) => row.record_type === "procurement").map((row) => row.record_adam);
-  const awardAdams = cpvs.filter((row) => row.record_type === "award").map((row) => row.record_adam);
-  const contractAdams = cpvs.filter((row) => row.record_type === "contract").map((row) => row.record_adam);
-  const [linkedAwards, linkedContracts] = await Promise.all([
-    relatedRows<Pick<AwardRow, "adam" | "procurement_adam">>(
-      "awards_compact", "adam", awardAdams, "adam,procurement_adam",
-    ),
-    relatedRows<Pick<ContractRow, "adam" | "procurement_adam" | "award_adam">>(
-      "contracts_compact", "adam", contractAdams, "adam,procurement_adam,award_adam",
-    ),
-  ]);
-  return {
-    procurementAdams: [...new Set([...direct, ...linkedAwards.map((row) => row.procurement_adam), ...linkedContracts.map((row) => row.procurement_adam)].filter((item): item is string => Boolean(item)))],
-    awardAdams: [...new Set([...awardAdams, ...linkedContracts.map((row) => row.award_adam)].filter((item): item is string => Boolean(item)))],
-  };
 }
 
 function groupBy<T>(rows: T[], key: (row: T) => string | null) {
