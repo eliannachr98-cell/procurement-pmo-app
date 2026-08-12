@@ -46,16 +46,35 @@ def first(item: dict, *keys: str) -> Any:
     return None
 
 
-# KHMDHS labels the primary type of every notice in the noticeType.key field.
-# Confirmed against live API samples (Jan-Mar 2025): 2=\u03a0\u03c1\u03bf\u03ba\u03ae\u03c1\u03c5\u03be\u03b7, 3=\u0394\u03b9\u03b1\u03ba\u03ae\u03c1\u03c5\u03be\u03b7,
-# 4=\u03a0\u03c1\u03cc\u03c3\u03ba\u03bb\u03b7\u03c3\u03b7, 6=\u03a0\u03c1\u03cc\u03c3\u03ba\u03bb\u03b7\u03c3\u03b7 \u03b5\u03ba\u03b4\u03ae\u03bb\u03c9\u03c3\u03b7\u03c2 \u03b5\u03bd\u03b4\u03b9\u03b1\u03c6\u03ad\u03c1\u03bf\u03bd\u03c4\u03bf\u03c2. Older code looked for a
-# nonexistent "documentType" field and silently fell back to guessing from the
-# title, which mis-bucketed roughly half of all notices as "other".
+# KHMDHS labels the primary type of every notice in the noticeType.key field
+# (confirmed against live API samples, Jan-Mar 2025): 2=\u03a0\u03c1\u03bf\u03ba\u03ae\u03c1\u03c5\u03be\u03b7, 3=\u0394\u03b9\u03b1\u03ba\u03ae\u03c1\u03c5\u03be\u03b7,
+# 4=\u03a0\u03c1\u03cc\u03c3\u03ba\u03bb\u03b7\u03c3\u03b7, 6=\u03a0\u03c1\u03cc\u03c3\u03ba\u03bb\u03b7\u03c3\u03b7 \u03b5\u03ba\u03b4\u03ae\u03bb\u03c9\u03c3\u03b7\u03c2 \u03b5\u03bd\u03b4\u03b9\u03b1\u03c6\u03ad\u03c1\u03bf\u03bd\u03c4\u03bf\u03c2. But that field only
+# distinguishes \u03a0\u03c1\u03bf\u03ba\u03ae\u03c1\u03c5\u03be\u03b7 from everything else -- it does not know that a
+# given notice is actually a \u0394\u03b9\u03b5\u03c5\u03ba\u03c1\u03af\u03bd\u03b9\u03c3\u03b7, \u03a0\u03b1\u03c1\u03ac\u03c4\u03b1\u03c3\u03b7, \u03a0\u03b5\u03c1\u03af\u03bb\u03b7\u03c8\u03b7, etc. of an
+# earlier one. Those subtypes are only visible in the title, using the same
+# keyword stems the user already validated by hand in a spreadsheet formula
+# (SEARCH for \u0391\u03a0\u039f\u03a6\u0391\u03a3/\u03a4\u03a1\u039f\u03a0\u039f\u03a0/\u03a0\u0391\u03a1\u0391\u03a4\u0391\u03a3/\u0394\u0399\u0395\u03a5\u039a\u03a1/\u039c\u0391\u03a4\u0391\u0399\u03a9/\u0394\u0399\u039f\u03a1\u0398\u03a9/\u03a0\u0395\u03a1\u0399\u039b\u0397\u03a8/\u039c\u0395\u03a4\u0391\u0398\u0395\u03a3 to
+# isolate plain declarations). So title keywords are checked first, in order
+# of specificity, and noticeType is only the fallback for the remaining
+# (still large) bucket of plain declarations/announcements.
+#
+# Requested final categories: \u0394\u03b9\u03b1\u03ba\u03ae\u03c1\u03c5\u03be\u03b7, \u03a0\u03c1\u03bf\u03ba\u03ae\u03c1\u03c5\u03be\u03b7, \u03a0\u03b5\u03c1\u03af\u03bb\u03b7\u03c8\u03b7, \u0394\u03b9\u03b5\u03c5\u03ba\u03c1\u03b9\u03bd\u03af\u03c3\u03b5\u03b9\u03c2,
+# \u03a0\u03b1\u03c1\u03ac\u03c4\u03b1\u03c3\u03b7/\u039c\u03b5\u03c4\u03ac\u03b8\u03b5\u03c3\u03b7, \u03a4\u03c1\u03bf\u03c0\u03bf\u03c0\u03bf\u03b9\u03ae\u03c3\u03b5\u03b9\u03c2. \u03a0\u03c1\u03cc\u03c3\u03ba\u03bb\u03b7\u03c3\u03b7 (any variant) and anything
+# left over fold into \u0394\u03b9\u03b1\u03ba\u03ae\u03c1\u03c5\u03be\u03b7; \u0394\u03b9\u03cc\u03c1\u03b8\u03c9\u03c3\u03b7 folds into \u03a4\u03c1\u03bf\u03c0\u03bf\u03c0\u03bf\u03b9\u03ae\u03c3\u03b5\u03b9\u03c2 (both are
+# corrections to an existing notice). \u039c\u03b1\u03c4\u03b1\u03af\u03c9\u03c3\u03b7/\u0391\u03c0\u03cc\u03c6\u03b1\u03c3\u03b7 stay as their own
+# categories since they're genuinely different documents, not requested to
+# be merged, and cancellation already has a reliable non-title signal.
+KEYWORD_CATEGORIES = (
+    ("cancellation", ("\u03bc\u03b1\u03c4\u03b1\u03af\u03c9",)),
+    ("amendment", ("\u03c4\u03c1\u03bf\u03c0\u03bf\u03c0\u03bf\u03b9", "\u03b4\u03b9\u03cc\u03c1\u03b8\u03c9", "\u03bf\u03c1\u03b8\u03ae \u03b5\u03c0\u03b1\u03bd\u03ac\u03bb\u03b7\u03c8\u03b7")),
+    ("extension", ("\u03c0\u03b1\u03c1\u03ac\u03c4\u03b1\u03c3", "\u03bc\u03b5\u03c4\u03ac\u03b8\u03b5\u03c3")),
+    ("clarification", ("\u03b4\u03b9\u03b5\u03c5\u03ba\u03c1\u03b9\u03bd",)),
+    ("summary", ("\u03c0\u03b5\u03c1\u03af\u03bb\u03b7\u03c8",)),
+    ("decision", ("\u03b1\u03c0\u03cc\u03c6\u03b1\u03c3\u03b7", "\u03ad\u03b3\u03ba\u03c1\u03b9\u03c3\u03b7")),
+)
+
 NOTICE_TYPE_CATEGORIES = {
     "2": "announcement",
-    "3": "declaration",
-    "4": "invitation",
-    "6": "interest_invitation",
 }
 
 
@@ -67,46 +86,20 @@ def classify_document(
     title: str | None,
     notice_type: Any = None,
     cancelled: bool = False,
-    amend_previous: bool = False,
 ) -> str:
     if cancelled:
         return "cancellation"
 
-    notice_type_key, _ = keyed(notice_type)
-    if amend_previous:
-        # Amendments are still only distinguishable from each other by title;
-        # KHMDHS does not expose a finer-grained field for this subset.
-        source = _strip_accents(" ".join(filter(None, [text(title)])).lower())
-        groups = (
-            ("clarification", ("\u03b4\u03b9\u03b5\u03c5\u03ba\u03c1\u03b9\u03bd", "\u03b5\u03c1\u03ce\u03c4", "\u03b1\u03c0\u03ac\u03bd\u03c4")),
-            ("extension", ("\u03bc\u03b5\u03c4\u03ac\u03b8\u03b5\u03c3", "\u03c0\u03b1\u03c1\u03ac\u03c4\u03b1\u03c3")),
-            ("decision", ("\u03b1\u03c0\u03cc\u03c6\u03b1\u03c3\u03b7", "\u03ad\u03b3\u03ba\u03c1\u03b9\u03c3\u03b7")),
-        )
-        for category, needles in groups:
-            normalized_needles = (_strip_accents(needle) for needle in needles)
-            if any(needle in source for needle in normalized_needles):
-                return category
-        return "amendment"
-
-    if notice_type_key in NOTICE_TYPE_CATEGORIES:
-        return NOTICE_TYPE_CATEGORIES[notice_type_key]
-
-    # No noticeType available (e.g. direct unit-test calls): fall back to
-    # guessing from the title so existing callers keep working.
     source = _strip_accents(" ".join(filter(None, [text(title)])).lower())
-    groups = (
-        ("clarification", ("\u03b4\u03b9\u03b5\u03c5\u03ba\u03c1\u03b9\u03bd", "\u03b5\u03c1\u03ce\u03c4", "\u03b1\u03c0\u03ac\u03bd\u03c4")),
-        ("amendment", ("\u03c4\u03c1\u03bf\u03c0\u03bf\u03c0\u03bf\u03b9", "\u03bf\u03c1\u03b8\u03ae \u03b5\u03c0\u03b1\u03bd\u03ac\u03bb\u03b7\u03c8\u03b7")),
-        ("extension", ("\u03bc\u03b5\u03c4\u03ac\u03b8\u03b5\u03c3", "\u03c0\u03b1\u03c1\u03ac\u03c4\u03b1\u03c3")),
-        ("decision", ("\u03b1\u03c0\u03cc\u03c6\u03b1\u03c3\u03b7", "\u03ad\u03b3\u03ba\u03c1\u03b9\u03c3\u03b7")),
-        ("announcement", ("\u03c0\u03c1\u03bf\u03ba\u03ae\u03c1\u03c5\u03be",)),
-        ("declaration", ("\u03b4\u03b9\u03b1\u03ba\u03ae\u03c1\u03c5\u03be", "\u03c0\u03c1\u03cc\u03c3\u03ba\u03bb\u03b7\u03c3\u03b7")),
-    )
-    for category, needles in groups:
+    for category, needles in KEYWORD_CATEGORIES:
         normalized_needles = (_strip_accents(needle) for needle in needles)
         if any(needle in source for needle in normalized_needles):
             return category
-    return "other"
+
+    notice_type_key, _ = keyed(notice_type)
+    # Everything else -- \u0394\u03b9\u03b1\u03ba\u03ae\u03c1\u03c5\u03be\u03b7, \u03a0\u03c1\u03cc\u03c3\u03ba\u03bb\u03b7\u03c3\u03b7 (any variant), and unclassified
+    # notices with no usable noticeType -- is a plain declaration.
+    return NOTICE_TYPE_CATEGORIES.get(notice_type_key, "declaration")
 
 
 def organization(item: dict) -> tuple[str | None, str | None]:
@@ -198,7 +191,6 @@ def transform(source: str, item: dict) -> dict:
                 base["title"],
                 item.get("noticeType"),
                 cancelled=bool(item.get("cancelled")),
-                amend_previous=bool(item.get("amendPreviousNotice")),
             ),
             "nuts_code": nuts_code,
             "nuts_name": nuts_name,

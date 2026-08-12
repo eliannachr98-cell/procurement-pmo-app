@@ -53,8 +53,9 @@ class CompactTransformTests(unittest.TestCase):
         self.assertEqual(classify_document("\u0394\u03b9\u03b1\u03ba\u03ae\u03c1\u03c5\u03be\u03b7 \u03b1\u03bd\u03bf\u03b9\u03ba\u03c4\u03bf\u03cd \u03b4\u03b9\u03b1\u03b3\u03c9\u03bd\u03b9\u03c3\u03bc\u03bf\u03cd"), "declaration")
 
     def test_document_classification_uses_khmdhs_notice_type(self):
-        # noticeType is authoritative: a title with no recognizable keyword
-        # ("\u03a0\u03c1\u03bf\u03bc\u03ae\u03b8\u03b5\u03b9\u03b1 \u03c4\u03c1\u03bf\u03c6\u03af\u03bc\u03c9\u03bd") must still classify correctly when tagged.
+        # noticeType only distinguishes \u03a0\u03c1\u03bf\u03ba\u03ae\u03c1\u03c5\u03be\u03b7 from everything else -- a
+        # title with no recognizable keyword ("\u03a0\u03c1\u03bf\u03bc\u03ae\u03b8\u03b5\u03b9\u03b1 \u03c4\u03c1\u03bf\u03c6\u03af\u03bc\u03c9\u03bd") falls
+        # back to it, and only key=2 (\u03a0\u03c1\u03bf\u03ba\u03ae\u03c1\u03c5\u03be\u03b7) is treated specially.
         self.assertEqual(
             classify_document("\u03a0\u03c1\u03bf\u03bc\u03ae\u03b8\u03b5\u03b9\u03b1 \u03c4\u03c1\u03bf\u03c6\u03af\u03bc\u03c9\u03bd", {"key": "2", "value": "\u03a0\u03c1\u03bf\u03ba\u03ae\u03c1\u03c5\u03be\u03b7"}),
             "announcement",
@@ -63,9 +64,15 @@ class CompactTransformTests(unittest.TestCase):
             classify_document("\u03a0\u03c1\u03bf\u03bc\u03ae\u03b8\u03b5\u03b9\u03b1 \u03c4\u03c1\u03bf\u03c6\u03af\u03bc\u03c9\u03bd", {"key": "3", "value": "\u0394\u03b9\u03b1\u03ba\u03ae\u03c1\u03c5\u03be\u03b7"}),
             "declaration",
         )
+        # \u03a0\u03c1\u03cc\u03c3\u03ba\u03bb\u03b7\u03c3\u03b7 / \u03a0\u03c1\u03cc\u03c3\u03ba\u03bb\u03b7\u03c3\u03b7 \u03b5\u03ba\u03b4\u03ae\u03bb\u03c9\u03c3\u03b7\u03c2 \u03b5\u03bd\u03b4\u03b9\u03b1\u03c6\u03ad\u03c1\u03bf\u03bd\u03c4\u03bf\u03c2 fold into declaration
+        # per user request -- no separate category for either.
+        self.assertEqual(
+            classify_document("\u03a0\u03c1\u03bf\u03bc\u03ae\u03b8\u03b5\u03b9\u03b1 \u03c4\u03c1\u03bf\u03c6\u03af\u03bc\u03c9\u03bd", {"key": "4", "value": "\u03a0\u03c1\u03cc\u03c3\u03ba\u03bb\u03b7\u03c3\u03b7"}),
+            "declaration",
+        )
         self.assertEqual(
             classify_document("\u03a0\u03c1\u03bf\u03bc\u03ae\u03b8\u03b5\u03b9\u03b1 \u03c4\u03c1\u03bf\u03c6\u03af\u03bc\u03c9\u03bd", {"key": "6", "value": "..."}),
-            "interest_invitation",
+            "declaration",
         )
 
     def test_document_classification_cancelled_overrides_notice_type(self):
@@ -74,10 +81,33 @@ class CompactTransformTests(unittest.TestCase):
             "cancellation",
         )
 
-    def test_document_classification_amendment_subtype_from_title(self):
+    def test_document_classification_title_keywords_beat_notice_type(self):
+        # These sub-types only show up in the title -- noticeType alone
+        # (e.g. key=3 \u0394\u03b9\u03b1\u03ba\u03ae\u03c1\u03c5\u03be\u03b7) can't tell a plain notice apart from a
+        # \u03a0\u03b5\u03c1\u03af\u03bb\u03b7\u03c8\u03b7 or \u0394\u03b9\u03cc\u03c1\u03b8\u03c9\u03c3\u03b7 of one.
         self.assertEqual(
-            classify_document("\u03a0\u03b1\u03c1\u03ac\u03c4\u03b1\u03c3\u03b7 \u03c0\u03c1\u03bf\u03b8\u03b5\u03c3\u03bc\u03af\u03b1\u03c2", {"key": "3"}, amend_previous=True),
+            classify_document("\u03a0\u03b1\u03c1\u03ac\u03c4\u03b1\u03c3\u03b7 \u03c0\u03c1\u03bf\u03b8\u03b5\u03c3\u03bc\u03af\u03b1\u03c2 \u03c5\u03c0\u03bf\u03b2\u03bf\u03bb\u03ae\u03c2", {"key": "3"}),
             "extension",
+        )
+        self.assertEqual(
+            classify_document("\u039c\u03b5\u03c4\u03ac\u03b8\u03b5\u03c3\u03b7 \u03ba\u03b1\u03c4\u03b1\u03bb\u03b7\u03ba\u03c4\u03b9\u03ba\u03ae\u03c2 \u03b7\u03bc\u03b5\u03c1\u03bf\u03bc\u03b7\u03bd\u03af\u03b1\u03c2", {"key": "3"}),
+            "extension",
+        )
+        self.assertEqual(
+            classify_document("\u03a0\u03b5\u03c1\u03af\u03bb\u03b7\u03c8\u03b7 \u03b4\u03b9\u03b1\u03ba\u03ae\u03c1\u03c5\u03be\u03b7\u03c2", {"key": "3"}),
+            "summary",
+        )
+        self.assertEqual(
+            classify_document("\u0394\u03b9\u03cc\u03c1\u03b8\u03c9\u03c3\u03b7 \u03c3\u03c6\u03ac\u03bb\u03bc\u03b1\u03c4\u03bf\u03c2 \u03b4\u03b9\u03b1\u03ba\u03ae\u03c1\u03c5\u03be\u03b7\u03c2", {"key": "3"}),
+            "amendment",
+        )
+        self.assertEqual(
+            classify_document("\u039c\u03b1\u03c4\u03b1\u03af\u03c9\u03c3\u03b7 \u03b4\u03b9\u03b1\u03b3\u03c9\u03bd\u03b9\u03c3\u03bc\u03bf\u03cd", {"key": "3"}, cancelled=False),
+            "cancellation",
+        )
+        self.assertEqual(
+            classify_document("\u0391\u03c0\u03cc\u03c6\u03b1\u03c3\u03b7 \u03ad\u03b3\u03ba\u03c1\u03b9\u03c3\u03b7\u03c2 \u03c0\u03c1\u03b1\u03ba\u03c4\u03b9\u03ba\u03bf\u03cd", {"key": "3"}),
+            "decision",
         )
 
     def test_contract_preserves_multiple_contractors(self):
