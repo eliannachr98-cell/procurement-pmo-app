@@ -310,7 +310,7 @@ function MultiSearchInput({ label, type, values, onChange, placeholder }: {
     setOptions([]);
   };
 
-  return <label className="multiSearch">{label}
+  return <label className="multiSearch"><span className="multiSearchLabel">{label}{values.length > 0 && <span className="multiSearchCount">{values.length} επιλεγμέν{values.length === 1 ? "ος" : "οι"}</span>}</span>
     <div className="multiBox">
       {values.map((value) => <span className="filterChip" key={value}>{value}<button type="button" aria-label={`Αφαίρεση ${value}`} onClick={() => onChange(values.filter((item) => item !== value))}>×</button></span>)}
       <input value={text} onChange={(event) => setText(event.target.value)} placeholder={values.length ? "Πρόσθεσε ακόμη μία επιλογή" : placeholder} />
