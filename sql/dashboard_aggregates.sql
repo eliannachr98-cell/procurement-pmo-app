@@ -36,16 +36,28 @@ language sql stable as $$
       and (p_contract_type is null or p.contract_type = p_contract_type)
       and (p_document_type is null or p.document_category = p_document_type)
   ),
+  has_award as (
+    select distinct a.procurement_adam as adam
+    from public.awards_compact a
+    where a.procurement_adam in (select adam from matched)
+  ),
+  has_contract as (
+    select distinct c.procurement_adam as adam
+    from public.contracts_compact c
+    where c.procurement_adam in (select adam from matched)
+  ),
   status_calc as (
     select m.adam, m.nuts_name, m.nuts_code,
       case
         when m.cancelled_at is not null or m.raw_status = 'cancelled' then 'Ακυρωμένος'
-        when exists (select 1 from public.contracts_compact c where c.procurement_adam = m.adam) then 'Ολοκληρωμένος'
-        when exists (select 1 from public.awards_compact a where a.procurement_adam = m.adam) then 'Ανατεθειμένος'
+        when hc.adam is not null then 'Ολοκληρωμένος'
+        when ha.adam is not null then 'Ανατεθειμένος'
         when m.opening_at is not null and m.opening_at < now() then 'Αξιολόγηση'
         else 'Ενεργός'
       end as status
     from matched m
+    left join has_award ha on ha.adam = m.adam
+    left join has_contract hc on hc.adam = m.adam
   ),
   status_agg as (
     select status, count(*) as n from status_calc group by status
@@ -54,7 +66,8 @@ language sql stable as $$
     select rc.cpv_code, min(rc.cpv_description) as cpv_description,
            count(distinct rc.record_adam) as n
     from public.record_cpvs_compact rc
-    where rc.record_type = 'procurement' and rc.record_adam in (select adam from matched)
+    join matched m on m.adam = rc.record_adam
+    where rc.record_type = 'procurement'
     group by rc.cpv_code
     order by n desc
     limit 12
