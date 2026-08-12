@@ -63,8 +63,11 @@ language sql stable as $$
     select status, count(*) as n from status_calc group by status
   ),
   cpv_agg as (
+    -- (record_type, record_adam, cpv_code) is the primary key, so record_adam
+    -- is already unique per cpv_code group here -- count(*) needs no DISTINCT
+    -- and lets Postgres hash-aggregate instead of sort-then-group.
     select rc.cpv_code, min(rc.cpv_description) as cpv_description,
-           count(distinct rc.record_adam) as n
+           count(*) as n
     from public.record_cpvs_compact rc
     join matched m on m.adam = rc.record_adam
     where rc.record_type = 'procurement'
