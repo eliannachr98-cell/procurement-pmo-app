@@ -247,19 +247,7 @@ export default function Home() {
           <label>Αναθέτουσα Αρχή<input list="authority-options" value={authority === "Όλες" ? "" : authority} onChange={(event) => setAuthority(event.target.value)} placeholder="Γράψε ή επίλεξε αρχή" /><datalist id="authority-options">{authorities.map((item) => <option key={item} value={item} />)}</datalist></label>
           <MultiSearchInput label="Ανάδοχος" type="contractor" values={contractor} onChange={setContractor} placeholder="Αναζήτησε και επίλεξε αναδόχους" />
           {page !== "market" && <MultiSearchInput label="CPV" type="cpv" values={cpv} onChange={setCpv} placeholder="Αναζήτησε κωδικό ή περιγραφή CPV" />}
-          <div className="checkboxGroup">
-            <span className="checkboxGroupLabel">Τύπος σύμβασης{contractType.length > 0 && <span className="multiSearchCount">{contractType.length} επιλεγμέν{contractType.length === 1 ? "ος" : "οι"}</span>}</span>
-            {contractTypeOptions.map((item) => (
-              <label key={item} className="checkboxRow">
-                <input
-                  type="checkbox"
-                  checked={contractType.includes(item)}
-                  onChange={(event) => setContractType(event.target.checked ? [...contractType, item] : contractType.filter((value) => value !== item))}
-                />
-                {item}
-              </label>
-            ))}
-          </div>
+          <CheckboxDropdown label="Τύπος σύμβασης" options={contractTypeOptions} values={contractType} onChange={setContractType} />
           <label>Τύπος εγγράφου<select value={documentType} onChange={(event) => setDocumentType(event.target.value)}><option value="Όλοι">Όλοι</option>{documentTypes.map(([value,label]) => <option key={value} value={value}>{label}</option>)}</select></label>
           <label>Κατάσταση<select value={status} onChange={(event) => setStatus(event.target.value)}><option>Όλες</option>{Object.keys(statusTone).map((item) => <option key={item}>{item}</option>)}</select></label>
           <div className="filterNote"><span>i</span><p>Τα ίδια φίλτρα εφαρμόζονται στην Επισκόπηση και στους Διαγωνισμούς.</p></div>
@@ -323,6 +311,46 @@ function mapPosition(name: string, index: number): [number, number] {
   if (value.includes("αχα") || value.includes("πάτρ")) return [34,65]; if (value.includes("κοριν")) return [41,62];
   if (value.includes("θεσσαλ")) return [43,39]; if (value.includes("νησ") || value.includes("αιγα")) return [70,61];
   return [[36,31],[54,35],[38,51],[62,43],[51,72]][index % 5] as [number,number];
+}
+
+function CheckboxDropdown({ label, options, values, onChange }: {
+  label: string;
+  options: string[];
+  values: string[];
+  onChange: (values: string[]) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onOutside = (event: MouseEvent) => {
+      if (rootRef.current && !rootRef.current.contains(event.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onOutside);
+    return () => document.removeEventListener("mousedown", onOutside);
+  }, [open]);
+
+  const summary = values.length === 0 ? "Όλοι" : values.length === 1 ? values[0] : `${values.length} επιλεγμένα`;
+
+  return <div className="checkboxDropdown" ref={rootRef}>
+    <span className="checkboxGroupLabel">{label}</span>
+    <button type="button" className="checkboxDropdownTrigger" onClick={() => setOpen((current) => !current)}>
+      <span>{summary}</span><span className={`chevron ${open ? "open" : ""}`}>▾</span>
+    </button>
+    {open && <div className="checkboxDropdownPanel">
+      {options.map((item) => (
+        <label key={item} className="checkboxRow">
+          <input
+            type="checkbox"
+            checked={values.includes(item)}
+            onChange={(event) => onChange(event.target.checked ? [...values, item] : values.filter((value) => value !== item))}
+          />
+          {item}
+        </label>
+      ))}
+    </div>}
+  </div>;
 }
 
 type SearchOption = { value: string; label: string };
