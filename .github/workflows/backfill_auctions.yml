@@ -8,7 +8,7 @@ on:
         description: "Year to backfill"
         required: true
         type: choice
-        options: ["2020", "2021", "2022", "2023", "2024", "2025"]
+        options: ["2020", "2021", "2022", "2023", "2024", "2025", "2026"]
         default: "2020"
 
 permissions:
