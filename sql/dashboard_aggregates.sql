@@ -106,11 +106,13 @@ begin
 end;
 $$;
 
+drop function if exists public.dashboard_breakdown(text, text, text, text, text, text[]);
+
 create or replace function public.dashboard_breakdown(
   p_query text default null,
   p_authority text default null,
   p_year text default null,
-  p_contract_type text default null,
+  p_contract_type text[] default null,
   p_document_type text default null,
   p_adams text[] default null
 )
@@ -138,7 +140,7 @@ begin
       and (p_query is null or p.adam ilike '%' || p_query || '%' or p.title ilike '%' || p_query || '%')
       and (p_authority is null or p.authority_name ilike '%' || p_authority || '%')
       and (p_year is null or (p.publication_date >= (p_year || '-01-01')::date and p.publication_date <= (p_year || '-12-31')::date))
-      and (p_contract_type is null or p.contract_type = p_contract_type)
+      and (p_contract_type is null or p.contract_type = any(p_contract_type))
       and (p_document_type is null or p.document_category = p_document_type)
   ),
   has_award as (
