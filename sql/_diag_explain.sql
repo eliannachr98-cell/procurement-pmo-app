@@ -1,3 +1,1 @@
-select clock_timestamp() as started;
-select public.dashboard_breakdown(null, 'ΔΗΜΟΣ ΑΘΗΝΑΙΩΝ', null, null, null, null)->'total' as total;
-select clock_timestamp() as finished;
+select rolname, rolconfig from pg_roles where rolname in ('anon','authenticator','authenticated','postgres','service_role');
