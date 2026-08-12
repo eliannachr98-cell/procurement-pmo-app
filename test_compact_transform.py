@@ -37,6 +37,13 @@ class CompactTransformTests(unittest.TestCase):
         result = transform("notice", {"referenceNumber": "25PROC017023699"})["record"]
         self.assertEqual(result["title"], "Χωρίς διαθέσιμο τίτλο")
 
+    def test_notice_reads_procedure_type_from_typeOfProcedure(self):
+        result = transform("notice", {
+            "referenceNumber": "25PROC1",
+            "typeOfProcedure": {"key": "1", "value": "Ανοιχτή διαδικασία (αρ.27/αρ.264)"},
+        })["record"]
+        self.assertEqual(result["procedure_type"], "Ανοιχτή διαδικασία (αρ.27/αρ.264)")
+
     def test_unknown_budget_is_not_mislabeled(self):
         result = transform("notice", {
             "referenceNumber": "25PROC1",
