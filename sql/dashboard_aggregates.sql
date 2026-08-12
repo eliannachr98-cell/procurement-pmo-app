@@ -9,7 +9,7 @@
 create or replace function public.available_years()
 returns table(year text)
 language sql stable as $$
-  select distinct substring(publication_date, 1, 4) as year
+  select distinct extract(year from publication_date)::text as year
   from public.procurements_compact
   where publication_date is not null
   order by 1 desc;
@@ -32,7 +32,7 @@ language sql stable as $$
     where (p_adams is null or p.adam = any(p_adams))
       and (p_query is null or p.adam ilike '%' || p_query || '%' or p.title ilike '%' || p_query || '%')
       and (p_authority is null or p.authority_name ilike '%' || p_authority || '%')
-      and (p_year is null or (p.publication_date >= (p_year || '-01-01') and p.publication_date <= (p_year || '-12-31')))
+      and (p_year is null or (p.publication_date >= (p_year || '-01-01')::date and p.publication_date <= (p_year || '-12-31')::date))
       and (p_contract_type is null or p.contract_type = p_contract_type)
       and (p_document_type is null or p.document_category = p_document_type)
   ),
