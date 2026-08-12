@@ -1,0 +1,40 @@
+name: Apply SQL file to compact database
+
+on:
+  workflow_dispatch:
+    inputs:
+      file:
+        description: Path to the .sql file under sql/ to run
+        required: true
+        default: sql/dashboard_aggregates.sql
+
+permissions:
+  contents: read
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install database driver
+        run: pip install "psycopg[binary]>=3.2,<4"
+      - name: Run SQL file
+        env:
+          DATABASE_URL: ${{ secrets.COMPACT_DATABASE_URL }}
+          SQL_FILE: ${{ inputs.file }}
+        run: |
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          import psycopg
+
+          path = Path(os.environ["SQL_FILE"])
+          sql = path.read_text(encoding="utf-8")
+          with psycopg.connect(os.environ["DATABASE_URL"], autocommit=True) as connection:
+              connection.execute(sql)
+          print(f"applied: {path}")
+          PY
