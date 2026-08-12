@@ -7,15 +7,13 @@
 -- 260k+ total rows.
 --
 -- The unfiltered breakdown (the common case: dashboard loaded with no
--- filters) is inherently expensive over ~270k rows -- even after query
--- tuning it stayed well past PostgREST's request timeout. It only changes
--- when new data loads, so it is precomputed into dashboard_cache by
--- refresh_dashboard_caches() and just read back (indexed, instant) here.
--- Filtered requests compute live: a filtered "matched" set is normally far
--- smaller and comfortably fast.
-
-drop function if exists public.dashboard_breakdown(text, text, text, text, text, text[]);
-drop materialized view if exists public.cpv_notice_counts;
+-- filters) is expensive over ~270k rows and only changes when new data
+-- loads, so it is precomputed into dashboard_cache by
+-- refresh_dashboard_caches() and just read back here. IMPORTANT: calling
+-- the aggregation query through a separate SQL function made Postgres
+-- choose a far worse plan than running the same query inline (>120s vs
+-- ~18s, confirmed via EXPLAIN ANALYZE) -- both functions below inline the
+-- full query themselves rather than calling a shared helper function.
 
 create table if not exists public.dashboard_cache (
   id boolean primary key default true check (id),
@@ -32,7 +30,69 @@ language sql stable as $$
   order by 1 desc;
 $$;
 
-create or replace function public.compute_dashboard_breakdown(
+create or replace function public.refresh_dashboard_caches()
+returns void
+language plpgsql as $$
+declare
+  result json;
+begin
+  with matched as (
+    select p.adam, p.opening_at, p.cancelled_at, p.status as raw_status,
+           p.nuts_name, p.nuts_code
+    from public.procurements_compact p
+  ),
+  has_award as (
+    select distinct a.procurement_adam as adam from public.awards_compact a
+  ),
+  has_contract as (
+    select distinct c.procurement_adam as adam from public.contracts_compact c
+  ),
+  status_calc as (
+    select m.adam, m.nuts_name, m.nuts_code,
+      case
+        when m.cancelled_at is not null or m.raw_status = 'cancelled' then 'Ακυρωμένος'
+        when hc.adam is not null then 'Ολοκληρωμένος'
+        when ha.adam is not null then 'Ανατεθειμένος'
+        when m.opening_at is not null and m.opening_at < now() then 'Αξιολόγηση'
+        else 'Ενεργός'
+      end as status
+    from matched m
+    left join has_award ha on ha.adam = m.adam
+    left join has_contract hc on hc.adam = m.adam
+  ),
+  status_agg as (
+    select status, count(*) as n from status_calc group by status
+  ),
+  cpv_agg as (
+    select rc.cpv_code, min(rc.cpv_description) as cpv_description, count(*) as n
+    from public.record_cpvs_compact rc
+    where rc.record_type = 'procurement'
+    group by rc.cpv_code
+    order by n desc
+    limit 12
+  ),
+  nuts_agg as (
+    select coalesce(nuts_name, nuts_code, 'Χωρίς NUTS') as nuts_name, count(*) as n
+    from status_calc
+    group by 1
+    order by n desc
+    limit 15
+  )
+  select json_build_object(
+    'total', (select count(*) from matched),
+    'status', (select coalesce(json_agg(json_build_object('status', status, 'count', n)), '[]'::json) from status_agg),
+    'cpv', (select coalesce(json_agg(json_build_object('cpv_code', cpv_code, 'cpv_description', cpv_description, 'count', n)), '[]'::json) from cpv_agg),
+    'nuts', (select coalesce(json_agg(json_build_object('nuts_name', nuts_name, 'count', n)), '[]'::json) from nuts_agg)
+  )
+  into result;
+
+  insert into public.dashboard_cache (id, payload, refreshed_at)
+  values (true, result, now())
+  on conflict (id) do update set payload = excluded.payload, refreshed_at = excluded.refreshed_at;
+end;
+$$;
+
+create or replace function public.dashboard_breakdown(
   p_query text default null,
   p_authority text default null,
   p_year text default null,
@@ -41,7 +101,16 @@ create or replace function public.compute_dashboard_breakdown(
   p_adams text[] default null
 )
 returns json
-language sql stable as $$
+language plpgsql stable as $$
+declare
+  result json;
+begin
+  if p_adams is null and p_query is null and p_authority is null
+     and p_year is null and p_contract_type is null and p_document_type is null then
+    select payload into result from public.dashboard_cache where id;
+    return result;
+  end if;
+
   with matched as (
     select p.adam, p.opening_at, p.cancelled_at, p.status as raw_status,
            p.nuts_name, p.nuts_code
@@ -80,9 +149,6 @@ language sql stable as $$
     select status, count(*) as n from status_calc group by status
   ),
   cpv_agg as (
-    -- (record_type, record_adam, cpv_code) is the primary key, so record_adam
-    -- is already unique per cpv_code group here -- count(*) needs no DISTINCT
-    -- and lets Postgres hash-aggregate instead of sort-then-group.
     select rc.cpv_code, min(rc.cpv_description) as cpv_description, count(*) as n
     from public.record_cpvs_compact rc
     join matched m on m.adam = rc.record_adam
@@ -103,31 +169,11 @@ language sql stable as $$
     'status', (select coalesce(json_agg(json_build_object('status', status, 'count', n)), '[]'::json) from status_agg),
     'cpv', (select coalesce(json_agg(json_build_object('cpv_code', cpv_code, 'cpv_description', cpv_description, 'count', n)), '[]'::json) from cpv_agg),
     'nuts', (select coalesce(json_agg(json_build_object('nuts_name', nuts_name, 'count', n)), '[]'::json) from nuts_agg)
-  );
+  )
+  into result;
+
+  return result;
+end;
 $$;
 
-create or replace function public.refresh_dashboard_caches()
-returns void
-language sql as $$
-  insert into public.dashboard_cache (id, payload, refreshed_at)
-  values (true, public.compute_dashboard_breakdown(), now())
-  on conflict (id) do update set payload = excluded.payload, refreshed_at = excluded.refreshed_at;
-$$;
-
-create or replace function public.dashboard_breakdown(
-  p_query text default null,
-  p_authority text default null,
-  p_year text default null,
-  p_contract_type text default null,
-  p_document_type text default null,
-  p_adams text[] default null
-)
-returns json
-language sql stable as $$
-  select case
-    when p_adams is null and p_query is null and p_authority is null
-      and p_year is null and p_contract_type is null and p_document_type is null
-    then (select payload from public.dashboard_cache where id)
-    else public.compute_dashboard_breakdown(p_query, p_authority, p_year, p_contract_type, p_document_type, p_adams)
-  end;
-$$;
+drop function if exists public.compute_dashboard_breakdown(text, text, text, text, text, text[]);
