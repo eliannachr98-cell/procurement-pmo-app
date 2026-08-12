@@ -33,7 +33,7 @@ status_agg as (
 ),
 cpv_agg as (
   select rc.cpv_code, min(rc.cpv_description) as cpv_description,
-         count(distinct rc.record_adam) as n
+         count(*) as n
   from public.record_cpvs_compact rc
   join matched m on m.adam = rc.record_adam
   where rc.record_type = 'procurement'
