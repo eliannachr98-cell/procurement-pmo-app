@@ -225,7 +225,7 @@ export default function Home() {
         <section className="content">
           <div className="pageTitle">
             <div><p className="eyebrow">PROCUREMENT INTELLIGENCE</p><h1>{page === "overview" ? "Επισκόπηση" : page === "tenders" ? "Διαγωνισμοί" : page === "market" ? "Αγορά & Ανταγωνισμός" : "Ειδοποιήσεις"}</h1></div>
-            {page === "tenders" && <label className="search"><span>⌕</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Αναζήτηση με ΑΔΑΜ ή τίτλο…" /></label>}
+            {page !== "alerts" && <label className="search"><span>⌕</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Αναζήτηση με ΑΔΑΜ ή τίτλο…" /></label>}
           </div>
           {loading && tenders.length === 0 && <div className="dataBanner">Φόρτωση πραγματικών δεδομένων από Supabase…</div>}
           {dataError && <div className="dataBanner error">{dataError} · εμφανίζεται προσωρινό δείγμα.</div>}
@@ -252,7 +252,7 @@ export default function Home() {
               {loading ? "Φόρτωση…" : `Φόρτωση περισσότερων (${number.format(tenders.length)} από ${number.format(totalTenders)})`}
             </button>}
           </>}
-          {page === "market" && <MarketPanel awards={awards} contracts={contracts} cpv={cpv} setCpv={setCpv} contractor={contractor} />}
+          {page === "market" && <MarketPanel awards={awards} contracts={contracts} cpv={cpv} setCpv={setCpv} contractor={contractor} authority={authority} query={query} />}
           {page === "alerts" && <EmptyState icon="♢" title="Ειδοποιήσεις CPV" text="Οι ειδοποιήσεις θα ενεργοποιηθούν μαζί με τους λογαριασμούς χρηστών στη Supabase." />}
         </section>
 
@@ -421,16 +421,27 @@ function MultiSearchInput({ label, type, values, onChange, placeholder }: {
 
 type ContractorSummary = { name: string; tenders: number; contracts: number; authorities: number; value: number };
 
-function MarketPanel({ awards, contracts, cpv, setCpv, contractor }: {
-  awards: Award[]; contracts: Contract[]; cpv: string[]; setCpv: (value: string[]) => void; contractor: string[];
+const CONTRACTOR_ALIASES: Record<string, string> = { PWC: "PRICEWATERHOUSECOOPERS", EY: "ERNST" };
+
+function MarketPanel({ awards, contracts, cpv, setCpv, contractor, authority, query }: {
+  awards: Award[]; contracts: Contract[]; cpv: string[]; setCpv: (value: string[]) => void; contractor: string[]; authority: string; query: string;
 }) {
   const [selectedContractor, setSelectedContractor] = useState("");
   const [contractorSearch, setContractorSearch] = useState("");
   const cpvTerms = cpv.map((item) => item.toLocaleLowerCase("el"));
   const matchesCpv = (item: { cpv: string; cpvDescription?: string }) =>
     !cpvTerms.length || cpvTerms.some((term) => `${item.cpv} ${item.cpvDescription}`.toLocaleLowerCase("el").includes(term));
-  const relevantAwards = awards.filter(matchesCpv);
-  const relevantContracts = contracts.filter(matchesCpv);
+  // A framework agreement's award/contract record can list several co-suppliers
+  // together, so matching by CPV alone would also pull in unrelated companies
+  // that merely share the same framework as the searched contractor.
+  const contractorTerms = contractor.map((item) => {
+    const upper = item.trim().toLocaleUpperCase("en-US");
+    return (CONTRACTOR_ALIASES[upper] ?? item).toLocaleLowerCase("el");
+  });
+  const matchesContractor = (name: string) =>
+    !contractorTerms.length || contractorTerms.some((term) => name.toLocaleLowerCase("el").includes(term));
+  const relevantAwards = awards.filter((item) => matchesCpv(item) && matchesContractor(item.contractor));
+  const relevantContracts = contracts.filter((item) => matchesCpv(item) && matchesContractor(item.contractor));
 
   const byContractor = new Map<string, { name: string; tenders: Set<string>; contracts: Set<string>; authorities: Set<string>; valueByTender: Map<string, number> }>();
   const ensure = (name: string) => {
@@ -468,7 +479,7 @@ function MarketPanel({ awards, contracts, cpv, setCpv, contractor }: {
     .filter((row) => !search || row.name.toLocaleLowerCase("el").includes(search))
     .sort((a, b) => b.value - a.value);
 
-  const hasSelection = cpv.length > 0 || contractor.length > 0;
+  const hasSelection = cpv.length > 0 || contractor.length > 0 || (authority.trim() !== "" && authority !== "Όλες") || query.trim().length > 0;
   const selectedSummary = contractorRows.find((row) => row.name === selectedContractor);
 
   return <>

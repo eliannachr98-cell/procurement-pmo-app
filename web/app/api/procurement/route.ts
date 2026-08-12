@@ -221,18 +221,30 @@ export async function GET(request: Request) {
 
     // Competition mapping must not depend on the currently visible tender page.
     // Recent tenders usually have no award yet, which previously made this view empty.
+    // Authority/ADAM narrowing applies directly on these tables too, since a
+    // contractor/CPV match isn't the only way into this view any more.
+    const marketExtraFilters: string[] = [];
+    if (authority) marketExtraFilters.push(`authority_name=ilike.${encodeURIComponent(`*${authority}*`)}`);
+    if (query) {
+      const value = encodeURIComponent(`*${query}*`);
+      marketExtraFilters.push(`or=(procurement_adam.ilike.${value},adam.ilike.${value},title.ilike.${value})`);
+    }
+    const marketExtraQuery = marketExtraFilters.map((item) => `&${item}`).join("");
+    const marketIsNarrowed = Boolean(matchingAwardAdams || matchingContractAdams || marketExtraFilters.length);
     const [marketAwards, marketContracts] = await Promise.all([
       supabaseGet<AwardRow[]>(
         "awards_compact?select=adam,procurement_adam,title,authority_name,contract_type,award_date,amount_ex_vat,amount_inc_vat,amount_unknown_vat" +
         (matchingAwardAdams ? `&adam=in.(${matchingAwardAdams.map(encodeURIComponent).join(",")})` : "") +
+        marketExtraQuery +
         // `adam` is the primary key, so this avoids sorting the full awards table
         // by an unindexed date on every dashboard request.
-        `&order=adam.desc&limit=${matchingAwardAdams ? 1000 : 200}`,
+        `&order=adam.desc&limit=${marketIsNarrowed ? 1000 : 200}`,
       ),
       supabaseGet<ContractRow[]>(
         "contracts_compact?select=adam,procurement_adam,award_adam,title,authority_name,contract_type,signed_date,delivery_date,amount_ex_vat,amount_inc_vat,amount_unknown_vat" +
         (matchingContractAdams ? `&adam=in.(${matchingContractAdams.map(encodeURIComponent).join(",")})` : "") +
-        `&order=adam.desc&limit=${matchingContractAdams ? 1000 : 200}`,
+        marketExtraQuery +
+        `&order=adam.desc&limit=${marketIsNarrowed ? 1000 : 200}`,
       ),
     ]);
     const marketAwardAdams = marketAwards.map((row) => row.adam);
