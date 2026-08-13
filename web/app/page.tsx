@@ -157,13 +157,15 @@ export default function Home() {
   const loadDashboard = useCallback(() => {
     const requestId = ++latestDashboardRequest.current;
     const params = new URLSearchParams();
-    if (query.trim()) params.set("q", query.trim());
+    // The dashboard charts/tables always count "διαγωνισμοί" (declarations/
+    // announcements only) - Τύπος εγγράφου and Τύπος σύμβασης describe a
+    // different axis of the same records (and a broad, low-selectivity
+    // value like "Προμήθειες" alone was slow enough to time this out
+    // server-side), so only these four narrow what the dashboard shows.
     if (authority.trim() && authority !== "Όλες") params.set("authority", authority.trim());
     contractor.forEach((item) => params.append("contractor", item));
     cpv.forEach((item) => params.append("cpv", item));
     if (year !== "Όλα") params.set("year", year);
-    contractType.forEach((item) => params.append("contractType", item));
-    if (documentType !== "Όλοι") params.set("documentType", documentType);
     fetch(`/api/dashboard?${params.toString()}`)
       .then((response) => response.ok ? response.json() : Promise.reject(new Error("dashboard request failed")))
       .then((payload) => {
@@ -176,7 +178,7 @@ export default function Home() {
         // from the previous filter selection.
         if (requestId === latestDashboardRequest.current) setDashboard(emptyDashboard);
       });
-  }, [query, authority, contractor, cpv, year, contractType, documentType]);
+  }, [authority, contractor, cpv, year]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => { loadTenderPage(1); loadDashboard(); }, 350);
