@@ -834,7 +834,9 @@ function AlertsPanel() {
       {loading && <p className="noRows">Φόρτωση ειδοποιήσεων…</p>}
       {!loading && !alerts.length && <p className="noRows">Δεν βρέθηκαν νέοι διαγωνισμοί ακόμη.</p>}
       {!loading && alerts.length > 0 && <div className="alertList">
-        {alerts.map((item) => <button type="button" className="alertCard" key={item.adam} onClick={() => openTender(item.adam)}>
+        {alerts.map((item) => {
+          const notPassed = item.openingDate ? new Date(item.openingDate).getTime() >= Date.now() : false;
+          return <button type="button" className={`alertCard ${notPassed ? "isOpen" : "isClosed"}`} key={item.adam} onClick={() => openTender(item.adam)}>
           <span className="alertCardHead"><strong>{item.title}</strong><span>{formatDate(item.publicationDate ?? undefined)}</span></span>
           <span className="alertCardAuthority">{item.authority}</span>
           <span className="alertCardFacts">
@@ -844,7 +846,8 @@ function AlertsPanel() {
             <span><b>Αποσφράγιση</b>{formatDate(item.openingDate ?? undefined)}</span>
             <span><b>Τύπος σύμβασης</b>{item.contractType ?? "—"}</span>
           </span>
-        </button>)}
+        </button>;
+        })}
       </div>}
       {loadingTender && <p className="noRows">Φόρτωση στοιχείων διαγωνισμού…</p>}
     </article>}

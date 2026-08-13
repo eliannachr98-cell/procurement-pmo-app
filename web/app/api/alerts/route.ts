@@ -44,7 +44,8 @@ export async function GET() {
       const existing = byTitle.get(key);
       if (!existing || (item.publicationDate ?? "") > (existing.publicationDate ?? "")) byTitle.set(key, item);
     }
-    const deduped = [...byTitle.values()].sort((a, b) => (b.publicationDate ?? "").localeCompare(a.publicationDate ?? ""));
+    // Later αποσφράγιση (opening/deadline) date first; entries without one sink to the bottom.
+    const deduped = [...byTitle.values()].sort((a, b) => (b.openingDate ?? "").localeCompare(a.openingDate ?? ""));
 
     return NextResponse.json({ watchlist, alerts: deduped });
   } catch (error) {
