@@ -29,6 +29,7 @@ type Tender = {
 type Award = {
   adam: string;
   noticeAdam?: string;
+  noticeTitle?: string;
   title: string;
   authority: string;
   cpv: string;
@@ -41,6 +42,7 @@ type Award = {
 type Contract = {
   adam: string;
   noticeAdam?: string;
+  noticeTitle?: string;
   title: string;
   authority: string;
   cpv: string;
@@ -252,7 +254,7 @@ export default function Home() {
               {loading ? "Φόρτωση…" : `Φόρτωση περισσότερων (${number.format(tenders.length)} από ${number.format(totalTenders)})`}
             </button>}
           </>}
-          {page === "market" && <MarketPanel awards={awards} contracts={contracts} cpv={cpv} setCpv={setCpv} contractor={contractor} authority={authority} query={query} />}
+          {page === "market" && <MarketPanel awards={awards} contracts={contracts} cpv={cpv} setCpv={setCpv} contractor={contractor} authority={authority} query={query} year={year} contractType={contractType} documentType={documentType} />}
           {page === "alerts" && <EmptyState icon="♢" title="Ειδοποιήσεις CPV" text="Οι ειδοποιήσεις θα ενεργοποιηθούν μαζί με τους λογαριασμούς χρηστών στη Supabase." />}
         </section>
 
@@ -427,11 +429,14 @@ type ContractorSummary = { key: string; name: string; tenders: number; contracts
 
 const CONTRACTOR_ALIASES: Record<string, string> = { PWC: "PRICEWATERHOUSECOOPERS", EY: "ERNST" };
 
-function MarketPanel({ awards, contracts, cpv, setCpv, contractor, authority, query }: {
+function MarketPanel({ awards, contracts, cpv, setCpv, contractor, authority, query, year, contractType, documentType }: {
   awards: Award[]; contracts: Contract[]; cpv: string[]; setCpv: (value: string[]) => void; contractor: string[]; authority: string; query: string;
+  year: string; contractType: string[]; documentType: string;
 }) {
   const [selectedContractor, setSelectedContractor] = useState("");
   const [contractorSearch, setContractorSearch] = useState("");
+  const [visibleCount, setVisibleCount] = useState(10);
+  useEffect(() => { setVisibleCount(10); }, [contractor, cpv, authority, query, year, contractType, documentType, contractorSearch]);
   const cpvTerms = cpv.map((item) => item.toLocaleLowerCase("el"));
   const matchesCpv = (item: { cpv: string; cpvDescription?: string }) =>
     !cpvTerms.length || cpvTerms.some((term) => `${item.cpv} ${item.cpvDescription}`.toLocaleLowerCase("el").includes(term));
@@ -531,9 +536,11 @@ function MarketPanel({ awards, contracts, cpv, setCpv, contractor, authority, qu
       value: [...row.valueByTender.values()].reduce((sum, item) => sum + item, 0),
     }))
     .filter((row) => !search || row.name.toLocaleLowerCase("el").includes(search))
-    .sort((a, b) => b.value - a.value);
+    .sort((a, b) => b.tenders - a.tenders);
+  const visibleRows = contractorRows.slice(0, visibleCount);
 
-  const hasSelection = cpv.length > 0 || contractor.length > 0 || (authority.trim() !== "" && authority !== "Όλες") || query.trim().length > 0;
+  const hasSelection = cpv.length > 0 || contractor.length > 0 || (authority.trim() !== "" && authority !== "Όλες") || query.trim().length > 0 ||
+    year !== "Όλα" || contractType.length > 0 || documentType !== "Όλοι";
   const selectedSummary = contractorRows.find((row) => row.key === selectedContractor);
 
   return <>
@@ -545,10 +552,10 @@ function MarketPanel({ awards, contracts, cpv, setCpv, contractor, authority, qu
     {hasSelection && <>
       <label className="search marketContractorSearch"><span>⌕</span><input value={contractorSearch} onChange={(event) => setContractorSearch(event.target.value)} placeholder="Αναζήτηση αναδόχου" /></label>
       <article className="panel tablePanel">
-        <PanelHeader title="Ανάδοχοι" caption="Πάτησε πάνω σε έναν ανάδοχο για να δεις τους διαγωνισμούς και τις συμβάσεις του." />
+        <PanelHeader title="Ανάδοχοι" caption="Ταξινομημένοι κατά αριθμό διαγωνισμών. Πάτησε πάνω σε έναν ανάδοχο για να δεις τους διαγωνισμούς και τις συμβάσεις του." />
         <div className="tableScroll"><table>
           <thead><tr><th /><th>Ανάδοχος</th><th>Διαγωνισμοί</th><th>Συμβάσεις</th><th>Συνολική αξία</th><th>Αναθέτουσες Αρχές</th></tr></thead>
-          <tbody>{contractorRows.map((item) => (
+          <tbody>{visibleRows.map((item) => (
             <tr key={item.key} className={selectedContractor === item.key ? "selectedRow" : ""} onClick={() => setSelectedContractor(item.key === selectedContractor ? "" : item.key)}>
               <td><input type="checkbox" checked={selectedContractor === item.key} readOnly /></td>
               <td><button className="contractorLink" type="button">{item.name}</button></td>
@@ -560,6 +567,9 @@ function MarketPanel({ awards, contracts, cpv, setCpv, contractor, authority, qu
           ))}</tbody>
         </table></div>
         {!contractorRows.length && <p className="noRows">Δεν βρέθηκαν αποτελέσματα για τις επιλογές σου.</p>}
+        {contractorRows.length > visibleRows.length && <button className="viewAll" type="button" onClick={() => setVisibleCount((current) => current + 10)}>
+          Φόρτωση περισσότερων ({visibleRows.length} από {number.format(contractorRows.length)})
+        </button>}
       </article>
       {selectedContractor && selectedSummary && <ContractorProfile
         name={selectedSummary.name}
@@ -577,14 +587,19 @@ function ContractorProfile({ name, summary, awards, contracts, onClose }: {
 }) {
   const [tab, setTab] = useState<"tenders" | "contracts" | "distribution">("tenders");
 
+  // Award/contract titles are the title of that document itself (a decision,
+  // a signed contract, an amendment...), not of the original tender it came
+  // from - showing them here as if they were the tender's own title made
+  // amendments and award decisions look like separate tenders. Only take
+  // rows where the real declaration is known, and use its own title.
   const tenderMap = new Map<string, { adam: string; title: string; authority: string; cpv: string; cpvDescription?: string }>();
   for (const item of awards) {
-    const key = item.noticeAdam ?? item.adam;
-    if (!tenderMap.has(key)) tenderMap.set(key, { adam: item.noticeAdam ?? item.adam, title: item.title, authority: item.authority, cpv: item.cpv, cpvDescription: item.cpvDescription });
+    if (!item.noticeAdam || !item.noticeTitle) continue;
+    if (!tenderMap.has(item.noticeAdam)) tenderMap.set(item.noticeAdam, { adam: item.noticeAdam, title: item.noticeTitle, authority: item.authority, cpv: item.cpv, cpvDescription: item.cpvDescription });
   }
   for (const item of contracts) {
-    const key = item.noticeAdam ?? item.adam;
-    tenderMap.set(key, { adam: item.noticeAdam ?? item.adam, title: item.title, authority: item.authority, cpv: item.cpv, cpvDescription: item.cpvDescription });
+    if (!item.noticeAdam || !item.noticeTitle) continue;
+    tenderMap.set(item.noticeAdam, { adam: item.noticeAdam, title: item.noticeTitle, authority: item.authority, cpv: item.cpv, cpvDescription: item.cpvDescription });
   }
   const tenderRows = [...tenderMap.values()];
 

@@ -223,15 +223,36 @@ export async function GET(request: Request) {
     // Recent tenders usually have no award yet, which previously made this view empty.
     // Authority/ADAM narrowing applies directly on these tables too, since a
     // contractor/CPV match isn't the only way into this view any more.
+    // Year and document-type only exist on the notice itself, not on the
+    // award/contract row, so narrowing by them means finding which notices
+    // qualify first, then restricting the market rows to that notice set.
+    const marketNoticeScopeFilters: string[] = [];
+    if (/^\d{4}$/.test(year)) {
+      marketNoticeScopeFilters.push(`publication_date=gte.${year}-01-01`, `publication_date=lte.${year}-12-31`);
+    }
+    if (documentType) marketNoticeScopeFilters.push(`document_category=eq.${encodeURIComponent(documentType)}`);
+    let marketScopeAdams: string[] | null = null;
+    if (marketNoticeScopeFilters.length) {
+      const scopeRows = await supabaseGet<{ adam: string }[]>(
+        `procurements_compact?select=adam&${marketNoticeScopeFilters.join("&")}&limit=5000`,
+      );
+      marketScopeAdams = scopeRows.map((row) => row.adam);
+    }
+    // An empty (but non-null) scope means the year/document-type combination
+    // matches no notice at all - skip the fetch rather than send `in.()`,
+    // whose empty-list behaviour PostgREST doesn't guarantee.
+    const marketScopeIsEmpty = marketScopeAdams !== null && marketScopeAdams.length === 0;
     const marketExtraFilters: string[] = [];
     if (authority) marketExtraFilters.push(`authority_name=ilike.${encodeURIComponent(`*${authority}*`)}`);
+    if (contractTypes.length) marketExtraFilters.push(`contract_type=in.(${contractTypes.map(encodeURIComponent).join(",")})`);
+    if (marketScopeAdams?.length) marketExtraFilters.push(`procurement_adam=in.(${marketScopeAdams.map(encodeURIComponent).join(",")})`);
     if (query) {
       const value = encodeURIComponent(`*${query}*`);
       marketExtraFilters.push(`or=(procurement_adam.ilike.${value},adam.ilike.${value},title.ilike.${value})`);
     }
     const marketExtraQuery = marketExtraFilters.map((item) => `&${item}`).join("");
     const marketIsNarrowed = Boolean(matchingAwardAdams || matchingContractAdams || marketExtraFilters.length);
-    const [marketAwards, marketContracts] = await Promise.all([
+    const [marketAwards, marketContracts] = marketScopeIsEmpty ? [[] as AwardRow[], [] as ContractRow[]] : await Promise.all([
       supabaseGet<AwardRow[]>(
         "awards_compact?select=adam,procurement_adam,title,authority_name,contract_type,award_date,amount_ex_vat,amount_inc_vat,amount_unknown_vat" +
         (matchingAwardAdams ? `&adam=in.(${matchingAwardAdams.map(encodeURIComponent).join(",")})` : "") +
@@ -372,6 +393,10 @@ export async function GET(request: Request) {
       return rows.map((contractor) => ({
         adam: award.adam,
         noticeAdam: award.procurement_adam ?? undefined,
+        // `title` is this award document's own title (e.g. an award decision) -
+        // `noticeTitle` is the actual tender/declaration it belongs to, which a
+        // "which tenders has this contractor won" view needs instead.
+        noticeTitle: linkedNotice?.title,
         title: award.title ?? linkedNotice?.title ?? "—",
         authority: award.authority_name ?? linkedNotice?.authority_name ?? "—",
         contractType: award.contract_type ?? linkedNotice?.contract_type ?? undefined,
@@ -398,6 +423,7 @@ export async function GET(request: Request) {
       return rows.map((contractor) => ({
         adam: contract.adam,
         noticeAdam: contract.procurement_adam ?? undefined,
+        noticeTitle: linkedNotice?.title,
         title: contract.title ?? linkedAward?.title ?? linkedNotice?.title ?? "—",
         authority: contract.authority_name ?? linkedAward?.authority_name ?? linkedNotice?.authority_name ?? "—",
         contractType: contract.contract_type ?? linkedAward?.contract_type ?? linkedNotice?.contract_type ?? undefined,
