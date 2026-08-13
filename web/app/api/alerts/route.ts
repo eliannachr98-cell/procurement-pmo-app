@@ -11,6 +11,7 @@ type AlertRow = {
   title: string;
   authority: string;
   contractType: string | null;
+  documentType: string | null;
   publicationDate: string | null;
   openingDate: string | null;
   budget: number;
@@ -33,21 +34,13 @@ export async function GET() {
       p_days: ALERT_WINDOW_DAYS,
     });
 
-    // The same real opportunity is often published as more than one notice
-    // document under an identical title (e.g. a Διακήρυξη alongside a
-    // separate Προκήρυξη for the same reference) - both legitimately count
-    // as "διαγωνισμοί" elsewhere in the app, but an alert feed should surface
-    // the opportunity once. Keep the most recently published one per title.
-    const byTitle = new Map<string, AlertRow>();
-    for (const item of alerts ?? []) {
-      const key = item.title.trim().toLocaleUpperCase("el");
-      const existing = byTitle.get(key);
-      if (!existing || (item.publicationDate ?? "") > (existing.publicationDate ?? "")) byTitle.set(key, item);
-    }
+    // Every matching notice is returned, including extensions/amendments of
+    // an earlier declaration - the frontend filters and badges by
+    // documentType instead of the server silently dropping records.
     // Later αποσφράγιση (opening/deadline) date first; entries without one sink to the bottom.
-    const deduped = [...byTitle.values()].sort((a, b) => (b.openingDate ?? "").localeCompare(a.openingDate ?? ""));
+    const sorted = [...(alerts ?? [])].sort((a, b) => (b.openingDate ?? "").localeCompare(a.openingDate ?? ""));
 
-    return NextResponse.json({ watchlist, alerts: deduped });
+    return NextResponse.json({ watchlist, alerts: sorted });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown alerts error";
     return NextResponse.json({ error: message }, { status: 500 });
