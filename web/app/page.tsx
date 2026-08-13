@@ -788,7 +788,6 @@ function AlertsPanel() {
   const [error, setError] = useState("");
   const [selectedTender, setSelectedTender] = useState<Tender | null>(null);
   const [loadingTender, setLoadingTender] = useState(false);
-  const [hiddenDocTypes, setHiddenDocTypes] = useState<string[]>([]);
 
   const load = useCallback(() => {
     // A cold Vercel/Supabase connection occasionally 500s the first request
@@ -848,25 +847,12 @@ function AlertsPanel() {
     </article>
     {!watchlist.length && <article className="panel empty"><span>♢</span><h2>Δεν παρακολουθείς κανένα CPV</h2><p>Πρόσθεσε έναν ή περισσότερους κωδικούς CPV παραπάνω για να ξεκινήσεις να βλέπεις εδώ τους νέους διαγωνισμούς που ταιριάζουν.</p></article>}
     {error && <div className="dataBanner error">{error}</div>}
-    {(() => {
-      const presentDocTypes = Object.keys(ALERT_DOC_TYPE_LABELS).filter((code) => alerts.some((item) => (item.documentType ?? "declaration") === code));
-      const visibleAlerts = alerts.filter((item) => !hiddenDocTypes.includes(item.documentType ?? "declaration"));
-      return watchlist.length > 0 && <article className="panel tablePanel">
-      <PanelHeader title="Νέοι διαγωνισμοί" caption={`${number.format(visibleAlerts.length)} από ${number.format(alerts.length)} διαγωνισμοί τις τελευταίες 45 ημέρες στα CPV που παρακολουθείς`} />
-      {presentDocTypes.length > 1 && <div className="docTypeFilter">
-        {presentDocTypes.map((code) => {
-          const hidden = hiddenDocTypes.includes(code);
-          return <button type="button" key={code} className={`docTypeChip ${hidden ? "" : "isActive"}`}
-            onClick={() => setHiddenDocTypes((current) => hidden ? current.filter((item) => item !== code) : [...current, code])}>
-            {ALERT_DOC_TYPE_LABELS[code]}
-          </button>;
-        })}
-      </div>}
+    {watchlist.length > 0 && <article className="panel tablePanel">
+      <PanelHeader title="Νέοι διαγωνισμοί" caption={`${number.format(alerts.length)} διαγωνισμοί τις τελευταίες 45 ημέρες στα CPV που παρακολουθείς`} />
       {loading && <p className="noRows">Φόρτωση ειδοποιήσεων…</p>}
       {!loading && !alerts.length && <p className="noRows">Δεν βρέθηκαν νέοι διαγωνισμοί ακόμη.</p>}
-      {!loading && alerts.length > 0 && !visibleAlerts.length && <p className="noRows">Όλοι οι διαγωνισμοί είναι κρυμμένοι από τα φίλτρα τύπου εγγράφου.</p>}
-      {!loading && visibleAlerts.length > 0 && <div className="alertList">
-        {visibleAlerts.map((item) => {
+      {!loading && alerts.length > 0 && <div className="alertList">
+        {alerts.map((item) => {
           const notPassed = item.openingDate ? new Date(item.openingDate).getTime() >= Date.now() : false;
           const docType = item.documentType ?? "declaration";
           return <button type="button" className={`alertCard ${notPassed ? "isOpen" : "isClosed"}`} key={item.adam} onClick={() => openTender(item.adam)}>
@@ -883,8 +869,7 @@ function AlertsPanel() {
         })}
       </div>}
       {loadingTender && <p className="noRows">Φόρτωση στοιχείων διαγωνισμού…</p>}
-    </article>;
-    })()}
+    </article>}
   </>;
 }
 
