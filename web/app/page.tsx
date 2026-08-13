@@ -368,16 +368,12 @@ function MonthlyBarChart({ months, metric, formatValue, unitLabel }: {
 }) {
   if (!months.length) return <p className="noRows">Δεν υπάρχουν δεδομένα για τα τρέχοντα φίλτρα.</p>;
   const maximum = Math.max(1, ...months.map((item) => item[metric]));
-  // Bars stay thin enough to show every month, but a label on each of ~20
-  // columns would overlap - only every Nth one gets a tick so the axis
-  // stays readable at any panel width.
-  const labelStep = Math.max(1, Math.ceil(months.length / 6));
   return <div className="monthlyBars">
-    {months.map((item, index) => <div className="monthlyBarCol" key={item.month}>
+    {months.map((item) => <div className="monthlyBarCol" key={item.month}>
       <div className="monthlyBarTrack">
         <div className="monthlyBar" style={{ height: `${Math.max((item[metric] / maximum) * 100, 2)}%` }} title={`${monthLabel(item.month)}: ${formatValue(item[metric])} ${unitLabel}`} />
       </div>
-      <span className="monthlyBarLabel">{index % labelStep === 0 ? monthLabel(item.month) : ""}</span>
+      <span className="monthlyBarLabel">{monthLabel(item.month)}</span>
     </div>)}
   </div>;
 }
