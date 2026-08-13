@@ -13,6 +13,7 @@ type Breakdown = {
   total: number;
   status: { status: string; count: number; budget: number }[];
   cpv: { cpv_code: string; cpv_description: string | null; count: number }[];
+  cpvTotal: number;
   nuts: { nuts_code: string; nuts_name: string; count: number }[];
   monthly: { month: string; count: number; budget: number; authorities: number; cpv: number }[];
 };
@@ -44,7 +45,7 @@ export async function GET(request: Request) {
     }
 
     if (matchingAdams?.length === 0) {
-      return NextResponse.json({ total: 0, status: [], cpv: [], nuts: [], monthly: [] } satisfies Breakdown);
+      return NextResponse.json({ total: 0, status: [], cpv: [], cpvTotal: 0, nuts: [], monthly: [] } satisfies Breakdown);
     }
 
     const breakdown = await supabaseRpc<Breakdown>("dashboard_breakdown", {

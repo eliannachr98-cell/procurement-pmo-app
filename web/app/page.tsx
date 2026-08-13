@@ -101,10 +101,11 @@ type DashboardBreakdown = {
   total: number;
   status: { status: string; count: number; budget: number }[];
   cpv: { cpv_code: string; cpv_description: string | null; count: number }[];
+  cpvTotal: number;
   nuts: { nuts_code: string; nuts_name: string; count: number }[];
   monthly: { month: string; count: number; budget: number; authorities: number; cpv: number }[];
 };
-const emptyDashboard: DashboardBreakdown = { total: 0, status: [], cpv: [], nuts: [], monthly: [] };
+const emptyDashboard: DashboardBreakdown = { total: 0, status: [], cpv: [], cpvTotal: 0, nuts: [], monthly: [] };
 
 export default function Home() {
   const [tenders, setTenders] = useState<Tender[]>(fallbackTenders);
@@ -275,7 +276,7 @@ export default function Home() {
             </div>
             <div className="chartGrid">
               <article className="panel"><PanelHeader title="Διαγωνισμοί ανά στάδιο" caption={`Σύνολο ${number.format(dashboard.total)} διαγωνισμών`} onDownload={() => downloadCsv("diagonismoi-ana-stadio.csv", ["Κατάσταση", "Πλήθος", "Προϋπολογισμός"], dashboard.status.map((item) => [item.status, item.count, item.budget]))} /><StatusBars counts={dashboard.status} /></article>
-              <article className="panel"><PanelHeader title="CPV Distribution" caption="Κορυφαίες κατηγορίες (σύνολο βάσης)" onDownload={() => downloadCsv("cpv-distribution.csv", ["CPV", "Περιγραφή", "Πλήθος"], dashboard.cpv.map((item) => [item.cpv_code, item.cpv_description ?? "", item.count]))} /><CpvDonut counts={dashboard.cpv} total={dashboard.total} /></article>
+              <article className="panel"><PanelHeader title="CPV Distribution" caption="Κορυφαίες κατηγορίες (σύνολο βάσης)" onDownload={() => downloadCsv("cpv-distribution.csv", ["CPV", "Περιγραφή", "Πλήθος"], dashboard.cpv.map((item) => [item.cpv_code, item.cpv_description ?? "", item.count]))} /><CpvDonut counts={dashboard.cpv} total={dashboard.total} cpvTotal={dashboard.cpvTotal} /></article>
             </div>
             <div className="monthlyGrid">
               <article className="panel monthlyTablePanel"><PanelHeader title="Διαγωνισμοί ανά μήνα" caption="Πλήθος, Π/Υ, CPV και αναθέτουσες αρχές ανά μήνα δημοσίευσης" onDownload={() => downloadCsv("diagonismoi-ana-mina.csv", ["Μήνας", "Διαγωνισμοί", "Συνολική αξία", "CPV", "Αναθέτουσες Αρχές"], dashboard.monthly.map((item) => [monthLabel(item.month), item.count, item.budget, item.cpv, item.authorities]))} /><MonthlyTable months={dashboard.monthly} /></article>
@@ -338,12 +339,12 @@ function StatusBars({ counts }: { counts: { status: string; count: number }[] })
   return <div className="bars">{statuses.map((item) => { const count = byStatus.get(item) ?? 0; const width = count === 0 ? 0 : Math.max((count / maximum) * 100, 3); return <div className="barRow" key={item}><span>{item}</span><div><i className={statusTone[item]} style={{ width: `${width}%` }} /></div><strong>{number.format(count)}</strong></div>; })}</div>;
 }
 
-function CpvDonut({ counts, total }: { counts: { cpv_code: string; cpv_description: string | null; count: number }[]; total: number }) {
+function CpvDonut({ counts, total, cpvTotal }: { counts: { cpv_code: string; cpv_description: string | null; count: number }[]; total: number; cpvTotal: number }) {
   const top = counts.slice(0, 3);
   const topSum = top.reduce((sum, item) => sum + item.count, 0);
   const other = Math.max(0, counts.reduce((sum, item) => sum + item.count, 0) - topSum);
   const denominator = Math.max(total, 1);
-  return <div className="donutWrap"><div className="donut"><span><strong>{number.format(counts.length)}</strong><small>CPV</small></span></div><ul>{top.map((item, index) => <li key={item.cpv_code} title={item.cpv_description ?? undefined}><i className={["navy", "teal", "gold"][index]} /><span><b>{item.cpv_code}</b><small>{item.cpv_description || "Χωρίς περιγραφή"}</small></span><b>{Math.round(item.count / denominator * 100)}%</b></li>)}{other > 0 && <li><i className="pale" />Λοιπά <b>{Math.round(other / denominator * 100)}%</b></li>}</ul></div>;
+  return <div className="donutWrap"><div className="donut"><span><strong>{number.format(cpvTotal)}</strong><small>CPV</small></span></div><ul>{top.map((item, index) => <li key={item.cpv_code} title={item.cpv_description ?? undefined}><i className={["navy", "teal", "gold"][index]} /><span><b>{item.cpv_code}</b><small>{item.cpv_description || "Χωρίς περιγραφή"}</small></span><b>{Math.round(item.count / denominator * 100)}%</b></li>)}{other > 0 && <li><i className="pale" />Λοιπά <b>{Math.round(other / denominator * 100)}%</b></li>}</ul></div>;
 }
 
 const MONTH_NAMES = ["Ιαν","Φεβ","Μαρ","Απρ","Μαϊ","Ιουν","Ιουλ","Αυγ","Σεπ","Οκτ","Νοε","Δεκ"];
