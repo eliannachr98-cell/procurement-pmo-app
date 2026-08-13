@@ -233,8 +233,13 @@ export async function GET(request: Request) {
     if (documentType) marketNoticeScopeFilters.push(`document_category=eq.${encodeURIComponent(documentType)}`);
     let marketScopeAdams: string[] | null = null;
     if (marketNoticeScopeFilters.length) {
+      // When a contractor/CPV match already narrowed the candidate notices,
+      // check the year/document-type condition against exactly that set -
+      // otherwise this would need to page through the entire (100k+ row)
+      // table without any guarantee the relevant notices land in the cap.
+      const scopeConstraint = matchingAdams ? `&adam=in.(${matchingAdams.map(encodeURIComponent).join(",")})` : "";
       const scopeRows = await supabaseGet<{ adam: string }[]>(
-        `procurements_compact?select=adam&${marketNoticeScopeFilters.join("&")}&limit=5000`,
+        `procurements_compact?select=adam&${marketNoticeScopeFilters.join("&")}${scopeConstraint}&order=publication_date.desc.nullslast&limit=5000`,
       );
       marketScopeAdams = scopeRows.map((row) => row.adam);
     }
