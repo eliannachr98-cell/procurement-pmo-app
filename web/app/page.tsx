@@ -266,12 +266,12 @@ export default function Home() {
               <Metric label="Ακυρωμένοι" value={number.format(statusCount("Ακυρωμένος"))} tone="rose" />
             </div>
             <div className="metrics metricsBudget">
-              <Metric label="Π/Υ Διαγωνισμών" value={euro.format(totalBudget)} tone="sky" />
-              <Metric label="Π/Υ Ενεργών" value={euro.format(statusBudget("Ενεργός"))} tone="mint" />
-              <Metric label="Π/Υ Αξιολόγησης" value={euro.format(statusBudget("Αξιολόγηση"))} tone="sand" />
-              <Metric label="Π/Υ Ανατεθειμένων" value={euro.format(statusBudget("Ανατεθειμένος"))} tone="lilac" />
-              <Metric label="Π/Υ Ολοκληρωμένων" value={euro.format(statusBudget("Ολοκληρωμένος"))} tone="sage" />
-              <Metric label="Π/Υ Ακυρωμένων" value={euro.format(statusBudget("Ακυρωμένος"))} tone="rose" />
+              <Metric label="Π/Υ:" value={euro.format(totalBudget)} tone="sky" />
+              <Metric label="Π/Υ:" value={euro.format(statusBudget("Ενεργός"))} tone="mint" />
+              <Metric label="Π/Υ:" value={euro.format(statusBudget("Αξιολόγηση"))} tone="sand" />
+              <Metric label="Π/Υ:" value={euro.format(statusBudget("Ανατεθειμένος"))} tone="lilac" />
+              <Metric label="Π/Υ:" value={euro.format(statusBudget("Ολοκληρωμένος"))} tone="sage" />
+              <Metric label="Π/Υ:" value={euro.format(statusBudget("Ακυρωμένος"))} tone="rose" />
             </div>
             <div className="chartGrid">
               <article className="panel"><PanelHeader title="Διαγωνισμοί ανά στάδιο" caption={`Σύνολο ${number.format(dashboard.total)} διαγωνισμών`} onDownload={() => downloadCsv("diagonismoi-ana-stadio.csv", ["Κατάσταση", "Πλήθος", "Προϋπολογισμός"], dashboard.status.map((item) => [item.status, item.count, item.budget]))} /><StatusBars counts={dashboard.status} /></article>
