@@ -43,7 +43,7 @@ begin
   for target_year in select year from public.available_years() union all select null loop
     with matched as (
       select p.adam, p.opening_at, p.cancelled_at, p.status as raw_status,
-             p.nuts_name, p.nuts_code, p.publication_date,
+             p.nuts_name, p.nuts_code, p.publication_date, p.authority_name,
              coalesce(p.budget_inc_vat, p.budget_ex_vat, p.budget_unknown_vat, 0) as budget
       from public.procurements_compact p
       -- Only count original tender notices, not follow-up documents
@@ -64,7 +64,7 @@ begin
       where c.procurement_adam in (select adam from matched)
     ),
     status_calc as (
-      select m.adam, m.nuts_name, m.nuts_code, m.budget, m.publication_date,
+      select m.adam, m.nuts_name, m.nuts_code, m.budget, m.publication_date, m.authority_name,
         case
           when m.cancelled_at is not null or m.raw_status = 'cancelled' then 'Ακυρωμένος'
           when hc.adam is not null then 'Ολοκληρωμένος'
@@ -102,18 +102,33 @@ begin
       limit 20
     ),
     monthly_agg as (
-      select to_char(date_trunc('month', publication_date), 'YYYY-MM') as month, count(*) as n, sum(budget) as budget
+      select to_char(date_trunc('month', publication_date), 'YYYY-MM') as month,
+             count(*) as n, sum(budget) as budget, count(distinct authority_name) as authorities
       from status_calc
       where publication_date is not null
       group by 1
-      order by 1
+    ),
+    monthly_cpv as (
+      select to_char(date_trunc('month', m.publication_date), 'YYYY-MM') as month,
+             count(distinct rc.cpv_code) as n
+      from public.record_cpvs_compact rc
+      join matched m on m.adam = rc.record_adam
+      where rc.record_type = 'procurement' and m.publication_date is not null
+      group by 1
     )
     select json_build_object(
       'total', (select count(*) from matched),
       'status', (select coalesce(json_agg(json_build_object('status', status, 'count', n, 'budget', budget)), '[]'::json) from status_agg),
       'cpv', (select coalesce(json_agg(json_build_object('cpv_code', cpv_code, 'cpv_description', cpv_description, 'count', n)), '[]'::json) from cpv_agg),
       'nuts', (select coalesce(json_agg(json_build_object('nuts_code', nuts_code, 'nuts_name', nuts_name, 'count', n)), '[]'::json) from nuts_agg),
-      'monthly', (select coalesce(json_agg(json_build_object('month', month, 'count', n, 'budget', budget)), '[]'::json) from monthly_agg)
+      'monthly', (
+        select coalesce(json_agg(json_build_object(
+          'month', ma.month, 'count', ma.n, 'budget', ma.budget,
+          'authorities', ma.authorities, 'cpv', coalesce(mc.n, 0)
+        ) order by ma.month), '[]'::json)
+        from monthly_agg ma
+        left join monthly_cpv mc on mc.month = ma.month
+      )
     )
     into result;
 
@@ -190,7 +205,7 @@ begin
   sql_text := $sql1$
     with matched as (
       select p.adam, p.opening_at, p.cancelled_at, p.status as raw_status,
-             p.nuts_name, p.nuts_code, p.publication_date,
+             p.nuts_name, p.nuts_code, p.publication_date, p.authority_name,
              coalesce(p.budget_inc_vat, p.budget_ex_vat, p.budget_unknown_vat, 0) as budget
       from public.procurements_compact p
   $sql1$ || where_sql || $sql2$
@@ -206,7 +221,7 @@ begin
       where c.procurement_adam in (select adam from matched)
     ),
     status_calc as (
-      select m.adam, m.nuts_name, m.nuts_code, m.budget, m.publication_date,
+      select m.adam, m.nuts_name, m.nuts_code, m.budget, m.publication_date, m.authority_name,
         case
           when m.cancelled_at is not null or m.raw_status = 'cancelled' then 'Ακυρωμένος'
           when hc.adam is not null then 'Ολοκληρωμένος'
@@ -240,18 +255,33 @@ begin
       limit 20
     ),
     monthly_agg as (
-      select to_char(date_trunc('month', publication_date), 'YYYY-MM') as month, count(*) as n, sum(budget) as budget
+      select to_char(date_trunc('month', publication_date), 'YYYY-MM') as month,
+             count(*) as n, sum(budget) as budget, count(distinct authority_name) as authorities
       from status_calc
       where publication_date is not null
       group by 1
-      order by 1
+    ),
+    monthly_cpv as (
+      select to_char(date_trunc('month', m.publication_date), 'YYYY-MM') as month,
+             count(distinct rc.cpv_code) as n
+      from public.record_cpvs_compact rc
+      join matched m on m.adam = rc.record_adam
+      where rc.record_type = 'procurement' and m.publication_date is not null
+      group by 1
     )
     select json_build_object(
       'total', (select count(*) from matched),
       'status', (select coalesce(json_agg(json_build_object('status', status, 'count', n, 'budget', budget)), '[]'::json) from status_agg),
       'cpv', (select coalesce(json_agg(json_build_object('cpv_code', cpv_code, 'cpv_description', cpv_description, 'count', n)), '[]'::json) from cpv_agg),
       'nuts', (select coalesce(json_agg(json_build_object('nuts_code', nuts_code, 'nuts_name', nuts_name, 'count', n)), '[]'::json) from nuts_agg),
-      'monthly', (select coalesce(json_agg(json_build_object('month', month, 'count', n, 'budget', budget)), '[]'::json) from monthly_agg)
+      'monthly', (
+        select coalesce(json_agg(json_build_object(
+          'month', ma.month, 'count', ma.n, 'budget', ma.budget,
+          'authorities', ma.authorities, 'cpv', coalesce(mc.n, 0)
+        ) order by ma.month), '[]'::json)
+        from monthly_agg ma
+        left join monthly_cpv mc on mc.month = ma.month
+      )
     )
   $sql2$;
 
