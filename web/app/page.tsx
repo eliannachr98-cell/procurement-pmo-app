@@ -258,12 +258,20 @@ export default function Home() {
 
           {page === "overview" && <>
             <div className="metrics">
-              <Metric label="Διαγωνισμοί" value={number.format(dashboard.total)} sub={`Π/Υ ${euro.format(totalBudget)}`} tone="sky" />
-              <Metric label="Ενεργοί" value={number.format(statusCount("Ενεργός"))} sub={`Π/Υ ${euro.format(statusBudget("Ενεργός"))}`} tone="mint" />
-              <Metric label="Σε αξιολόγηση" value={number.format(statusCount("Αξιολόγηση"))} sub={`Π/Υ ${euro.format(statusBudget("Αξιολόγηση"))}`} tone="sand" />
-              <Metric label="Ανατεθειμένοι" value={number.format(statusCount("Ανατεθειμένος"))} sub={`Π/Υ ${euro.format(statusBudget("Ανατεθειμένος"))}`} tone="lilac" />
-              <Metric label="Ολοκληρωμένοι" value={number.format(statusCount("Ολοκληρωμένος"))} sub={`Π/Υ ${euro.format(statusBudget("Ολοκληρωμένος"))}`} tone="sage" />
-              <Metric label="Ακυρωμένοι" value={number.format(statusCount("Ακυρωμένος"))} sub={`Π/Υ ${euro.format(statusBudget("Ακυρωμένος"))}`} tone="rose" />
+              <Metric label="Διαγωνισμοί" value={number.format(dashboard.total)} tone="sky" />
+              <Metric label="Ενεργοί" value={number.format(statusCount("Ενεργός"))} tone="mint" />
+              <Metric label="Σε αξιολόγηση" value={number.format(statusCount("Αξιολόγηση"))} tone="sand" />
+              <Metric label="Ανατεθειμένοι" value={number.format(statusCount("Ανατεθειμένος"))} tone="lilac" />
+              <Metric label="Ολοκληρωμένοι" value={number.format(statusCount("Ολοκληρωμένος"))} tone="sage" />
+              <Metric label="Ακυρωμένοι" value={number.format(statusCount("Ακυρωμένος"))} tone="rose" />
+            </div>
+            <div className="metrics metricsBudget">
+              <Metric label="Π/Υ Διαγωνισμών" value={euro.format(totalBudget)} tone="sky" />
+              <Metric label="Π/Υ Ενεργών" value={euro.format(statusBudget("Ενεργός"))} tone="mint" />
+              <Metric label="Π/Υ Αξιολόγησης" value={euro.format(statusBudget("Αξιολόγηση"))} tone="sand" />
+              <Metric label="Π/Υ Ανατεθειμένων" value={euro.format(statusBudget("Ανατεθειμένος"))} tone="lilac" />
+              <Metric label="Π/Υ Ολοκληρωμένων" value={euro.format(statusBudget("Ολοκληρωμένος"))} tone="sage" />
+              <Metric label="Π/Υ Ακυρωμένων" value={euro.format(statusBudget("Ακυρωμένος"))} tone="rose" />
             </div>
             <div className="chartGrid">
               <article className="panel"><PanelHeader title="Διαγωνισμοί ανά στάδιο" caption={`Σύνολο ${number.format(dashboard.total)} διαγωνισμών`} onDownload={() => downloadCsv("diagonismoi-ana-stadio.csv", ["Κατάσταση", "Πλήθος", "Προϋπολογισμός"], dashboard.status.map((item) => [item.status, item.count, item.budget]))} /><StatusBars counts={dashboard.status} /></article>
