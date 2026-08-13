@@ -1,0 +1,47 @@
+-- Server-side query for the Ειδοποιήσεις CPV alert feed.
+--
+-- The first version of this resolved each watched CPV through
+-- procurementAdamsForContractor-style helpers (built for the market/
+-- dashboard routes, which walk every award/contract ever tagged with that
+-- CPV across all time) and then paged the results back through PostgREST in
+-- chunks of 70 - fine for one narrow CPV, but a handful of broad codes
+-- (e.g. "79400000-8" general business consulting) made this fan out into
+-- hundreds of sequential HTTP round trips and time out. This does the whole
+-- thing as one inlined query instead, restricted up front to recent
+-- declarations/announcements (which is all an alert cares about) rather
+-- than resolving matches across the entire history first.
+create or replace function public.alerts_feed(p_cpv_codes text[], p_days int default 45)
+returns json
+language sql stable as $$
+  with matched_notice_adams as (
+    select distinct record_adam as adam
+    from public.record_cpvs_compact
+    where record_type = 'procurement' and cpv_code = any(p_cpv_codes)
+  ),
+  notices as (
+    select p.adam, p.title, p.authority_name, p.contract_type, p.publication_date, p.opening_at,
+           coalesce(p.budget_inc_vat, p.budget_ex_vat, p.budget_unknown_vat, 0) as budget
+    from public.procurements_compact p
+    join matched_notice_adams m on m.adam = p.adam
+    where p.document_category in ('declaration', 'announcement')
+      and p.publication_date >= (current_date - (p_days || ' days')::interval)
+  ),
+  notice_cpvs as (
+    select rc.record_adam as adam, rc.cpv_code, rc.cpv_description
+    from public.record_cpvs_compact rc
+    join notices n on n.adam = rc.record_adam
+    where rc.record_type = 'procurement'
+  )
+  select coalesce(json_agg(json_build_object(
+    'adam', n.adam,
+    'title', n.title,
+    'authority', coalesce(n.authority_name, '—'),
+    'contractType', n.contract_type,
+    'publicationDate', n.publication_date,
+    'openingDate', n.opening_at,
+    'budget', n.budget,
+    'cpvs', (select coalesce(json_agg(json_build_object('code', nc.cpv_code, 'description', nc.cpv_description)), '[]'::json) from notice_cpvs nc where nc.adam = n.adam),
+    'matchedCpv', (select coalesce(json_agg(nc.cpv_code), '[]'::json) from notice_cpvs nc where nc.adam = n.adam and nc.cpv_code = any(p_cpv_codes))
+  ) order by n.publication_date desc nulls last), '[]'::json)
+  from notices n;
+$$;
