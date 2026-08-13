@@ -83,8 +83,9 @@ type DashboardBreakdown = {
   status: { status: string; count: number; budget: number }[];
   cpv: { cpv_code: string; cpv_description: string | null; count: number }[];
   nuts: { nuts_code: string; nuts_name: string; count: number }[];
+  monthly: { month: string; count: number; budget: number }[];
 };
-const emptyDashboard: DashboardBreakdown = { total: 0, status: [], cpv: [], nuts: [] };
+const emptyDashboard: DashboardBreakdown = { total: 0, status: [], cpv: [], nuts: [], monthly: [] };
 
 export default function Home() {
   const [tenders, setTenders] = useState<Tender[]>(fallbackTenders);
@@ -240,12 +241,14 @@ export default function Home() {
               <Metric label="Ενεργοί" value={number.format(statusCount("Ενεργός"))} sub={`Π/Υ ${euro.format(statusBudget("Ενεργός"))}`} tone="mint" />
               <Metric label="Σε αξιολόγηση" value={number.format(statusCount("Αξιολόγηση"))} sub={`Π/Υ ${euro.format(statusBudget("Αξιολόγηση"))}`} tone="sand" />
               <Metric label="Ανατεθειμένοι" value={number.format(statusCount("Ανατεθειμένος"))} sub={`Π/Υ ${euro.format(statusBudget("Ανατεθειμένος"))}`} tone="lilac" />
-              <Metric label="Ολοκληρωμένοι + Ακυρωμένοι" value={number.format(statusCount("Ολοκληρωμένος") + statusCount("Ακυρωμένος"))} sub={`Π/Υ ${euro.format(statusBudget("Ολοκληρωμένος") + statusBudget("Ακυρωμένος"))}`} tone="sage" />
+              <Metric label="Ολοκληρωμένοι" value={number.format(statusCount("Ολοκληρωμένος"))} sub={`Π/Υ ${euro.format(statusBudget("Ολοκληρωμένος"))}`} tone="sage" />
+              <Metric label="Ακυρωμένοι" value={number.format(statusCount("Ακυρωμένος"))} sub={`Π/Υ ${euro.format(statusBudget("Ακυρωμένος"))}`} tone="rose" />
             </div>
             <div className="chartGrid">
               <article className="panel"><PanelHeader title="Διαγωνισμοί ανά στάδιο" caption={`Σύνολο ${number.format(dashboard.total)} διαγωνισμών`} /><StatusBars counts={dashboard.status} /></article>
               <article className="panel"><PanelHeader title="CPV Distribution" caption="Κορυφαίες κατηγορίες (σύνολο βάσης)" /><CpvDonut counts={dashboard.cpv} total={dashboard.total} /></article>
             </div>
+            <article className="panel"><PanelHeader title="Τάση διαγωνισμών ανά μήνα" caption="Πλήθος και Π/Υ δημοσιεύσεων ανά μήνα" /><MonthlyTrend months={dashboard.monthly} /></article>
             <NutsMap counts={dashboard.nuts} />
             <TenderTable rows={[...filtered].sort((a,b) => (b.publicationDate || "").localeCompare(a.publicationDate || "")).slice(0,10)} title="Πρόσφατοι διαγωνισμοί" caption="Οι 10 πιο πρόσφατες εγγραφές" onViewAll={() => setPage("tenders")} />
           </>}
@@ -304,6 +307,39 @@ function CpvDonut({ counts, total }: { counts: { cpv_code: string; cpv_descripti
   const other = Math.max(0, counts.reduce((sum, item) => sum + item.count, 0) - topSum);
   const denominator = Math.max(total, 1);
   return <div className="donutWrap"><div className="donut"><span><strong>{number.format(counts.length)}</strong><small>CPV</small></span></div><ul>{top.map((item, index) => <li key={item.cpv_code} title={item.cpv_description ?? undefined}><i className={["navy", "teal", "gold"][index]} /><span><b>{item.cpv_code}</b><small>{item.cpv_description || "Χωρίς περιγραφή"}</small></span><b>{Math.round(item.count / denominator * 100)}%</b></li>)}{other > 0 && <li><i className="pale" />Λοιπά <b>{Math.round(other / denominator * 100)}%</b></li>}</ul></div>;
+}
+
+function monthLabel(ym: string) {
+  const [year, month] = ym.split("-");
+  const names = ["Ιαν","Φεβ","Μαρ","Απρ","Μαϊ","Ιουν","Ιουλ","Αυγ","Σεπ","Οκτ","Νοε","Δεκ"];
+  return `${names[Number(month) - 1] ?? month} '${year.slice(2)}`;
+}
+
+function MonthlyTrend({ months }: { months: { month: string; count: number; budget: number }[] }) {
+  if (!months.length) return <p className="noRows">Δεν υπάρχουν δεδομένα τάσης για τα τρέχοντα φίλτρα.</p>;
+  const width = 640, height = 200, padTop = 16, padBottom = 28, padSide = 10;
+  const plotWidth = width - padSide * 2;
+  const plotHeight = height - padTop - padBottom;
+  const maxCount = Math.max(1, ...months.map((item) => item.count));
+  const stepX = months.length > 1 ? plotWidth / (months.length - 1) : 0;
+  const points = months.map((item, index) => [
+    padSide + index * stepX,
+    padTop + plotHeight - (item.count / maxCount) * plotHeight,
+  ] as [number, number]);
+  const linePath = points.map(([x, y], index) => `${index === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`).join(" ");
+  const areaPath = `${linePath} L${points[points.length - 1][0].toFixed(1)},${padTop + plotHeight} L${points[0][0].toFixed(1)},${padTop + plotHeight} Z`;
+  // Thin the x-axis labels out so they don't overlap on a wide date range.
+  const labelStride = Math.max(1, Math.ceil(months.length / 8));
+  return <div className="trendChart">
+    <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" role="img" aria-label="Τάση διαγωνισμών ανά μήνα">
+      <path d={areaPath} className="trendArea" />
+      <path d={linePath} className="trendLine" />
+      {points.map(([x, y], index) => <circle key={months[index].month} cx={x} cy={y} r={index === points.length - 1 ? 4.5 : 3} className="trendDot">
+        <title>{monthLabel(months[index].month)} · {number.format(months[index].count)} διαγωνισμοί · {euro.format(months[index].budget)}</title>
+      </circle>)}
+    </svg>
+    <div className="trendLabels">{months.map((item, index) => <span key={item.month}>{index % labelStride === 0 || index === months.length - 1 ? monthLabel(item.month) : ""}</span>)}</div>
+  </div>;
 }
 
 function TenderTable({ rows, expanded = false, title = "Λίστα διαγωνισμών", caption, onViewAll }: { rows: Tender[]; expanded?: boolean; title?: string; caption?: string; onViewAll?: () => void }) {
