@@ -263,7 +263,7 @@ export default function Home() {
             </button>}
           </>}
           {page === "market" && <MarketPanel awards={awards} contracts={contracts} cpv={cpv} setCpv={setCpv} contractor={contractor} authority={authority} query={query} year={year} contractType={contractType} documentType={documentType} />}
-          {page === "alerts" && <EmptyState icon="♢" title="Ειδοποιήσεις CPV" text="Οι ειδοποιήσεις θα ενεργοποιηθούν μαζί με τους λογαριασμούς χρηστών στη Supabase." />}
+          {page === "alerts" && <AlertsPanel />}
         </section>
 
         {/* Ειδοποιήσεις is a CPV watch-list/alert feed, not a filtered view of the
@@ -487,12 +487,13 @@ function CheckboxDropdown({ label, options, values, onChange }: {
 
 type SearchOption = { value: string; label: string };
 
-function MultiSearchInput({ label, type, values, onChange, placeholder }: {
+function MultiSearchInput({ label, type, values, onChange, placeholder, onSelectOption }: {
   label: string;
   type: "contractor" | "cpv";
   values: string[];
   onChange: (values: string[]) => void;
   placeholder: string;
+  onSelectOption?: (option: SearchOption) => void;
 }) {
   const [text, setText] = useState("");
   const [options, setOptions] = useState<SearchOption[]>([]);
@@ -524,6 +525,7 @@ function MultiSearchInput({ label, type, values, onChange, placeholder }: {
   const select = (option: SearchOption) => {
     if (!values.includes(option.value)) onChange([...values, option.value]);
     setLabelByValue((current) => ({ ...current, [option.value]: option.label }));
+    onSelectOption?.(option);
     setText("");
     setOptions([]);
   };
@@ -762,7 +764,87 @@ function formatDate(value?: string) {
   return new Intl.DateTimeFormat("el-GR").format(new Date(value));
 }
 
-function EmptyState({ icon, title, text }: { icon: string; title: string; text: string }) {
-  return <article className="panel empty"><span>{icon}</span><h2>{title}</h2><p>{text}</p><button>Σύντομα διαθέσιμο</button></article>;
+type WatchlistItem = { cpv_code: string; cpv_label: string | null };
+type AlertItem = {
+  adam: string; title: string; authority: string; contractType?: string;
+  publicationDate: string | null; openingDate: string | null; budget: number;
+  matchedCpv: string[]; cpvs: { code: string; description: string | null }[];
+};
+
+function AlertsPanel() {
+  const [watchlist, setWatchlist] = useState<WatchlistItem[]>([]);
+  const [alerts, setAlerts] = useState<AlertItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [selectedTender, setSelectedTender] = useState<Tender | null>(null);
+  const [loadingTender, setLoadingTender] = useState(false);
+
+  const load = useCallback(() => {
+    setLoading(true);
+    fetch("/api/alerts")
+      .then((response) => response.ok ? response.json() : Promise.reject(new Error("alerts request failed")))
+      .then((payload) => { setWatchlist(payload.watchlist ?? []); setAlerts(payload.alerts ?? []); setError(""); })
+      .catch(() => setError("Δεν ήταν δυνατή η φόρτωση των ειδοποιήσεων."))
+      .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const removeCpv = (code: string) => {
+    setWatchlist((current) => current.filter((item) => item.cpv_code !== code));
+    fetch(`/api/watchlist?cpv_code=${encodeURIComponent(code)}`, { method: "DELETE" }).then(load);
+  };
+
+  const openTender = (adam: string) => {
+    setLoadingTender(true);
+    fetch(`/api/procurement?q=${encodeURIComponent(adam)}&pageSize=5`)
+      .then((response) => response.ok ? response.json() : { tenders: [] })
+      .then((payload) => setSelectedTender((payload.tenders ?? []).find((item: Tender) => item.adam === adam) ?? null))
+      .catch(() => setSelectedTender(null))
+      .finally(() => setLoadingTender(false));
+  };
+
+  if (selectedTender) return <TenderDetail tender={selectedTender} onBack={() => setSelectedTender(null)} />;
+
+  return <>
+    <article className="panel">
+      <PanelHeader title="Παρακολούθηση CPV" caption="Πρόσθεσε κωδικούς CPV - οι νέοι διαγωνισμοί που δημοσιεύονται σε αυτούς εμφανίζονται παρακάτω, με αποδελτίωση των βασικών στοιχείων." />
+      <MultiSearchInput
+        label="CPV υπό παρακολούθηση"
+        type="cpv"
+        values={watchlist.map((item) => item.cpv_code)}
+        onChange={(nextValues) => {
+          const removed = watchlist.map((item) => item.cpv_code).find((code) => !nextValues.includes(code));
+          if (removed) removeCpv(removed);
+        }}
+        onSelectOption={(option) => {
+          fetch("/api/watchlist", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ cpv_code: option.value, cpv_label: option.label }) })
+            .then(load);
+        }}
+        placeholder="Αναζήτησε και πρόσθεσε CPV στην παρακολούθηση"
+      />
+    </article>
+    {!watchlist.length && <article className="panel empty"><span>♢</span><h2>Δεν παρακολουθείς κανένα CPV</h2><p>Πρόσθεσε έναν ή περισσότερους κωδικούς CPV παραπάνω για να ξεκινήσεις να βλέπεις εδώ τους νέους διαγωνισμούς που ταιριάζουν.</p></article>}
+    {error && <div className="dataBanner error">{error}</div>}
+    {watchlist.length > 0 && <article className="panel tablePanel">
+      <PanelHeader title="Νέοι διαγωνισμοί" caption={`${number.format(alerts.length)} διαγωνισμοί τις τελευταίες 45 ημέρες στα CPV που παρακολουθείς`} />
+      {loading && <p className="noRows">Φόρτωση ειδοποιήσεων…</p>}
+      {!loading && !alerts.length && <p className="noRows">Δεν βρέθηκαν νέοι διαγωνισμοί ακόμη.</p>}
+      {!loading && alerts.length > 0 && <div className="alertList">
+        {alerts.map((item) => <button type="button" className="alertCard" key={item.adam} onClick={() => openTender(item.adam)}>
+          <span className="alertCardHead"><strong>{item.title}</strong><span>{formatDate(item.publicationDate ?? undefined)}</span></span>
+          <span className="alertCardAuthority">{item.authority}</span>
+          <span className="alertCardFacts">
+            <span><b>ΑΔΑΜ</b>{item.adam}</span>
+            <span><b>CPV</b>{item.cpvs.map((cpv) => cpv.code).join(", ") || "—"}</span>
+            <span><b>Π/Υ</b>{euro.format(item.budget)}</span>
+            <span><b>Αποσφράγιση</b>{formatDate(item.openingDate ?? undefined)}</span>
+            <span><b>Τύπος σύμβασης</b>{item.contractType ?? "—"}</span>
+          </span>
+        </button>)}
+      </div>}
+      {loadingTender && <p className="noRows">Φόρτωση στοιχείων διαγωνισμού…</p>}
+    </article>}
+  </>;
 }
 

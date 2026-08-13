@@ -43,6 +43,25 @@ export async function supabaseGet<T>(path: string): Promise<T> {
   return response.json();
 }
 
+export async function supabaseWrite<T>(path: string, method: "POST" | "DELETE" | "PATCH", body?: unknown, prefer = "return=representation"): Promise<T> {
+  const url = process.env.SUPABASE_URL;
+  const key = process.env.SUPABASE_PUBLISHABLE_KEY;
+  if (!url || !key) throw new Error("Supabase environment variables are missing");
+
+  const response = await fetch(`${url}/rest/v1/${path}`, {
+    method,
+    headers: { apikey: key, "Content-Type": "application/json", Prefer: prefer },
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(`Supabase ${method} ${path} failed (${response.status}): ${detail.slice(0, 180)}`);
+  }
+  const text = await response.text();
+  return (text ? JSON.parse(text) : undefined) as T;
+}
+
 export async function supabaseRpc<T>(fn: string, args: Record<string, unknown> = {}): Promise<T> {
   const url = process.env.SUPABASE_URL;
   const key = process.env.SUPABASE_PUBLISHABLE_KEY;
