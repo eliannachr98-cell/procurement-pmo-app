@@ -7,9 +7,15 @@
 -- chunks of 70 - fine for one narrow CPV, but a handful of broad codes
 -- (e.g. "79400000-8" general business consulting) made this fan out into
 -- hundreds of sequential HTTP round trips and time out. This does the whole
--- thing as one inlined query instead, restricted up front to recent
--- declarations/announcements (which is all an alert cares about) rather
--- than resolving matches across the entire history first.
+-- thing as one inlined query instead, restricted up front to a recent
+-- publication window rather than resolving matches across the entire
+-- history first.
+--
+-- Every document_category is returned (not just declaration/announcement) -
+-- an extension ("Παράταση / μετάθεση") or amendment notice for a watched CPV
+-- is still something the user wants to see, just filterable client-side:
+-- collapsing them server-side hid real information (e.g. a postponed
+-- opening date) with no way to get it back.
 create or replace function public.alerts_feed(p_cpv_codes text[], p_days int default 45)
 returns json
 language sql stable as $$
@@ -19,12 +25,11 @@ language sql stable as $$
     where record_type = 'procurement' and cpv_code = any(p_cpv_codes)
   ),
   notices as (
-    select p.adam, p.title, p.authority_name, p.contract_type, p.publication_date, p.opening_at,
+    select p.adam, p.title, p.authority_name, p.contract_type, p.document_category, p.publication_date, p.opening_at,
            coalesce(p.budget_inc_vat, p.budget_ex_vat, p.budget_unknown_vat, 0) as budget
     from public.procurements_compact p
     join matched_notice_adams m on m.adam = p.adam
-    where p.document_category in ('declaration', 'announcement')
-      and p.publication_date >= (current_date - (p_days || ' days')::interval)
+    where p.publication_date >= (current_date - (p_days || ' days')::interval)
   ),
   notice_cpvs as (
     select rc.record_adam as adam, rc.cpv_code, rc.cpv_description
@@ -37,6 +42,7 @@ language sql stable as $$
     'title', n.title,
     'authority', coalesce(n.authority_name, '—'),
     'contractType', n.contract_type,
+    'documentType', n.document_category,
     'publicationDate', n.publication_date,
     'openingDate', n.opening_at,
     'budget', n.budget,
