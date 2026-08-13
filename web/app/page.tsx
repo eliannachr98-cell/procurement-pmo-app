@@ -807,22 +807,25 @@ function AlertsPanel() {
   if (selectedTender) return <TenderDetail tender={selectedTender} onBack={() => setSelectedTender(null)} />;
 
   return <>
-    <article className="panel">
-      <PanelHeader title="Παρακολούθηση CPV" caption="Πρόσθεσε κωδικούς CPV - οι νέοι διαγωνισμοί που δημοσιεύονται σε αυτούς εμφανίζονται παρακάτω, με αποδελτίωση των βασικών στοιχείων." />
-      <MultiSearchInput
-        label="CPV υπό παρακολούθηση"
-        type="cpv"
-        values={watchlist.map((item) => item.cpv_code)}
-        onChange={(nextValues) => {
-          const removed = watchlist.map((item) => item.cpv_code).find((code) => !nextValues.includes(code));
-          if (removed) removeCpv(removed);
-        }}
-        onSelectOption={(option) => {
-          fetch("/api/watchlist", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ cpv_code: option.value, cpv_label: option.label }) })
-            .then(load);
-        }}
-        placeholder="Αναζήτησε και πρόσθεσε CPV στην παρακολούθηση"
-      />
+    <article className="panel watchlistPanel">
+      <div className="watchlistRow">
+        <div><p className="eyebrow">CPV ALERTS</p><h2>Παρακολούθηση CPV</h2></div>
+        <MultiSearchInput
+          label="CPV"
+          type="cpv"
+          values={watchlist.map((item) => item.cpv_code)}
+          onChange={(nextValues) => {
+            const removed = watchlist.map((item) => item.cpv_code).find((code) => !nextValues.includes(code));
+            if (removed) removeCpv(removed);
+          }}
+          onSelectOption={(option) => {
+            fetch("/api/watchlist", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ cpv_code: option.value, cpv_label: option.label }) })
+              .then(load);
+          }}
+          placeholder="Αναζήτησε και πρόσθεσε CPV στην παρακολούθηση"
+        />
+      </div>
+      <p className="watchlistCaption">Οι νέοι διαγωνισμοί που δημοσιεύονται σε αυτά τα CPV εμφανίζονται παρακάτω, με αποδελτίωση των βασικών στοιχείων.</p>
     </article>
     {!watchlist.length && <article className="panel empty"><span>♢</span><h2>Δεν παρακολουθείς κανένα CPV</h2><p>Πρόσθεσε έναν ή περισσότερους κωδικούς CPV παραπάνω για να ξεκινήσεις να βλέπεις εδώ τους νέους διαγωνισμούς που ταιριάζουν.</p></article>}
     {error && <div className="dataBanner error">{error}</div>}
