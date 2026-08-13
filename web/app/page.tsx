@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import "leaflet/dist/leaflet.css";
 
 type Status = "Ενεργός" | "Αξιολόγηση" | "Ανατεθειμένος" | "Ολοκληρωμένος" | "Ακυρωμένος";
 type Tender = {
@@ -83,7 +84,7 @@ type DashboardBreakdown = {
   status: { status: string; count: number; budget: number }[];
   cpv: { cpv_code: string; cpv_description: string | null; count: number }[];
   nuts: { nuts_code: string; nuts_name: string; count: number }[];
-  monthly: { month: string; count: number; budget: number }[];
+  monthly: { month: string; count: number; budget: number; authorities: number; cpv: number }[];
 };
 const emptyDashboard: DashboardBreakdown = { total: 0, status: [], cpv: [], nuts: [], monthly: [] };
 
@@ -248,7 +249,7 @@ export default function Home() {
               <article className="panel"><PanelHeader title="Διαγωνισμοί ανά στάδιο" caption={`Σύνολο ${number.format(dashboard.total)} διαγωνισμών`} /><StatusBars counts={dashboard.status} /></article>
               <article className="panel"><PanelHeader title="CPV Distribution" caption="Κορυφαίες κατηγορίες (σύνολο βάσης)" /><CpvDonut counts={dashboard.cpv} total={dashboard.total} /></article>
             </div>
-            <article className="panel"><PanelHeader title="Τάση διαγωνισμών ανά μήνα" caption="Πλήθος και Π/Υ δημοσιεύσεων ανά μήνα" /><MonthlyTrend months={dashboard.monthly} /></article>
+            <article className="panel"><PanelHeader title="Διαγωνισμοί ανά μήνα" caption="Πλήθος, Π/Υ, CPV και αναθέτουσες αρχές ανά μήνα δημοσίευσης" /><MonthlyTable months={dashboard.monthly} /></article>
             <NutsMap counts={dashboard.nuts} />
             <TenderTable rows={[...filtered].sort((a,b) => (b.publicationDate || "").localeCompare(a.publicationDate || "")).slice(0,10)} title="Πρόσφατοι διαγωνισμοί" caption="Οι 10 πιο πρόσφατες εγγραφές" onViewAll={() => setPage("tenders")} />
           </>}
@@ -315,31 +316,20 @@ function monthLabel(ym: string) {
   return `${names[Number(month) - 1] ?? month} '${year.slice(2)}`;
 }
 
-function MonthlyTrend({ months }: { months: { month: string; count: number; budget: number }[] }) {
-  if (!months.length) return <p className="noRows">Δεν υπάρχουν δεδομένα τάσης για τα τρέχοντα φίλτρα.</p>;
-  const width = 640, height = 200, padTop = 16, padBottom = 28, padSide = 10;
-  const plotWidth = width - padSide * 2;
-  const plotHeight = height - padTop - padBottom;
-  const maxCount = Math.max(1, ...months.map((item) => item.count));
-  const stepX = months.length > 1 ? plotWidth / (months.length - 1) : 0;
-  const points = months.map((item, index) => [
-    padSide + index * stepX,
-    padTop + plotHeight - (item.count / maxCount) * plotHeight,
-  ] as [number, number]);
-  const linePath = points.map(([x, y], index) => `${index === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`).join(" ");
-  const areaPath = `${linePath} L${points[points.length - 1][0].toFixed(1)},${padTop + plotHeight} L${points[0][0].toFixed(1)},${padTop + plotHeight} Z`;
-  // Thin the x-axis labels out so they don't overlap on a wide date range.
-  const labelStride = Math.max(1, Math.ceil(months.length / 8));
-  return <div className="trendChart">
-    <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" role="img" aria-label="Τάση διαγωνισμών ανά μήνα">
-      <path d={areaPath} className="trendArea" />
-      <path d={linePath} className="trendLine" />
-      {points.map(([x, y], index) => <circle key={months[index].month} cx={x} cy={y} r={index === points.length - 1 ? 4.5 : 3} className="trendDot">
-        <title>{monthLabel(months[index].month)} · {number.format(months[index].count)} διαγωνισμοί · {euro.format(months[index].budget)}</title>
-      </circle>)}
-    </svg>
-    <div className="trendLabels">{months.map((item, index) => <span key={item.month}>{index % labelStride === 0 || index === months.length - 1 ? monthLabel(item.month) : ""}</span>)}</div>
-  </div>;
+function MonthlyTable({ months }: { months: { month: string; count: number; budget: number; authorities: number; cpv: number }[] }) {
+  if (!months.length) return <p className="noRows">Δεν υπάρχουν δεδομένα για τα τρέχοντα φίλτρα.</p>;
+  // Count/budget add up correctly across months; distinct CPV/authority
+  // counts don't (the same CPV or authority can appear in several months),
+  // so a naive sum would overstate the real total - leave those blank in
+  // the totals row rather than show a misleading number.
+  const totals = months.reduce((sum, item) => ({ count: sum.count + item.count, budget: sum.budget + item.budget }), { count: 0, budget: 0 });
+  return <div className="tableScroll monthlyTable"><table>
+    <thead><tr><th>Μήνας</th><th>Διαγωνισμοί</th><th>Συνολική αξία</th><th>CPV</th><th>Αναθέτουσες Αρχές</th></tr></thead>
+    <tbody>
+      {months.map((item) => <tr key={item.month}><td>{monthLabel(item.month)}</td><td>{number.format(item.count)}</td><td>{euro.format(item.budget)}</td><td>{number.format(item.cpv)}</td><td>{number.format(item.authorities)}</td></tr>)}
+      <tr className="tableTotal"><td>Σύνολο</td><td>{number.format(totals.count)}</td><td>{euro.format(totals.budget)}</td><td>—</td><td>—</td></tr>
+    </tbody>
+  </table></div>;
 }
 
 function TenderTable({ rows, expanded = false, title = "Λίστα διαγωνισμών", caption, onViewAll }: { rows: Tender[]; expanded?: boolean; title?: string; caption?: string; onViewAll?: () => void }) {
@@ -359,23 +349,65 @@ function TenderDetail({ tender, onBack }: { tender: Tender; onBack: () => void }
 }
 
 function NutsMap({ counts }: { counts: { nuts_code: string; nuts_name: string; count: number }[] }) {
-  const regions = [...counts].sort((a, b) => b.count - a.count);
+  const mapElRef = useRef<HTMLDivElement>(null);
+  const mapRef = useRef<import("leaflet").Map | null>(null);
+  const layerRef = useRef<import("leaflet").LayerGroup | null>(null);
+
+  // "EL" is the generic whole-country code a notice falls back to when
+  // nothing more specific was recorded - it has no real single location, so
+  // it's not useful in a per-region list and is dropped entirely rather than
+  // shown as a meaningless top entry.
+  const regions = [...counts].filter((item) => item.nuts_code !== "EL").sort((a, b) => b.count - a.count);
   const total = regions.reduce((sum, item) => sum + item.count, 0);
   const max = Math.max(1, ...regions.map((item) => item.count));
-  // The generic whole-country code ("EL", used when a notice carries no
-  // region more specific than "ΕΛΛΑΔΑ") has no real single location - it
-  // stays in the legend/count but isn't placed as a pin.
-  const pins = regions.map((item) => ({ item, position: nutsPosition(item.nuts_code) })).filter((row): row is { item: typeof regions[number]; position: [number, number] } => row.position !== null).slice(0, 12);
-  return <article className="panel nutsPanel"><PanelHeader title="Διαγωνισμοί ανά NUTS" caption={`${number.format(total)} διαγωνισμοί με τα τρέχοντα φίλτρα`} /><div className="nutsMap"><div className="realMap"><iframe title="Χάρτης Ελλάδας" loading="lazy" src="https://www.openstreetmap.org/export/embed.html?bbox=18.4%2C34.4%2C30.4%2C42.2&amp;layer=mapnik" />{pins.map(({ item, position: [left, top] }) => <span className="mapPin" key={item.nuts_code} style={{left:`${left}%`,top:`${top}%`,width:`${22+(item.count/max)*20}px`,height:`${22+(item.count/max)*20}px`}}><b>{item.count}</b><span className="mapTooltip"><strong>{item.nuts_name}</strong><em>{item.count} διαγωνισμοί</em></span></span>)}<a className="mapCredit" href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">© OpenStreetMap</a></div><div className="nutsLegend">{regions.slice(0,10).map((item) => <div key={item.nuts_code}><span title={item.nuts_name}>{item.nuts_name}</span><i><b style={{width:`${(item.count/max)*100}%`}} /></i><strong>{number.format(item.count)}</strong></div>)}</div></div></article>;
+  const pins = regions
+    .map((item) => ({ item, position: nutsLatLon(item.nuts_code) }))
+    .filter((row): row is { item: typeof regions[number]; position: [number, number] } => row.position !== null)
+    .slice(0, 15);
+  const pinsKey = pins.map((row) => `${row.item.nuts_code}:${row.item.count}`).join("|");
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const { default: L } = await import("leaflet");
+      if (cancelled || !mapElRef.current) return;
+      if (!mapRef.current) {
+        mapRef.current = L.map(mapElRef.current, { scrollWheelZoom: false }).setView([38.8, 23.5], 6);
+        L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+          attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+          maxZoom: 18,
+        }).addTo(mapRef.current);
+        layerRef.current = L.layerGroup().addTo(mapRef.current);
+        // The container's real size isn't known until the surrounding grid
+        // has laid out - without this the tiles render into a 0-height box.
+        window.requestAnimationFrame(() => mapRef.current?.invalidateSize());
+      }
+      const layer = layerRef.current;
+      if (!layer) return;
+      layer.clearLayers();
+      for (const { item, position } of pins) {
+        const size = Math.round(24 + (item.count / max) * 22);
+        const icon = L.divIcon({
+          html: `<span class="mapPinBadge">${number.format(item.count)}</span>`,
+          className: "mapPinWrap",
+          iconSize: [size, size],
+        });
+        L.marker(position, { icon }).bindTooltip(`${item.nuts_name}: ${number.format(item.count)} διαγωνισμοί`).addTo(layer);
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pinsKey]);
+
+  useEffect(() => () => { mapRef.current?.remove(); mapRef.current = null; }, []);
+
+  return <article className="panel nutsPanel"><PanelHeader title="Διαγωνισμοί ανά NUTS" caption={`${number.format(total)} διαγωνισμοί με τα τρέχοντα φίλτρα`} /><div className="nutsMap"><div className="realMap" ref={mapElRef} /><div className="nutsLegend">{regions.slice(0,10).map((item) => <div key={item.nuts_code}><span title={item.nuts_name}>{item.nuts_name}</span><i><b style={{width:`${(item.count/max)*100}%`}} /></i><strong>{number.format(item.count)}</strong></div>)}</div></div></article>;
 }
 
 // Approximate centroid [lat, lon] per Greek NUTS unit (official 2021
 // classification, down to NUTS3 where the source data provides it, with
 // NUTS2/NUTS1-level fallbacks since KHMDHS notices don't always carry full
-// NUTS3 precision). "EL" itself is the generic whole-country code notices
-// fall back to when nothing more specific was recorded - it has no real
-// single location, so it's deliberately left out and shown in the legend
-// only, not plotted as a pin.
+// NUTS3 precision).
 const NUTS_COORDS: Record<string, [number, number]> = {
   EL3: [38.0, 23.7], EL30: [38.0, 23.7],
   EL301: [38.05, 23.80], EL302: [38.02, 23.68], EL303: [37.98, 23.73], EL304: [37.93, 23.70],
@@ -397,27 +429,13 @@ const NUTS_COORDS: Record<string, [number, number]> = {
   EL65: [37.5, 22.4], EL651: [37.50, 22.60], EL652: [37.94, 22.93], EL653: [37.00, 22.20], EL654: [37.30, 22.10],
 };
 
-// The embedded map's OSM export renders in standard Web Mercator, so a plain
-// linear map from latitude to the pin's vertical position would drift
-// noticeably over Greece's ~8 degree latitude span - project both the pin
-// and the bbox edges through the same Mercator transform first.
-const mercatorY = (lat: number) => Math.log(Math.tan(Math.PI / 4 + (lat * Math.PI) / 180 / 2));
-const MAP_BBOX = { minLon: 18.4, maxLon: 30.4, minLat: 34.4, maxLat: 42.2 };
-const MAP_MERCATOR_TOP = mercatorY(MAP_BBOX.maxLat);
-const MAP_MERCATOR_SPAN = MAP_MERCATOR_TOP - mercatorY(MAP_BBOX.minLat);
-
-function nutsPosition(code: string): [number, number] | null {
+function nutsLatLon(code: string): [number, number] | null {
   // Prefer the most specific match, then fall back one NUTS level at a time
   // (EL421 -> EL42 -> EL4) until something in the table matches.
   let key = code;
   while (key.length >= 3) {
     const coords = NUTS_COORDS[key];
-    if (coords) {
-      const [lat, lon] = coords;
-      const left = ((lon - MAP_BBOX.minLon) / (MAP_BBOX.maxLon - MAP_BBOX.minLon)) * 100;
-      const top = ((MAP_MERCATOR_TOP - mercatorY(lat)) / MAP_MERCATOR_SPAN) * 100;
-      return [left, top];
-    }
+    if (coords) return coords;
     key = key.slice(0, -1);
   }
   return null;
