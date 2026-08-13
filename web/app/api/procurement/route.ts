@@ -273,6 +273,25 @@ export async function GET(request: Request) {
         `&order=adam.desc&limit=${marketIsNarrowed ? 1000 : 200}`,
       ),
     ]);
+    // A contract's own procurement_adam is often unset - it's still linked to
+    // the notice through its award. The scope filter above only matches a
+    // contract's *own* procurement_adam, so it silently drops every contract
+    // reachable only via award_adam - fetch those separately and merge in.
+    if (marketScopeAdams && marketAwards.length) {
+      const scopedAwardAdams = marketAwards.map((row) => row.adam);
+      const supplementalFilters = [`award_adam=in.(${scopedAwardAdams.map(encodeURIComponent).join(",")})`];
+      if (matchingContractAdams) supplementalFilters.push(`adam=in.(${matchingContractAdams.map(encodeURIComponent).join(",")})`);
+      if (authority) supplementalFilters.push(`authority_name=ilike.${encodeURIComponent(`*${authority}*`)}`);
+      if (contractTypes.length) supplementalFilters.push(`contract_type=in.(${contractTypes.map(encodeURIComponent).join(",")})`);
+      const supplementalContracts = await supabaseGet<ContractRow[]>(
+        "contracts_compact?select=adam,procurement_adam,award_adam,title,authority_name,contract_type,signed_date,delivery_date,amount_ex_vat,amount_inc_vat,amount_unknown_vat" +
+        `&${supplementalFilters.join("&")}&order=adam.desc&limit=1000`,
+      );
+      const seenContractAdams = new Set(marketContracts.map((row) => row.adam));
+      for (const row of supplementalContracts) {
+        if (!seenContractAdams.has(row.adam)) { marketContracts.push(row); seenContractAdams.add(row.adam); }
+      }
+    }
     const marketAwardAdams = marketAwards.map((row) => row.adam);
     const marketContractAdams = marketContracts.map((row) => row.adam);
     const marketNoticeAdams = [...new Set([
@@ -417,7 +436,10 @@ export async function GET(request: Request) {
     const contractItems = marketContracts.flatMap((contract) => {
       const cpv = marketContractCpvsByAdam.get(contract.adam)?.[0];
       const linkedAward = marketAwardsByAdam.get(contract.award_adam ?? "");
-      const linkedNotice = marketNoticesByAdam.get(contract.procurement_adam ?? "");
+      // A contract's own procurement_adam is sometimes unset - fall back to
+      // its linked award's, since that's still the same real tender.
+      const noticeAdam = contract.procurement_adam ?? linkedAward?.procurement_adam ?? undefined;
+      const linkedNotice = marketNoticesByAdam.get(noticeAdam ?? "");
       // A contract's own contractor rows sometimes aren't repeated from its
       // award -- fall back to the award's contractors when the contract has
       // none of its own.
@@ -427,13 +449,13 @@ export async function GET(request: Request) {
       const rows = contractorsForContract.length ? contractorsForContract : [null];
       return rows.map((contractor) => ({
         adam: contract.adam,
-        noticeAdam: contract.procurement_adam ?? undefined,
+        noticeAdam,
         noticeTitle: linkedNotice?.title,
         title: contract.title ?? linkedAward?.title ?? linkedNotice?.title ?? "—",
         authority: contract.authority_name ?? linkedAward?.authority_name ?? linkedNotice?.authority_name ?? "—",
         contractType: contract.contract_type ?? linkedAward?.contract_type ?? linkedNotice?.contract_type ?? undefined,
-        cpv: cpv?.cpv_code ?? marketNoticeCpvsByAdam.get(contract.procurement_adam ?? "")?.[0]?.cpv_code ?? "—",
-        cpvDescription: cpv?.cpv_description ?? marketNoticeCpvsByAdam.get(contract.procurement_adam ?? "")?.[0]?.cpv_description ?? "",
+        cpv: cpv?.cpv_code ?? marketNoticeCpvsByAdam.get(noticeAdam ?? "")?.[0]?.cpv_code ?? "—",
+        cpvDescription: cpv?.cpv_description ?? marketNoticeCpvsByAdam.get(noticeAdam ?? "")?.[0]?.cpv_description ?? "",
         contractor: contractor?.contractor_name ?? "Χωρίς ανάδοχο",
         contractorVat: contractor?.contractor_vat ?? undefined,
         signedDate: contract.signed_date ?? undefined,
