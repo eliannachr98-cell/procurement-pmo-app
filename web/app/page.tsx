@@ -771,16 +771,6 @@ type AlertItem = {
   matchedCpv: string[]; cpvs: { code: string; description: string | null }[];
 };
 
-const ALERT_DOC_TYPE_LABELS: Record<string, string> = {
-  declaration: "Διακήρυξη",
-  announcement: "Προκήρυξη",
-  summary: "Περίληψη",
-  clarification: "Διευκρίνιση",
-  extension: "Παράταση / μετάθεση",
-  amendment: "Τροποποίηση",
-  decision: "Απόφαση / έγκριση",
-};
-
 const ALERT_URGENT_DAYS = 15;
 
 function alertUrgency(openingDate: string | null): "open" | "urgent" | "passed" | "unknown" {
@@ -868,10 +858,9 @@ function AlertsPanel() {
       {!loading && visibleAlerts.length > 0 && <div className="alertList">
         {visibleAlerts.map((item) => {
           const urgency = alertUrgency(item.openingDate);
-          const docType = item.documentType ?? "declaration";
           return <button type="button" className={`alertCard is-${urgency}`} key={item.adam} onClick={() => openTender(item.adam)}>
           <span className="alertCardHead"><strong>{item.title}</strong><span>{formatDate(item.publicationDate ?? undefined)}</span></span>
-          <span className="alertCardAuthority"><span className="alertCardAuthorityName">{item.authority}</span><span className={`alertCardDocType docType-${docType}`}>{ALERT_DOC_TYPE_LABELS[docType] ?? docType}</span></span>
+          <span className="alertCardAuthority">{item.authority}</span>
           <span className="alertCardFacts">
             <span><b>ΑΔΑΜ</b>{item.adam}</span>
             <span><b>CPV</b>{item.cpvs.map((cpv) => cpv.code).join(", ") || "—"}</span>
