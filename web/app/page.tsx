@@ -342,9 +342,21 @@ function StatusBars({ counts }: { counts: { status: string; count: number }[] })
 function CpvDonut({ counts, total, cpvTotal }: { counts: { cpv_code: string; cpv_description: string | null; count: number }[]; total: number; cpvTotal: number }) {
   const top = counts.slice(0, 3);
   const topSum = top.reduce((sum, item) => sum + item.count, 0);
-  const other = Math.max(0, counts.reduce((sum, item) => sum + item.count, 0) - topSum);
   const denominator = Math.max(total, 1);
-  return <div className="donutWrap"><div className="donut"><span><strong>{number.format(cpvTotal)}</strong><small>CPV</small></span></div><ul>{top.map((item, index) => <li key={item.cpv_code} title={item.cpv_description ?? undefined}><i className={["navy", "teal", "gold"][index]} /><span><b>{item.cpv_code}</b><small>{item.cpv_description || "Χωρίς περιγραφή"}</small></span><b>{Math.round(item.count / denominator * 100)}%</b></li>)}{other > 0 && <li><i className="pale" />Λοιπά <b>{Math.round(other / denominator * 100)}%</b></li>}</ul></div>;
+  // "Λοιπά" is every CPV code outside the top 3, not just ranks 4-12 of the
+  // (already top-12-only) breakdown array - otherwise the slice understated
+  // how fragmented the real distribution is across thousands of codes.
+  const otherShare = Math.max(0, denominator - topSum) / denominator;
+  const colors = ["#0d4565", "#168c8c", "#dca54a"];
+  let cursor = 0;
+  const stops = top.map((item, index) => {
+    const pct = (item.count / denominator) * 100;
+    const stop = `${colors[index]} ${cursor}% ${cursor + pct}%`;
+    cursor += pct;
+    return stop;
+  });
+  stops.push(`#d6e2e7 ${cursor}% 100%`);
+  return <div className="donutWrap"><div className="donut" style={{ background: `conic-gradient(${stops.join(",")})` }}><span><strong>{number.format(cpvTotal)}</strong><small>CPV</small></span></div><ul>{top.map((item, index) => <li key={item.cpv_code} title={item.cpv_description ?? undefined}><i className={["navy", "teal", "gold"][index]} /><span><b>{item.cpv_code}</b><small>{item.cpv_description || "Χωρίς περιγραφή"}</small></span><b>{Math.round(item.count / denominator * 100)}%</b></li>)}{otherShare > 0 && <li><i className="pale" />Λοιπά ({number.format(Math.max(0, cpvTotal - top.length))} κωδικοί) <b>{Math.round(otherShare * 100)}%</b></li>}</ul></div>;
 }
 
 const MONTH_NAMES = ["Ιαν","Φεβ","Μαρ","Απρ","Μαϊ","Ιουν","Ιουλ","Αυγ","Σεπ","Οκτ","Νοε","Δεκ"];
