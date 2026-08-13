@@ -419,7 +419,7 @@ function MultiSearchInput({ label, type, values, onChange, placeholder }: {
   </div>;
 }
 
-type ContractorSummary = { name: string; tenders: number; contracts: number; authorities: number; value: number };
+type ContractorSummary = { key: string; name: string; tenders: number; contracts: number; authorities: number; value: number };
 
 const CONTRACTOR_ALIASES: Record<string, string> = { PWC: "PRICEWATERHOUSECOOPERS", EY: "ERNST" };
 
@@ -443,15 +443,23 @@ function MarketPanel({ awards, contracts, cpv, setCpv, contractor, authority, qu
   const relevantAwards = awards.filter((item) => matchesCpv(item) && matchesContractor(item.contractor));
   const relevantContracts = contracts.filter((item) => matchesCpv(item) && matchesContractor(item.contractor));
 
-  const byContractor = new Map<string, { name: string; tenders: Set<string>; contracts: Set<string>; authorities: Set<string>; valueByTender: Map<string, number> }>();
-  const ensure = (name: string) => {
-    let row = byContractor.get(name);
-    if (!row) { row = { name, tenders: new Set(), contracts: new Set(), authorities: new Set(), valueByTender: new Map() }; byContractor.set(name, row); }
+  // The same legal entity is often typed differently across notices ("Α.Ε." vs
+  // "AE" vs an alternate registered name in quotes) - the VAT number is the one
+  // stable identifier, so group by that and fall back to the raw name only when
+  // a record has no VAT on file.
+  type ContractorGroup = { key: string; names: Map<string, number>; tenders: Set<string>; contracts: Set<string>; authorities: Set<string>; valueByTender: Map<string, number> };
+  const byContractor = new Map<string, ContractorGroup>();
+  const groupKeyFor = (item: { contractor: string; contractorVat?: string }) => item.contractorVat?.trim() || item.contractor;
+  const ensure = (item: { contractor: string; contractorVat?: string }) => {
+    const key = groupKeyFor(item);
+    let row = byContractor.get(key);
+    if (!row) { row = { key, names: new Map(), tenders: new Set(), contracts: new Set(), authorities: new Set(), valueByTender: new Map() }; byContractor.set(key, row); }
+    row.names.set(item.contractor, (row.names.get(item.contractor) ?? 0) + 1);
     return row;
   };
   for (const item of relevantAwards) {
     if (!item.contractor || item.contractor === "Χωρίς ανάδοχο") continue;
-    const row = ensure(item.contractor);
+    const row = ensure(item);
     const tenderKey = item.noticeAdam ?? item.adam;
     row.tenders.add(tenderKey);
     row.authorities.add(item.authority);
@@ -460,7 +468,7 @@ function MarketPanel({ awards, contracts, cpv, setCpv, contractor, authority, qu
   }
   for (const item of relevantContracts) {
     if (!item.contractor || item.contractor === "Χωρίς ανάδοχο") continue;
-    const row = ensure(item.contractor);
+    const row = ensure(item);
     const tenderKey = item.noticeAdam ?? item.adam;
     row.tenders.add(tenderKey);
     row.contracts.add(item.adam);
@@ -470,7 +478,9 @@ function MarketPanel({ awards, contracts, cpv, setCpv, contractor, authority, qu
   const search = contractorSearch.trim().toLocaleLowerCase("el");
   const contractorRows: ContractorSummary[] = [...byContractor.values()]
     .map((row) => ({
-      name: row.name,
+      key: row.key,
+      // Show the spelling that shows up most often across the matched records.
+      name: [...row.names.entries()].sort((a, b) => b[1] - a[1])[0][0],
       tenders: row.tenders.size,
       contracts: row.contracts.size,
       authorities: row.authorities.size,
@@ -480,7 +490,7 @@ function MarketPanel({ awards, contracts, cpv, setCpv, contractor, authority, qu
     .sort((a, b) => b.value - a.value);
 
   const hasSelection = cpv.length > 0 || contractor.length > 0 || (authority.trim() !== "" && authority !== "Όλες") || query.trim().length > 0;
-  const selectedSummary = contractorRows.find((row) => row.name === selectedContractor);
+  const selectedSummary = contractorRows.find((row) => row.key === selectedContractor);
 
   return <>
     <article className="panel marketHero">
@@ -495,8 +505,8 @@ function MarketPanel({ awards, contracts, cpv, setCpv, contractor, authority, qu
         <div className="tableScroll"><table>
           <thead><tr><th /><th>Ανάδοχος</th><th>Διαγωνισμοί</th><th>Συμβάσεις</th><th>Συνολική αξία</th><th>Αναθέτουσες Αρχές</th></tr></thead>
           <tbody>{contractorRows.map((item) => (
-            <tr key={item.name} className={selectedContractor === item.name ? "selectedRow" : ""} onClick={() => setSelectedContractor(item.name === selectedContractor ? "" : item.name)}>
-              <td><input type="checkbox" checked={selectedContractor === item.name} readOnly /></td>
+            <tr key={item.key} className={selectedContractor === item.key ? "selectedRow" : ""} onClick={() => setSelectedContractor(item.key === selectedContractor ? "" : item.key)}>
+              <td><input type="checkbox" checked={selectedContractor === item.key} readOnly /></td>
               <td><button className="contractorLink" type="button">{item.name}</button></td>
               <td>{number.format(item.tenders)}</td>
               <td>{number.format(item.contracts)}</td>
@@ -508,10 +518,10 @@ function MarketPanel({ awards, contracts, cpv, setCpv, contractor, authority, qu
         {!contractorRows.length && <p className="noRows">Δεν βρέθηκαν αποτελέσματα για τις επιλογές σου.</p>}
       </article>
       {selectedContractor && selectedSummary && <ContractorProfile
-        name={selectedContractor}
+        name={selectedSummary.name}
         summary={selectedSummary}
-        awards={relevantAwards.filter((item) => item.contractor === selectedContractor)}
-        contracts={relevantContracts.filter((item) => item.contractor === selectedContractor)}
+        awards={relevantAwards.filter((item) => groupKeyFor(item) === selectedContractor)}
+        contracts={relevantContracts.filter((item) => groupKeyFor(item) === selectedContractor)}
         onClose={() => setSelectedContractor("")}
       />}
     </>}
