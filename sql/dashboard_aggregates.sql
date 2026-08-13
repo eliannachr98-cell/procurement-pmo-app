@@ -69,7 +69,13 @@ begin
           when m.cancelled_at is not null or m.raw_status = 'cancelled' then 'Ακυρωμένος'
           when hc.adam is not null then 'Ολοκληρωμένος'
           when ha.adam is not null then 'Ανατεθειμένος'
-          when m.opening_at is not null and m.opening_at < now() then 'Αξιολόγηση'
+          -- A raw opening_at earlier than publication_date is bad source
+          -- data, not a real passed deadline (the app-side route applies
+          -- the same guard before showing/using this date) - without it, a
+          -- notice with no real deadline recorded could still get bucketed
+          -- into Αξιολόγηση just because the bogus date is trivially "in
+          -- the past".
+          when m.opening_at is not null and m.opening_at >= m.publication_date and m.opening_at < now() then 'Αξιολόγηση'
           else 'Ενεργός'
         end as status
       from matched m
@@ -237,7 +243,13 @@ begin
           when m.cancelled_at is not null or m.raw_status = 'cancelled' then 'Ακυρωμένος'
           when hc.adam is not null then 'Ολοκληρωμένος'
           when ha.adam is not null then 'Ανατεθειμένος'
-          when m.opening_at is not null and m.opening_at < now() then 'Αξιολόγηση'
+          -- A raw opening_at earlier than publication_date is bad source
+          -- data, not a real passed deadline (the app-side route applies
+          -- the same guard before showing/using this date) - without it, a
+          -- notice with no real deadline recorded could still get bucketed
+          -- into Αξιολόγηση just because the bogus date is trivially "in
+          -- the past".
+          when m.opening_at is not null and m.opening_at >= m.publication_date and m.opening_at < now() then 'Αξιολόγηση'
           else 'Ενεργός'
         end as status
       from matched m
