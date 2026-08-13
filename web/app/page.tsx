@@ -289,7 +289,11 @@ function StatusBars({ counts }: { counts: { status: string; count: number }[] })
   const statuses: Status[] = ["Ενεργός", "Αξιολόγηση", "Ανατεθειμένος", "Ολοκληρωμένος", "Ακυρωμένος"];
   const byStatus = new Map(counts.map((item) => [item.status, item.count]));
   const maximum = Math.max(1, ...statuses.map((item) => byStatus.get(item) ?? 0));
-  return <div className="bars">{statuses.map((item) => { const count = byStatus.get(item) ?? 0; return <div className="barRow" key={item}><span>{item}</span><div><i className={statusTone[item]} style={{ width: `${(count / maximum) * 100}%` }} /></div><strong>{number.format(count)}</strong></div>; })}</div>;
+  // Ανατεθειμένος/Αξιολόγηση dwarf Ολοκληρωμένος/Ακυρωμένος by two orders of
+  // magnitude, so a plain linear width made the smaller categories an
+  // invisible sliver even though their real count is non-zero - give every
+  // non-zero bar a floor so it stays visible, the count text is the exact figure.
+  return <div className="bars">{statuses.map((item) => { const count = byStatus.get(item) ?? 0; const width = count === 0 ? 0 : Math.max((count / maximum) * 100, 3); return <div className="barRow" key={item}><span>{item}</span><div><i className={statusTone[item]} style={{ width: `${width}%` }} /></div><strong>{number.format(count)}</strong></div>; })}</div>;
 }
 
 function CpvDonut({ counts, total }: { counts: { cpv_code: string; cpv_description: string | null; count: number }[]; total: number }) {
