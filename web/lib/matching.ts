@@ -102,9 +102,15 @@ function contractorSearchTerm(value: string) {
 }
 
 export async function procurementAdamsForContractor(term: string) {
-  const value = encodeURIComponent(`*${contractorSearchTerm(term)}*`);
+  // A Greek VAT number (ΑΦΜ) is 9 digits and identifies the legal entity
+  // precisely - matching on it avoids the name-substring approach missing
+  // variants ("Α.Ε." vs "AE", alternate registered names, etc).
+  const trimmed = term.trim();
+  const filter = /^\d{9}$/.test(trimmed)
+    ? `contractor_vat=eq.${encodeURIComponent(trimmed)}`
+    : `contractor_name=ilike.${encodeURIComponent(`*${contractorSearchTerm(trimmed)}*`)}`;
   const contractors = await allRows<ContractorRow>(
-    `record_contractors_compact?select=record_type,record_adam&contractor_name=ilike.${value}`,
+    `record_contractors_compact?select=record_type,record_adam&${filter}`,
   );
   const awardAdams = contractors.filter((row) => row.record_type === "award").map((row) => row.record_adam);
   const directContractAdams = contractors.filter((row) => row.record_type === "contract").map((row) => row.record_adam);

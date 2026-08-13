@@ -59,10 +59,57 @@ export async function GET(request: Request) {
       };
       if (brands[brand]) return NextResponse.json({ options: [brands[brand]] });
       const contractorValue = encodeURIComponent(`*${contractorSearchTerm(query)}*`);
-      const rows = await supabaseRows<{ contractor_name: string }>(
-        `record_contractors_compact?select=contractor_name&contractor_name=ilike.${contractorValue}&limit=60`,
+      const rows = await supabaseRows<{ contractor_name: string; contractor_vat: string | null }>(
+        `record_contractors_compact?select=contractor_name,contractor_vat&contractor_name=ilike.${contractorValue}&limit=200`,
       );
-      return NextResponse.json({ options: [...new Set(rows.map((row) => row.contractor_name).filter(Boolean))].sort((a, b) => a.localeCompare(b, "el")).slice(0, 20) });
+      // The same company is typed many different ways across notices, so
+      // group by VAT (the stable identifier) and merge groups that share an
+      // exact name string across a mistyped VAT, same as the market table.
+      type Group = { key: string; names: Map<string, number> };
+      const groups = new Map<string, Group>();
+      const groupKeyFor = (row: { contractor_name: string; contractor_vat: string | null }) => row.contractor_vat?.trim() || row.contractor_name;
+      for (const row of rows) {
+        if (!row.contractor_name) continue;
+        const key = groupKeyFor(row);
+        let group = groups.get(key);
+        if (!group) { group = { key, names: new Map() }; groups.set(key, group); }
+        group.names.set(row.contractor_name, (group.names.get(row.contractor_name) ?? 0) + 1);
+      }
+      const parent = new Map<string, string>();
+      const find = (key: string): string => {
+        let root = key;
+        while (parent.has(root) && parent.get(root) !== root) root = parent.get(root)!;
+        return root;
+      };
+      for (const key of groups.keys()) parent.set(key, key);
+      const nameOwner = new Map<string, string>();
+      for (const [key, group] of groups) {
+        for (const name of group.names.keys()) {
+          const owner = nameOwner.get(name);
+          if (!owner) { nameOwner.set(name, key); continue; }
+          const rootA = find(owner);
+          const rootB = find(key);
+          if (rootA !== rootB) parent.set(rootB, rootA);
+        }
+      }
+      const merged = new Map<string, Map<string, number>>();
+      for (const [key, group] of groups) {
+        const root = find(key);
+        let names = merged.get(root);
+        if (!names) { names = new Map(); merged.set(root, names); }
+        for (const [name, count] of group.names) names.set(name, (names.get(name) ?? 0) + count);
+      }
+      const options = [...merged.entries()]
+        .map(([key, names]) => {
+          const sorted = [...names.entries()].sort((a, b) => b[1] - a[1]);
+          const canonicalName = sorted[0][0];
+          const isVat = /^\d{9}$/.test(key);
+          return { value: isVat ? key : canonicalName, label: canonicalName, total: sorted.reduce((sum, [, count]) => sum + count, 0) };
+        })
+        .sort((a, b) => b.total - a.total)
+        .slice(0, 20)
+        .map(({ value, label }) => ({ value, label }));
+      return NextResponse.json({ options });
     }
 
     if (type === "cpv") {

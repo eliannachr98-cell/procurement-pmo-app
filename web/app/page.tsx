@@ -380,6 +380,9 @@ function MultiSearchInput({ label, type, values, onChange, placeholder }: {
   const [text, setText] = useState("");
   const [options, setOptions] = useState<SearchOption[]>([]);
   const [searching, setSearching] = useState(false);
+  // Contractor values are sometimes a VAT number (to match precisely), not a
+  // readable name, so chips need their own label separate from the filter value.
+  const [labelByValue, setLabelByValue] = useState<Record<string, string>>({});
 
   useEffect(() => {
     const query = text.trim();
@@ -403,13 +406,14 @@ function MultiSearchInput({ label, type, values, onChange, placeholder }: {
 
   const select = (option: SearchOption) => {
     if (!values.includes(option.value)) onChange([...values, option.value]);
+    setLabelByValue((current) => ({ ...current, [option.value]: option.label }));
     setText("");
     setOptions([]);
   };
 
   return <div className="multiSearch"><span className="multiSearchLabel">{label}{values.length > 0 && <span className="multiSearchCount">{values.length} επιλεγμέν{values.length === 1 ? "ος" : "οι"}</span>}</span>
     <div className="multiBox">
-      {values.map((value) => <span className="filterChip" key={value}>{value}<button type="button" aria-label={`Αφαίρεση ${value}`} onClick={() => onChange(values.filter((item) => item !== value))}>×</button></span>)}
+      {values.map((value) => <span className="filterChip" key={value}>{labelByValue[value] ?? value}<button type="button" aria-label={`Αφαίρεση ${labelByValue[value] ?? value}`} onClick={() => onChange(values.filter((item) => item !== value))}>×</button></span>)}
       <input value={text} onChange={(event) => setText(event.target.value)} placeholder={values.length ? "Πρόσθεσε ακόμη μία επιλογή" : placeholder} autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false} />
     </div>
     {(searching || options.length > 0) && <div className="suggestions">
@@ -433,15 +437,20 @@ function MarketPanel({ awards, contracts, cpv, setCpv, contractor, authority, qu
     !cpvTerms.length || cpvTerms.some((term) => `${item.cpv} ${item.cpvDescription}`.toLocaleLowerCase("el").includes(term));
   // A framework agreement's award/contract record can list several co-suppliers
   // together, so matching by CPV alone would also pull in unrelated companies
-  // that merely share the same framework as the searched contractor.
-  const contractorTerms = contractor.map((item) => {
-    const upper = item.trim().toLocaleUpperCase("en-US");
-    return (CONTRACTOR_ALIASES[upper] ?? item).toLocaleLowerCase("el");
+  // that merely share the same framework as the searched contractor. A filter
+  // value is either a VAT number (exact identity) or a free-text/brand name.
+  const contractorFilters = contractor.map((item) => {
+    const trimmed = item.trim();
+    if (/^\d{9}$/.test(trimmed)) return { vat: trimmed } as const;
+    const upper = trimmed.toLocaleUpperCase("en-US");
+    return { name: (CONTRACTOR_ALIASES[upper] ?? trimmed).toLocaleLowerCase("el") } as const;
   });
-  const matchesContractor = (name: string) =>
-    !contractorTerms.length || contractorTerms.some((term) => name.toLocaleLowerCase("el").includes(term));
-  const relevantAwards = awards.filter((item) => matchesCpv(item) && matchesContractor(item.contractor));
-  const relevantContracts = contracts.filter((item) => matchesCpv(item) && matchesContractor(item.contractor));
+  const matchesContractor = (item: { contractor: string; contractorVat?: string }) =>
+    !contractorFilters.length || contractorFilters.some((filter) =>
+      "vat" in filter ? item.contractorVat === filter.vat : item.contractor.toLocaleLowerCase("el").includes(filter.name),
+    );
+  const relevantAwards = awards.filter((item) => matchesCpv(item) && matchesContractor(item));
+  const relevantContracts = contracts.filter((item) => matchesCpv(item) && matchesContractor(item));
 
   // The same legal entity is often typed differently across notices ("Α.Ε." vs
   // "AE" vs an alternate registered name in quotes) - the VAT number is the one
@@ -475,8 +484,43 @@ function MarketPanel({ awards, contracts, cpv, setCpv, contractor, authority, qu
     row.authorities.add(item.authority);
     row.valueByTender.set(tenderKey, item.value);
   }
+
+  // Some notices record the exact same contractor name under a different
+  // (mistyped) VAT. When a literal name string is shared by more than one VAT
+  // group, they almost certainly refer to the same real company - fold them
+  // together instead of keeping the stray VAT typo as its own row.
+  const parent = new Map<string, string>();
+  const find = (key: string): string => {
+    let root = key;
+    while (parent.has(root) && parent.get(root) !== root) root = parent.get(root)!;
+    return root;
+  };
+  for (const key of byContractor.keys()) parent.set(key, key);
+  const nameOwner = new Map<string, string>();
+  for (const [key, row] of byContractor) {
+    for (const nameSeen of row.names.keys()) {
+      const owner = nameOwner.get(nameSeen);
+      if (!owner) { nameOwner.set(nameSeen, key); continue; }
+      const rootA = find(owner);
+      const rootB = find(key);
+      if (rootA !== rootB) parent.set(rootB, rootA);
+    }
+  }
+  const resolvedKeyFor = (item: { contractor: string; contractorVat?: string }) => find(groupKeyFor(item));
+  const mergedGroups = new Map<string, ContractorGroup>();
+  for (const [key, row] of byContractor) {
+    const root = find(key);
+    let target = mergedGroups.get(root);
+    if (!target) { target = { key: root, names: new Map(), tenders: new Set(), contracts: new Set(), authorities: new Set(), valueByTender: new Map() }; mergedGroups.set(root, target); }
+    for (const [nameSeen, count] of row.names) target.names.set(nameSeen, (target.names.get(nameSeen) ?? 0) + count);
+    for (const item of row.tenders) target.tenders.add(item);
+    for (const item of row.contracts) target.contracts.add(item);
+    for (const item of row.authorities) target.authorities.add(item);
+    for (const [tenderKey, amount] of row.valueByTender) if (!target.valueByTender.has(tenderKey)) target.valueByTender.set(tenderKey, amount);
+  }
+
   const search = contractorSearch.trim().toLocaleLowerCase("el");
-  const contractorRows: ContractorSummary[] = [...byContractor.values()]
+  const contractorRows: ContractorSummary[] = [...mergedGroups.values()]
     .map((row) => ({
       key: row.key,
       // Show the spelling that shows up most often across the matched records.
@@ -520,8 +564,8 @@ function MarketPanel({ awards, contracts, cpv, setCpv, contractor, authority, qu
       {selectedContractor && selectedSummary && <ContractorProfile
         name={selectedSummary.name}
         summary={selectedSummary}
-        awards={relevantAwards.filter((item) => groupKeyFor(item) === selectedContractor)}
-        contracts={relevantContracts.filter((item) => groupKeyFor(item) === selectedContractor)}
+        awards={relevantAwards.filter((item) => resolvedKeyFor(item) === selectedContractor)}
+        contracts={relevantContracts.filter((item) => resolvedKeyFor(item) === selectedContractor)}
         onClose={() => setSelectedContractor("")}
       />}
     </>}
