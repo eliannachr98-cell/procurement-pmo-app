@@ -11,9 +11,9 @@ export const dynamic = "force-dynamic";
 
 type Breakdown = {
   total: number;
-  status: { status: string; count: number }[];
+  status: { status: string; count: number; budget: number }[];
   cpv: { cpv_code: string; cpv_description: string | null; count: number }[];
-  nuts: { nuts_name: string; count: number }[];
+  nuts: { nuts_code: string; nuts_name: string; count: number }[];
 };
 
 export async function GET(request: Request) {

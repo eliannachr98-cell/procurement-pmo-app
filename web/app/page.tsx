@@ -80,9 +80,9 @@ const euro = new Intl.NumberFormat("el-GR", { style: "currency", currency: "EUR"
 
 type DashboardBreakdown = {
   total: number;
-  status: { status: string; count: number }[];
+  status: { status: string; count: number; budget: number }[];
   cpv: { cpv_code: string; cpv_description: string | null; count: number }[];
-  nuts: { nuts_name: string; count: number }[];
+  nuts: { nuts_code: string; nuts_name: string; count: number }[];
 };
 const emptyDashboard: DashboardBreakdown = { total: 0, status: [], cpv: [], nuts: [] };
 
@@ -206,6 +206,8 @@ export default function Home() {
     ["decision", "Απόφαση / έγκριση"],
   ];
   const statusCount = (value: Status) => dashboard.status.find((item) => item.status === value)?.count ?? 0;
+  const statusBudget = (value: Status) => dashboard.status.find((item) => item.status === value)?.budget ?? 0;
+  const totalBudget = dashboard.status.reduce((sum, item) => sum + item.budget, 0);
 
   return (
     <main className="shell">
@@ -234,11 +236,11 @@ export default function Home() {
 
           {page === "overview" && <>
             <div className="metrics">
-              <Metric label="Διαγωνισμοί" value={number.format(dashboard.total)} tone="sky" />
-              <Metric label="Ενεργοί" value={number.format(statusCount("Ενεργός"))} tone="mint" />
-              <Metric label="Σε αξιολόγηση" value={number.format(statusCount("Αξιολόγηση"))} tone="sand" />
-              <Metric label="Ανατεθειμένοι" value={number.format(statusCount("Ανατεθειμένος"))} tone="lilac" />
-              <Metric label="Συνολικός Π/Υ (τρέχουσα σελίδα)" value={euro.format(filtered.reduce((sum, item) => sum + item.budget, 0))} tone="sage" />
+              <Metric label="Διαγωνισμοί" value={number.format(dashboard.total)} sub={`Π/Υ ${euro.format(totalBudget)}`} tone="sky" />
+              <Metric label="Ενεργοί" value={number.format(statusCount("Ενεργός"))} sub={`Π/Υ ${euro.format(statusBudget("Ενεργός"))}`} tone="mint" />
+              <Metric label="Σε αξιολόγηση" value={number.format(statusCount("Αξιολόγηση"))} sub={`Π/Υ ${euro.format(statusBudget("Αξιολόγηση"))}`} tone="sand" />
+              <Metric label="Ανατεθειμένοι" value={number.format(statusCount("Ανατεθειμένος"))} sub={`Π/Υ ${euro.format(statusBudget("Ανατεθειμένος"))}`} tone="lilac" />
+              <Metric label="Ολοκληρωμένοι + Ακυρωμένοι" value={number.format(statusCount("Ολοκληρωμένος") + statusCount("Ακυρωμένος"))} sub={`Π/Υ ${euro.format(statusBudget("Ολοκληρωμένος") + statusBudget("Ακυρωμένος"))}`} tone="sage" />
             </div>
             <div className="chartGrid">
               <article className="panel"><PanelHeader title="Διαγωνισμοί ανά στάδιο" caption={`Σύνολο ${number.format(dashboard.total)} διαγωνισμών`} /><StatusBars counts={dashboard.status} /></article>
@@ -277,8 +279,8 @@ export default function Home() {
   );
 }
 
-function Metric({ label, value, tone }: { label: string; value: string; tone: string }) {
-  return <article className={`metric ${tone}`}><span>{label}</span><strong>{value}</strong></article>;
+function Metric({ label, value, sub, tone }: { label: string; value: string; sub?: string; tone: string }) {
+  return <article className={`metric ${tone}`}><span>{label}</span><strong>{value}</strong>{sub && <small>{sub}</small>}</article>;
 }
 
 function PanelHeader({ title, caption }: { title: string; caption: string }) {
@@ -320,21 +322,69 @@ function TenderDetail({ tender, onBack }: { tender: Tender; onBack: () => void }
   return <article className="panel tenderDetail"><button className="back" onClick={onBack}>← Πίσω στη λίστα</button><p className="eyebrow">ΚΑΡΤΕΛΑ ΔΙΑΓΩΝΙΣΜΟΥ</p><h2>{tender.title}</h2><p className="detailMeta">{tender.adam} · {tender.authority} · {tender.cpv} {tender.cpvDescription}</p><div className="detailMetrics"><Metric label="Προϋπολογισμός" value={euro.format(tender.budget)} tone="sky" /><Metric label="Αξία ανάθεσης" value={euro.format(tender.awardValue ?? 0)} tone="sand" /><Metric label="Αξία σύμβασης" value={euro.format(tender.contractValue ?? 0)} tone="mint" /></div><section className="gantt"><h3>Χρονοδιάγραμμα διαγωνισμού</h3>{milestones.map(([label,date], index) => <div className="ganttRow" key={`${label}-${date}`}><span>{label}</span><div><i style={{left:`${((new Date(date).getTime()-start)/span)*88}%`,width:index === milestones.length-1 ? "12%" : `${Math.max(8,((new Date(milestones[Math.min(index+1,milestones.length-1)][1]).getTime()-new Date(date).getTime())/span)*88)}%`}} /></div><time>{formatDate(date)}</time></div>)}</section><div className="detailFacts"><p><b>Ανάδοχος:</b> {tender.contractors?.join(", ") || "Δεν έχει καταχωριστεί"}</p><p><b>Τύπος διαδικασίας:</b> {tender.procedureType || "—"}</p><p><b>NUTS:</b> {[tender.nutsCode,tender.nutsName].filter(Boolean).join(" · ") || "—"}</p></div></article>;
 }
 
-function NutsMap({ counts }: { counts: { nuts_name: string; count: number }[] }) {
+function NutsMap({ counts }: { counts: { nuts_code: string; nuts_name: string; count: number }[] }) {
   const regions = [...counts].sort((a, b) => b.count - a.count);
   const total = regions.reduce((sum, item) => sum + item.count, 0);
   const max = Math.max(1, ...regions.map((item) => item.count));
-  return <article className="panel nutsPanel"><PanelHeader title="Διαγωνισμοί ανά NUTS" caption={`${number.format(total)} διαγωνισμοί με τα τρέχοντα φίλτρα`} /><div className="nutsMap"><div className="realMap"><iframe title="Χάρτης Ελλάδας" loading="lazy" src="https://www.openstreetmap.org/export/embed.html?bbox=18.4%2C34.4%2C30.4%2C42.2&amp;layer=mapnik" />{regions.slice(0,12).map((item,index) => { const [left,top] = mapPosition(item.nuts_name,index); return <span className="mapPin" key={item.nuts_name} style={{left:`${left}%`,top:`${top}%`,width:`${22+(item.count/max)*20}px`,height:`${22+(item.count/max)*20}px`}}><b>{item.count}</b><span className="mapTooltip"><strong>{item.nuts_name}</strong><em>{item.count} διαγωνισμοί</em></span></span>; })}<a className="mapCredit" href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">© OpenStreetMap</a></div><div className="nutsLegend">{regions.slice(0,10).map((item) => <div key={item.nuts_name}><span title={item.nuts_name}>{item.nuts_name}</span><i><b style={{width:`${(item.count/max)*100}%`}} /></i><strong>{number.format(item.count)}</strong></div>)}</div></div></article>;
+  // The generic whole-country code ("EL", used when a notice carries no
+  // region more specific than "ΕΛΛΑΔΑ") has no real single location - it
+  // stays in the legend/count but isn't placed as a pin.
+  const pins = regions.map((item) => ({ item, position: nutsPosition(item.nuts_code) })).filter((row): row is { item: typeof regions[number]; position: [number, number] } => row.position !== null).slice(0, 12);
+  return <article className="panel nutsPanel"><PanelHeader title="Διαγωνισμοί ανά NUTS" caption={`${number.format(total)} διαγωνισμοί με τα τρέχοντα φίλτρα`} /><div className="nutsMap"><div className="realMap"><iframe title="Χάρτης Ελλάδας" loading="lazy" src="https://www.openstreetmap.org/export/embed.html?bbox=18.4%2C34.4%2C30.4%2C42.2&amp;layer=mapnik" />{pins.map(({ item, position: [left, top] }) => <span className="mapPin" key={item.nuts_code} style={{left:`${left}%`,top:`${top}%`,width:`${22+(item.count/max)*20}px`,height:`${22+(item.count/max)*20}px`}}><b>{item.count}</b><span className="mapTooltip"><strong>{item.nuts_name}</strong><em>{item.count} διαγωνισμοί</em></span></span>)}<a className="mapCredit" href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">© OpenStreetMap</a></div><div className="nutsLegend">{regions.slice(0,10).map((item) => <div key={item.nuts_code}><span title={item.nuts_name}>{item.nuts_name}</span><i><b style={{width:`${(item.count/max)*100}%`}} /></i><strong>{number.format(item.count)}</strong></div>)}</div></div></article>;
 }
 
-function mapPosition(name: string, index: number): [number, number] {
-  const value = name.toLocaleLowerCase("el");
-  if (value.includes("θεσσαλον")) return [47,22]; if (value.includes("μακεδον") || value.includes("δράμα") || value.includes("έβρ")) return [58,16];
-  if (value.includes("αθην") || value.includes("αττικ")) return [48,59]; if (value.includes("πειρ")) return [45,64];
-  if (value.includes("κρήτ") || value.includes("χανι")) return [48,88]; if (value.includes("εύβ")) return [53,49];
-  if (value.includes("αχα") || value.includes("πάτρ")) return [34,65]; if (value.includes("κοριν")) return [41,62];
-  if (value.includes("θεσσαλ")) return [43,39]; if (value.includes("νησ") || value.includes("αιγα")) return [70,61];
-  return [[36,31],[54,35],[38,51],[62,43],[51,72]][index % 5] as [number,number];
+// Approximate centroid [lat, lon] per Greek NUTS unit (official 2021
+// classification, down to NUTS3 where the source data provides it, with
+// NUTS2/NUTS1-level fallbacks since KHMDHS notices don't always carry full
+// NUTS3 precision). "EL" itself is the generic whole-country code notices
+// fall back to when nothing more specific was recorded - it has no real
+// single location, so it's deliberately left out and shown in the legend
+// only, not plotted as a pin.
+const NUTS_COORDS: Record<string, [number, number]> = {
+  EL3: [38.0, 23.7], EL30: [38.0, 23.7],
+  EL301: [38.05, 23.80], EL302: [38.02, 23.68], EL303: [37.98, 23.73], EL304: [37.93, 23.70],
+  EL305: [38.05, 23.95], EL306: [38.05, 23.55], EL307: [37.94, 23.65],
+  EL4: [37.0, 25.5],
+  EL41: [39.0, 26.0], EL411: [39.10, 26.55], EL412: [37.75, 26.85], EL413: [38.37, 26.13],
+  EL42: [37.0, 26.5], EL421: [36.40, 27.15], EL422: [37.05, 25.30],
+  EL43: [35.3, 24.8], EL431: [35.34, 25.13], EL432: [35.19, 25.72], EL433: [35.37, 24.47], EL434: [35.51, 24.02],
+  EL5: [40.7, 22.9],
+  EL51: [41.1, 25.0], EL511: [41.13, 26.35], EL512: [41.13, 24.89], EL513: [41.12, 25.40], EL514: [41.15, 24.15], EL515: [40.94, 24.40],
+  EL52: [40.6, 22.9], EL521: [40.52, 22.20], EL522: [40.64, 22.94], EL523: [40.99, 22.87], EL524: [40.76, 22.05], EL525: [40.28, 22.50], EL526: [41.09, 23.55], EL527: [40.35, 23.40],
+  EL53: [40.3, 21.5], EL531: [40.09, 21.43], EL532: [40.52, 21.27], EL533: [40.30, 21.79], EL534: [40.78, 21.40],
+  EL54: [39.6, 20.8], EL541: [39.16, 20.99], EL542: [39.55, 20.30], EL543: [39.66, 20.85], EL544: [38.96, 20.75],
+  EL6: [38.7, 22.5],
+  EL61: [39.5, 22.4], EL611: [39.40, 21.85], EL612: [39.64, 22.42], EL613: [39.36, 22.95], EL614: [39.90, 22.40],
+  EL62: [38.3, 20.6], EL621: [37.79, 20.90], EL622: [39.62, 19.92], EL623: [38.18, 20.57], EL624: [38.71, 20.65],
+  EL63: [38.2, 21.5], EL631: [38.63, 21.42], EL632: [38.25, 21.73], EL633: [37.68, 21.42],
+  EL64: [38.6, 23.0], EL641: [38.37, 23.30], EL642: [38.46, 23.60], EL643: [38.90, 21.62], EL644: [38.90, 22.43], EL645: [38.48, 22.10],
+  EL65: [37.5, 22.4], EL651: [37.50, 22.60], EL652: [37.94, 22.93], EL653: [37.00, 22.20], EL654: [37.30, 22.10],
+};
+
+// The embedded map's OSM export renders in standard Web Mercator, so a plain
+// linear map from latitude to the pin's vertical position would drift
+// noticeably over Greece's ~8 degree latitude span - project both the pin
+// and the bbox edges through the same Mercator transform first.
+const mercatorY = (lat: number) => Math.log(Math.tan(Math.PI / 4 + (lat * Math.PI) / 180 / 2));
+const MAP_BBOX = { minLon: 18.4, maxLon: 30.4, minLat: 34.4, maxLat: 42.2 };
+const MAP_MERCATOR_TOP = mercatorY(MAP_BBOX.maxLat);
+const MAP_MERCATOR_SPAN = MAP_MERCATOR_TOP - mercatorY(MAP_BBOX.minLat);
+
+function nutsPosition(code: string): [number, number] | null {
+  // Prefer the most specific match, then fall back one NUTS level at a time
+  // (EL421 -> EL42 -> EL4) until something in the table matches.
+  let key = code;
+  while (key.length >= 3) {
+    const coords = NUTS_COORDS[key];
+    if (coords) {
+      const [lat, lon] = coords;
+      const left = ((lon - MAP_BBOX.minLon) / (MAP_BBOX.maxLon - MAP_BBOX.minLon)) * 100;
+      const top = ((MAP_MERCATOR_TOP - mercatorY(lat)) / MAP_MERCATOR_SPAN) * 100;
+      return [left, top];
+    }
+    key = key.slice(0, -1);
+  }
+  return null;
 }
 
 function CheckboxDropdown({ label, options, values, onChange }: {
