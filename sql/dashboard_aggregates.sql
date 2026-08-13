@@ -1,5 +1,6 @@
 -- Server-side aggregates for the Overview dashboard (status breakdown, CPV
--- distribution, NUTS distribution) and the Έτος filter's year list.
+-- distribution, NUTS distribution, monthly trend) and the Έτος filter's
+-- year list.
 --
 -- Both the dashboard charts and the year dropdown previously derived their
 -- numbers from whatever ~100 rows happened to be loaded in the browser for
@@ -42,7 +43,7 @@ begin
   for target_year in select year from public.available_years() union all select null loop
     with matched as (
       select p.adam, p.opening_at, p.cancelled_at, p.status as raw_status,
-             p.nuts_name, p.nuts_code,
+             p.nuts_name, p.nuts_code, p.publication_date,
              coalesce(p.budget_inc_vat, p.budget_ex_vat, p.budget_unknown_vat, 0) as budget
       from public.procurements_compact p
       -- Only count original tender notices, not follow-up documents
@@ -63,7 +64,7 @@ begin
       where c.procurement_adam in (select adam from matched)
     ),
     status_calc as (
-      select m.adam, m.nuts_name, m.nuts_code, m.budget,
+      select m.adam, m.nuts_name, m.nuts_code, m.budget, m.publication_date,
         case
           when m.cancelled_at is not null or m.raw_status = 'cancelled' then 'Ακυρωμένος'
           when hc.adam is not null then 'Ολοκληρωμένος'
@@ -99,12 +100,20 @@ begin
       group by 1
       order by n desc
       limit 20
+    ),
+    monthly_agg as (
+      select to_char(date_trunc('month', publication_date), 'YYYY-MM') as month, count(*) as n, sum(budget) as budget
+      from status_calc
+      where publication_date is not null
+      group by 1
+      order by 1
     )
     select json_build_object(
       'total', (select count(*) from matched),
       'status', (select coalesce(json_agg(json_build_object('status', status, 'count', n, 'budget', budget)), '[]'::json) from status_agg),
       'cpv', (select coalesce(json_agg(json_build_object('cpv_code', cpv_code, 'cpv_description', cpv_description, 'count', n)), '[]'::json) from cpv_agg),
-      'nuts', (select coalesce(json_agg(json_build_object('nuts_code', nuts_code, 'nuts_name', nuts_name, 'count', n)), '[]'::json) from nuts_agg)
+      'nuts', (select coalesce(json_agg(json_build_object('nuts_code', nuts_code, 'nuts_name', nuts_name, 'count', n)), '[]'::json) from nuts_agg),
+      'monthly', (select coalesce(json_agg(json_build_object('month', month, 'count', n, 'budget', budget)), '[]'::json) from monthly_agg)
     )
     into result;
 
@@ -181,7 +190,7 @@ begin
   sql_text := $sql1$
     with matched as (
       select p.adam, p.opening_at, p.cancelled_at, p.status as raw_status,
-             p.nuts_name, p.nuts_code,
+             p.nuts_name, p.nuts_code, p.publication_date,
              coalesce(p.budget_inc_vat, p.budget_ex_vat, p.budget_unknown_vat, 0) as budget
       from public.procurements_compact p
   $sql1$ || where_sql || $sql2$
@@ -197,7 +206,7 @@ begin
       where c.procurement_adam in (select adam from matched)
     ),
     status_calc as (
-      select m.adam, m.nuts_name, m.nuts_code, m.budget,
+      select m.adam, m.nuts_name, m.nuts_code, m.budget, m.publication_date,
         case
           when m.cancelled_at is not null or m.raw_status = 'cancelled' then 'Ακυρωμένος'
           when hc.adam is not null then 'Ολοκληρωμένος'
@@ -229,12 +238,20 @@ begin
       group by 1
       order by n desc
       limit 20
+    ),
+    monthly_agg as (
+      select to_char(date_trunc('month', publication_date), 'YYYY-MM') as month, count(*) as n, sum(budget) as budget
+      from status_calc
+      where publication_date is not null
+      group by 1
+      order by 1
     )
     select json_build_object(
       'total', (select count(*) from matched),
       'status', (select coalesce(json_agg(json_build_object('status', status, 'count', n, 'budget', budget)), '[]'::json) from status_agg),
       'cpv', (select coalesce(json_agg(json_build_object('cpv_code', cpv_code, 'cpv_description', cpv_description, 'count', n)), '[]'::json) from cpv_agg),
-      'nuts', (select coalesce(json_agg(json_build_object('nuts_code', nuts_code, 'nuts_name', nuts_name, 'count', n)), '[]'::json) from nuts_agg)
+      'nuts', (select coalesce(json_agg(json_build_object('nuts_code', nuts_code, 'nuts_name', nuts_name, 'count', n)), '[]'::json) from nuts_agg),
+      'monthly', (select coalesce(json_agg(json_build_object('month', month, 'count', n, 'budget', budget)), '[]'::json) from monthly_agg)
     )
   $sql2$;
 
