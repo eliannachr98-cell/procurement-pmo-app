@@ -338,10 +338,20 @@ function CpvDonut({ counts, total }: { counts: { cpv_code: string; cpv_descripti
   return <div className="donutWrap"><div className="donut"><span><strong>{number.format(counts.length)}</strong><small>CPV</small></span></div><ul>{top.map((item, index) => <li key={item.cpv_code} title={item.cpv_description ?? undefined}><i className={["navy", "teal", "gold"][index]} /><span><b>{item.cpv_code}</b><small>{item.cpv_description || "Χωρίς περιγραφή"}</small></span><b>{Math.round(item.count / denominator * 100)}%</b></li>)}{other > 0 && <li><i className="pale" />Λοιπά <b>{Math.round(other / denominator * 100)}%</b></li>}</ul></div>;
 }
 
+const MONTH_NAMES = ["Ιαν","Φεβ","Μαρ","Απρ","Μαϊ","Ιουν","Ιουλ","Αυγ","Σεπ","Οκτ","Νοε","Δεκ"];
+
 function monthLabel(ym: string) {
   const [year, month] = ym.split("-");
-  const names = ["Ιαν","Φεβ","Μαρ","Απρ","Μαϊ","Ιουν","Ιουλ","Αυγ","Σεπ","Οκτ","Νοε","Δεκ"];
-  return `${names[Number(month) - 1] ?? month} '${year.slice(2)}`;
+  return `${MONTH_NAMES[Number(month) - 1] ?? month} '${year.slice(2)}`;
+}
+
+// A horizontal axis label needs to stay short enough for ~20 narrow columns
+// to sit side by side without overlapping - just the month name, with the
+// year spelled out only at each January where the year actually changes.
+function shortMonthLabel(ym: string) {
+  const [year, month] = ym.split("-");
+  const name = MONTH_NAMES[Number(month) - 1] ?? month;
+  return month === "01" ? `${name} '${year.slice(2)}` : name;
 }
 
 function MonthlyTable({ months }: { months: { month: string; count: number; budget: number; authorities: number; cpv: number }[] }) {
@@ -373,7 +383,7 @@ function MonthlyBarChart({ months, metric, formatValue, unitLabel }: {
       <div className="monthlyBarTrack">
         <div className="monthlyBar" style={{ height: `${Math.max((item[metric] / maximum) * 100, 2)}%` }} title={`${monthLabel(item.month)}: ${formatValue(item[metric])} ${unitLabel}`} />
       </div>
-      <span className="monthlyBarLabel">{monthLabel(item.month)}</span>
+      <span className="monthlyBarLabel">{shortMonthLabel(item.month)}</span>
     </div>)}
   </div>;
 }
