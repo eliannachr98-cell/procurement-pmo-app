@@ -251,7 +251,10 @@ export default function Home() {
               <article className="panel"><PanelHeader title="Διαγωνισμοί ανά στάδιο" caption={`Σύνολο ${number.format(dashboard.total)} διαγωνισμών`} /><StatusBars counts={dashboard.status} /></article>
               <article className="panel"><PanelHeader title="CPV Distribution" caption="Κορυφαίες κατηγορίες (σύνολο βάσης)" /><CpvDonut counts={dashboard.cpv} total={dashboard.total} /></article>
             </div>
-            <article className="panel"><PanelHeader title="Διαγωνισμοί ανά μήνα" caption="Πλήθος, Π/Υ, CPV και αναθέτουσες αρχές ανά μήνα δημοσίευσης" /><MonthlyTable months={dashboard.monthly} /></article>
+            <div className="chartGrid">
+              <article className="panel"><PanelHeader title="Διαγωνισμοί ανά μήνα" caption="Πλήθος, Π/Υ, CPV και αναθέτουσες αρχές ανά μήνα δημοσίευσης" /><MonthlyTable months={dashboard.monthly} /></article>
+              <article className="panel"><PanelHeader title="Πλήθος ανά μήνα" caption="Αριθμός διαγωνισμών ανά μήνα δημοσίευσης" /><MonthlyBarChart months={dashboard.monthly} /></article>
+            </div>
             <NutsMap counts={dashboard.nuts} />
             <TenderTable rows={[...filtered].sort((a,b) => (b.publicationDate || "").localeCompare(a.publicationDate || "")).slice(0,10)} title="Πρόσφατοι διαγωνισμοί" caption="Οι 10 πιο πρόσφατες εγγραφές" onViewAll={() => setPage("tenders")} />
           </>}
@@ -334,6 +337,23 @@ function MonthlyTable({ months }: { months: { month: string; count: number; budg
       <tr className="tableTotal"><td>Σύνολο</td><td>{number.format(totals.count)}</td><td>{euro.format(totals.budget)}</td><td>—</td><td>—</td></tr>
     </tbody>
   </table></div>;
+}
+
+function MonthlyBarChart({ months }: { months: { month: string; count: number }[] }) {
+  if (!months.length) return <p className="noRows">Δεν υπάρχουν δεδομένα για τα τρέχοντα φίλτρα.</p>;
+  const maximum = Math.max(1, ...months.map((item) => item.count));
+  // Bars stay thin enough to show every month, but a label on each of ~20
+  // columns would overlap - only every Nth one gets a tick so the axis
+  // stays readable at any panel width.
+  const labelStep = Math.max(1, Math.ceil(months.length / 6));
+  return <div className="monthlyBars">
+    {months.map((item, index) => <div className="monthlyBarCol" key={item.month}>
+      <div className="monthlyBarTrack">
+        <div className="monthlyBar" style={{ height: `${Math.max((item.count / maximum) * 100, 2)}%` }} title={`${monthLabel(item.month)}: ${number.format(item.count)} διαγωνισμοί`} />
+      </div>
+      <span className="monthlyBarLabel">{index % labelStep === 0 ? monthLabel(item.month) : ""}</span>
+    </div>)}
+  </div>;
 }
 
 function TenderTable({ rows, expanded = false, title = "Λίστα διαγωνισμών", caption, onViewAll }: { rows: Tender[]; expanded?: boolean; title?: string; caption?: string; onViewAll?: () => void }) {
