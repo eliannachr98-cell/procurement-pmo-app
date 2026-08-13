@@ -42,7 +42,8 @@ begin
   for target_year in select year from public.available_years() union all select null loop
     with matched as (
       select p.adam, p.opening_at, p.cancelled_at, p.status as raw_status,
-             p.nuts_name, p.nuts_code
+             p.nuts_name, p.nuts_code,
+             coalesce(p.budget_inc_vat, p.budget_ex_vat, p.budget_unknown_vat, 0) as budget
       from public.procurements_compact p
       -- Only count original tender notices, not follow-up documents
       -- (amendment/clarification/extension/summary/decision) about the same
@@ -62,7 +63,7 @@ begin
       where c.procurement_adam in (select adam from matched)
     ),
     status_calc as (
-      select m.adam, m.nuts_name, m.nuts_code,
+      select m.adam, m.nuts_name, m.nuts_code, m.budget,
         case
           when m.cancelled_at is not null or m.raw_status = 'cancelled' then 'Ακυρωμένος'
           when hc.adam is not null then 'Ολοκληρωμένος'
@@ -75,7 +76,7 @@ begin
       left join has_contract hc on hc.adam = m.adam
     ),
     status_agg as (
-      select status, count(*) as n from status_calc group by status
+      select status, count(*) as n, sum(budget) as budget from status_calc group by status
     ),
     cpv_agg as (
       select rc.cpv_code, min(rc.cpv_description) as cpv_description, count(*) as n
@@ -87,17 +88,23 @@ begin
       limit 12
     ),
     nuts_agg as (
-      select coalesce(nuts_name, nuts_code, 'Χωρίς NUTS') as nuts_name, count(*) as n
+      -- Group by the actual NUTS code (precise region), not just its label --
+      -- the map needs the code to place a pin at a real location instead of
+      -- guessing from the name text. Records with no specific code (only the
+      -- generic country-level "EL") land in their own "XX" bucket.
+      select coalesce(nuts_code, 'XX') as nuts_code,
+             min(coalesce(nuts_name, nuts_code, 'Χωρίς NUTS')) as nuts_name,
+             count(*) as n
       from status_calc
       group by 1
       order by n desc
-      limit 15
+      limit 20
     )
     select json_build_object(
       'total', (select count(*) from matched),
-      'status', (select coalesce(json_agg(json_build_object('status', status, 'count', n)), '[]'::json) from status_agg),
+      'status', (select coalesce(json_agg(json_build_object('status', status, 'count', n, 'budget', budget)), '[]'::json) from status_agg),
       'cpv', (select coalesce(json_agg(json_build_object('cpv_code', cpv_code, 'cpv_description', cpv_description, 'count', n)), '[]'::json) from cpv_agg),
-      'nuts', (select coalesce(json_agg(json_build_object('nuts_name', nuts_name, 'count', n)), '[]'::json) from nuts_agg)
+      'nuts', (select coalesce(json_agg(json_build_object('nuts_code', nuts_code, 'nuts_name', nuts_name, 'count', n)), '[]'::json) from nuts_agg)
     )
     into result;
 
@@ -174,7 +181,8 @@ begin
   sql_text := $sql1$
     with matched as (
       select p.adam, p.opening_at, p.cancelled_at, p.status as raw_status,
-             p.nuts_name, p.nuts_code
+             p.nuts_name, p.nuts_code,
+             coalesce(p.budget_inc_vat, p.budget_ex_vat, p.budget_unknown_vat, 0) as budget
       from public.procurements_compact p
   $sql1$ || where_sql || $sql2$
     ),
@@ -189,7 +197,7 @@ begin
       where c.procurement_adam in (select adam from matched)
     ),
     status_calc as (
-      select m.adam, m.nuts_name, m.nuts_code,
+      select m.adam, m.nuts_name, m.nuts_code, m.budget,
         case
           when m.cancelled_at is not null or m.raw_status = 'cancelled' then 'Ακυρωμένος'
           when hc.adam is not null then 'Ολοκληρωμένος'
@@ -202,7 +210,7 @@ begin
       left join has_contract hc on hc.adam = m.adam
     ),
     status_agg as (
-      select status, count(*) as n from status_calc group by status
+      select status, count(*) as n, sum(budget) as budget from status_calc group by status
     ),
     cpv_agg as (
       select rc.cpv_code, min(rc.cpv_description) as cpv_description, count(*) as n
@@ -214,17 +222,19 @@ begin
       limit 12
     ),
     nuts_agg as (
-      select coalesce(nuts_name, nuts_code, 'Χωρίς NUTS') as nuts_name, count(*) as n
+      select coalesce(nuts_code, 'XX') as nuts_code,
+             min(coalesce(nuts_name, nuts_code, 'Χωρίς NUTS')) as nuts_name,
+             count(*) as n
       from status_calc
       group by 1
       order by n desc
-      limit 15
+      limit 20
     )
     select json_build_object(
       'total', (select count(*) from matched),
-      'status', (select coalesce(json_agg(json_build_object('status', status, 'count', n)), '[]'::json) from status_agg),
+      'status', (select coalesce(json_agg(json_build_object('status', status, 'count', n, 'budget', budget)), '[]'::json) from status_agg),
       'cpv', (select coalesce(json_agg(json_build_object('cpv_code', cpv_code, 'cpv_description', cpv_description, 'count', n)), '[]'::json) from cpv_agg),
-      'nuts', (select coalesce(json_agg(json_build_object('nuts_name', nuts_name, 'count', n)), '[]'::json) from nuts_agg)
+      'nuts', (select coalesce(json_agg(json_build_object('nuts_code', nuts_code, 'nuts_name', nuts_name, 'count', n)), '[]'::json) from nuts_agg)
     )
   $sql2$;
 
