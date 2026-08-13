@@ -781,10 +781,21 @@ const ALERT_DOC_TYPE_LABELS: Record<string, string> = {
   decision: "Απόφαση / έγκριση",
 };
 
+const ALERT_URGENT_DAYS = 15;
+
+function alertUrgency(openingDate: string | null): "open" | "urgent" | "passed" | "unknown" {
+  if (!openingDate) return "unknown";
+  const diffDays = (new Date(openingDate).getTime() - Date.now()) / 86400000;
+  if (diffDays < 0) return "passed";
+  if (diffDays < ALERT_URGENT_DAYS) return "urgent";
+  return "open";
+}
+
 function AlertsPanel() {
   const [watchlist, setWatchlist] = useState<WatchlistItem[]>([]);
   const [alerts, setAlerts] = useState<AlertItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showPassed, setShowPassed] = useState(false);
   const [error, setError] = useState("");
   const [selectedTender, setSelectedTender] = useState<Tender | null>(null);
   const [loadingTender, setLoadingTender] = useState(false);
@@ -847,15 +858,18 @@ function AlertsPanel() {
     </article>
     {!watchlist.length && <article className="panel empty"><span>♢</span><h2>Δεν παρακολουθείς κανένα CPV</h2><p>Πρόσθεσε έναν ή περισσότερους κωδικούς CPV παραπάνω για να ξεκινήσεις να βλέπεις εδώ τους νέους διαγωνισμούς που ταιριάζουν.</p></article>}
     {error && <div className="dataBanner error">{error}</div>}
-    {watchlist.length > 0 && <article className="panel tablePanel">
-      <PanelHeader title="Νέοι διαγωνισμοί" caption={`${number.format(alerts.length)} διαγωνισμοί τις τελευταίες 45 ημέρες στα CPV που παρακολουθείς`} />
+    {watchlist.length > 0 && (() => {
+      const passedCount = alerts.filter((item) => alertUrgency(item.openingDate) === "passed").length;
+      const visibleAlerts = showPassed ? alerts : alerts.filter((item) => alertUrgency(item.openingDate) !== "passed");
+      return <article className="panel tablePanel">
+      <PanelHeader title="Νέοι διαγωνισμοί" caption={`${number.format(visibleAlerts.length)} διαγωνισμοί τις τελευταίες 45 ημέρες στα CPV που παρακολουθείς`} />
       {loading && <p className="noRows">Φόρτωση ειδοποιήσεων…</p>}
       {!loading && !alerts.length && <p className="noRows">Δεν βρέθηκαν νέοι διαγωνισμοί ακόμη.</p>}
-      {!loading && alerts.length > 0 && <div className="alertList">
-        {alerts.map((item) => {
-          const notPassed = item.openingDate ? new Date(item.openingDate).getTime() >= Date.now() : false;
+      {!loading && visibleAlerts.length > 0 && <div className="alertList">
+        {visibleAlerts.map((item) => {
+          const urgency = alertUrgency(item.openingDate);
           const docType = item.documentType ?? "declaration";
-          return <button type="button" className={`alertCard ${notPassed ? "isOpen" : "isClosed"}`} key={item.adam} onClick={() => openTender(item.adam)}>
+          return <button type="button" className={`alertCard is-${urgency}`} key={item.adam} onClick={() => openTender(item.adam)}>
           <span className="alertCardHead"><strong>{item.title}</strong><span>{formatDate(item.publicationDate ?? undefined)}</span></span>
           <span className="alertCardAuthority"><span className="alertCardAuthorityName">{item.authority}</span><span className={`alertCardDocType docType-${docType}`}>{ALERT_DOC_TYPE_LABELS[docType] ?? docType}</span></span>
           <span className="alertCardFacts">
@@ -868,8 +882,12 @@ function AlertsPanel() {
         </button>;
         })}
       </div>}
+      {!loading && !showPassed && passedCount > 0 && <button type="button" className="loadMoreBtn" onClick={() => setShowPassed(true)}>
+        Εμφάνιση {number.format(passedCount)} ακόμη (έχει παρέλθει η αποσφράγιση)
+      </button>}
       {loadingTender && <p className="noRows">Φόρτωση στοιχείων διαγωνισμού…</p>}
-    </article>}
+    </article>;
+    })()}
   </>;
 }
 
