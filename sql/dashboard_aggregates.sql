@@ -88,6 +88,16 @@ begin
       order by n desc
       limit 12
     ),
+    -- cpv_agg above is capped at the top 12 for the donut breakdown - the
+    -- frontend previously (wrongly) read that array's length as "how many
+    -- CPV codes exist", which was always exactly 12. This counts the real
+    -- total distinct CPV codes across the matched set instead.
+    cpv_total as (
+      select count(distinct rc.cpv_code) as n
+      from public.record_cpvs_compact rc
+      join matched m on m.adam = rc.record_adam
+      where rc.record_type = 'procurement'
+    ),
     nuts_agg as (
       -- Group by the actual NUTS code (precise region), not just its label --
       -- the map needs the code to place a pin at a real location instead of
@@ -120,6 +130,7 @@ begin
       'total', (select count(*) from matched),
       'status', (select coalesce(json_agg(json_build_object('status', status, 'count', n, 'budget', budget)), '[]'::json) from status_agg),
       'cpv', (select coalesce(json_agg(json_build_object('cpv_code', cpv_code, 'cpv_description', cpv_description, 'count', n)), '[]'::json) from cpv_agg),
+      'cpvTotal', (select n from cpv_total),
       'nuts', (select coalesce(json_agg(json_build_object('nuts_code', nuts_code, 'nuts_name', nuts_name, 'count', n)), '[]'::json) from nuts_agg),
       'monthly', (
         select coalesce(json_agg(json_build_object(
@@ -245,6 +256,12 @@ begin
       order by n desc
       limit 12
     ),
+    cpv_total as (
+      select count(distinct rc.cpv_code) as n
+      from public.record_cpvs_compact rc
+      join matched m on m.adam = rc.record_adam
+      where rc.record_type = 'procurement'
+    ),
     nuts_agg as (
       select coalesce(nuts_code, 'XX') as nuts_code,
              min(coalesce(nuts_name, nuts_code, 'Χωρίς NUTS')) as nuts_name,
@@ -273,6 +290,7 @@ begin
       'total', (select count(*) from matched),
       'status', (select coalesce(json_agg(json_build_object('status', status, 'count', n, 'budget', budget)), '[]'::json) from status_agg),
       'cpv', (select coalesce(json_agg(json_build_object('cpv_code', cpv_code, 'cpv_description', cpv_description, 'count', n)), '[]'::json) from cpv_agg),
+      'cpvTotal', (select n from cpv_total),
       'nuts', (select coalesce(json_agg(json_build_object('nuts_code', nuts_code, 'nuts_name', nuts_name, 'count', n)), '[]'::json) from nuts_agg),
       'monthly', (
         select coalesce(json_agg(json_build_object(
