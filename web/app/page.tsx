@@ -790,18 +790,21 @@ function AlertsPanel() {
   const [loadingTender, setLoadingTender] = useState(false);
   const [hiddenDocTypes, setHiddenDocTypes] = useState<string[]>([]);
 
-  const load = useCallback((attempt = 0) => {
-    setLoading(true);
-    fetch("/api/alerts")
-      .then((response) => response.ok ? response.json() : Promise.reject(new Error("alerts request failed")))
-      .then((payload) => { setWatchlist(payload.watchlist ?? []); setAlerts(payload.alerts ?? []); setError(""); setLoading(false); })
-      .catch(() => {
-        // A cold Vercel/Supabase connection occasionally 500s the first request
-        // right after a page load; one silent retry clears most of those.
-        if (attempt < 2) { window.setTimeout(() => load(attempt + 1), 900); return; }
-        setError("Δεν ήταν δυνατή η φόρτωση των ειδοποιήσεων.");
-        setLoading(false);
-      });
+  const load = useCallback(() => {
+    // A cold Vercel/Supabase connection occasionally 500s the first request
+    // right after a page load; one silent retry clears most of those.
+    const attemptFetch = (attempt: number) => {
+      setLoading(true);
+      fetch("/api/alerts")
+        .then((response) => response.ok ? response.json() : Promise.reject(new Error("alerts request failed")))
+        .then((payload) => { setWatchlist(payload.watchlist ?? []); setAlerts(payload.alerts ?? []); setError(""); setLoading(false); })
+        .catch(() => {
+          if (attempt < 2) { window.setTimeout(() => attemptFetch(attempt + 1), 900); return; }
+          setError("Δεν ήταν δυνατή η φόρτωση των ειδοποιήσεων.");
+          setLoading(false);
+        });
+    };
+    attemptFetch(0);
   }, []);
 
   useEffect(() => { load(); }, [load]);
