@@ -118,11 +118,15 @@ function groupBy<T>(rows: T[], key: (row: T) => string | null) {
   return grouped;
 }
 
-function statusFor(row: ProcurementRow, awards: AwardRow[], contracts: ContractRow[]) {
+function statusFor(row: ProcurementRow, awards: AwardRow[], contracts: ContractRow[], validOpeningAt?: string) {
   if (row.cancelled_at || row.status === "cancelled") return "Ακυρωμένος";
   if (contracts.length) return "Ολοκληρωμένος";
   if (awards.length) return "Ανατεθειμένος";
-  if (row.opening_at && new Date(row.opening_at).getTime() < Date.now()) return "Αξιολόγηση";
+  // Must use the same validated opening date as the display value below -
+  // a raw opening_at earlier than publication_date is bad source data, not
+  // a real passed deadline, and was otherwise pushing those notices into
+  // "Αξιολόγηση" while the UI simultaneously showed no deadline at all.
+  if (validOpeningAt && new Date(validOpeningAt).getTime() < Date.now()) return "Αξιολόγηση";
   return "Ενεργός";
 }
 
@@ -395,7 +399,7 @@ export async function GET(request: Request) {
         documentType: notice.document_category ?? undefined,
         nutsCode: notice.nuts_code ?? undefined,
         nutsName: notice.nuts_name ?? undefined,
-        status: statusFor(notice, linkedAwards, linkedContracts),
+        status: statusFor(notice, linkedAwards, linkedContracts, submissionDeadline),
         publicationDate: notice.publication_date,
         deadline: submissionDeadline,
         openingDate: submissionDeadline,
