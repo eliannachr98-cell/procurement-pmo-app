@@ -862,6 +862,36 @@ function AlertsPanel() {
   const [error, setError] = useState("");
   const [selectedTender, setSelectedTender] = useState<Tender | null>(null);
   const [loadingTender, setLoadingTender] = useState(false);
+  const [recipients, setRecipients] = useState<{ email: string }[]>([]);
+  const [newEmail, setNewEmail] = useState("");
+  const [recipientError, setRecipientError] = useState("");
+
+  const loadRecipients = useCallback(() => {
+    fetch("/api/alert-recipients")
+      .then((response) => response.ok ? response.json() : { items: [] })
+      .then((payload) => setRecipients(payload.items ?? []))
+      .catch(() => setRecipients([]));
+  }, []);
+
+  useEffect(() => { loadRecipients(); }, [loadRecipients]);
+
+  const addRecipient = () => {
+    const email = newEmail.trim();
+    if (!email) return;
+    fetch("/api/alert-recipients", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email }) })
+      .then((response) => response.json())
+      .then((payload) => {
+        if (payload.error) { setRecipientError(payload.error); return; }
+        setRecipientError("");
+        setNewEmail("");
+        loadRecipients();
+      });
+  };
+
+  const removeRecipient = (email: string) => {
+    setRecipients((current) => current.filter((item) => item.email !== email));
+    fetch(`/api/alert-recipients?email=${encodeURIComponent(email)}`, { method: "DELETE" }).then(loadRecipients);
+  };
 
   const load = useCallback(() => {
     // A cold Vercel/Supabase connection occasionally 500s the first request
@@ -918,6 +948,23 @@ function AlertsPanel() {
         />
       </div>
       <p className="watchlistCaption">Οι νέοι διαγωνισμοί που δημοσιεύονται σε αυτά τα CPV εμφανίζονται παρακάτω, με αποδελτίωση των βασικών στοιχείων.</p>
+      <div className="watchlistRow recipientsRow">
+        <div><p className="eyebrow">EMAIL</p><h2>Ειδοποιήσεις μέσω email</h2></div>
+        <div className="recipientInput">
+          <input
+            type="email"
+            value={newEmail}
+            onChange={(event) => { setNewEmail(event.target.value); setRecipientError(""); }}
+            onKeyDown={(event) => { if (event.key === "Enter") addRecipient(); }}
+            placeholder="email@example.com"
+          />
+          <button type="button" onClick={addRecipient}>Προσθήκη</button>
+        </div>
+      </div>
+      {recipientError && <p className="recipientError">{recipientError}</p>}
+      {recipients.length > 0 && <div className="recipientChips">
+        {recipients.map((item) => <span className="recipientChip" key={item.email}>{item.email}<button type="button" onClick={() => removeRecipient(item.email)} aria-label={`Αφαίρεση ${item.email}`}>×</button></span>)}
+      </div>}
     </article>
     {!watchlist.length && <article className="panel empty"><span>♢</span><h2>Δεν παρακολουθείς κανένα CPV</h2><p>Πρόσθεσε έναν ή περισσότερους κωδικούς CPV παραπάνω για να ξεκινήσεις να βλέπεις εδώ τους νέους διαγωνισμούς που ταιριάζουν.</p></article>}
     {error && <div className="dataBanner error">{error}</div>}
