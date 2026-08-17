@@ -888,6 +888,7 @@ function AlertsPanel() {
   const [alerts, setAlerts] = useState<AlertItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [alertTab, setAlertTab] = useState<"recent" | "active" | "inactive">("active");
+  const [authorityFilter, setAuthorityFilter] = useState("");
   const [error, setError] = useState("");
   const [selectedTender, setSelectedTender] = useState<Tender | null>(null);
   const [loadingTender, setLoadingTender] = useState(false);
@@ -1000,12 +1001,14 @@ function AlertsPanel() {
     {error && <div className="dataBanner error">{error}</div>}
     {watchlist.length > 0 && (() => {
       const isWithinDays = (item: AlertItem, days: number) => item.publicationDate ? (Date.now() - new Date(item.publicationDate).getTime()) < days * 86400000 : false;
+      const authorityTerm = authorityFilter.trim().toLocaleLowerCase("el");
+      const scoped = authorityTerm ? alerts.filter((item) => item.authority.toLocaleLowerCase("el").includes(authorityTerm)) : alerts;
       // Πρόσφατα = published in the last 5 days (with a ΝΕΟ badge for the
       // last-3-days sub-tier within it), Ενεργά = everything else still
       // open (colored by how close its αποσφράγιση is), Ανενεργοί = passed.
-      const passed = alerts.filter((item) => alertUrgency(item.openingDate) === "passed");
-      const recent = alerts.filter((item) => alertUrgency(item.openingDate) !== "passed" && isWithinDays(item, 5));
-      const active = alerts.filter((item) => alertUrgency(item.openingDate) !== "passed" && !isWithinDays(item, 5));
+      const passed = scoped.filter((item) => alertUrgency(item.openingDate) === "passed");
+      const recent = scoped.filter((item) => alertUrgency(item.openingDate) !== "passed" && isWithinDays(item, 5));
+      const active = scoped.filter((item) => alertUrgency(item.openingDate) !== "passed" && !isWithinDays(item, 5));
       const tabs: { key: "recent" | "active" | "inactive"; label: string; items: AlertItem[] }[] = [
         { key: "recent", label: "Πρόσφατα", items: recent },
         { key: "active", label: "Ενεργά", items: active },
@@ -1037,6 +1040,15 @@ function AlertsPanel() {
 
       return <article className="panel tablePanel">
       <PanelHeader title="Νέοι διαγωνισμοί" caption={`${number.format(recent.length + active.length + passed.length)} διαγωνισμοί τις τελευταίες 45 ημέρες στα CPV που παρακολουθείς`} onDownload={() => downloadCsv("neoi-diagonismoi.csv", ["ΑΔΑΜ", "Τίτλος", "Αναθέτουσα Αρχή", "Π/Υ", "Αποσφράγιση", "Τύπος σύμβασης"], shownItems.map((item) => [item.adam, item.title, item.authority, item.budget, item.openingDate ?? "", item.contractType ?? ""]))} />
+      <div className="alertAuthorityFilter">
+        <input
+          type="text"
+          value={authorityFilter}
+          onChange={(event) => setAuthorityFilter(event.target.value)}
+          placeholder="Φίλτρο αναθέτουσας αρχής (π.χ. Δήμος Αθηναίων)"
+        />
+        {authorityFilter && <button type="button" onClick={() => setAuthorityFilter("")} aria-label="Καθαρισμός φίλτρου">×</button>}
+      </div>
       <div className="alertTabs">
         {tabs.map((tab) => <button type="button" key={tab.key} className={`alertTabBtn ${alertTab === tab.key ? "active" : ""}`} onClick={() => setAlertTab(tab.key)}>
           {tab.label} <span className="alertTabCount">{number.format(tab.items.length)}</span>
