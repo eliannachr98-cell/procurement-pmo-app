@@ -203,7 +203,25 @@ export async function GET(request: Request) {
       ),
     ]);
 
+    // A contract's own procurement_adam is often unset - it's still linked to
+    // the notice through its award (same gap already handled for the market
+    // section below). Missing this made a completed tender (with a real
+    // signed contract) show as merely "Ανατεθειμένος" - confirmed live
+    // against actual contract rows, e.g. 26PROC019515568.
     const awardAdams = awards.map((row) => row.adam);
+    if (awardAdams.length) {
+      const supplementalContracts = await relatedRows<ContractRow>(
+        "contracts_compact", "award_adam", awardAdams,
+        "adam,procurement_adam,award_adam,title,authority_name,contract_type,signed_date,delivery_date,amount_ex_vat,amount_inc_vat,amount_unknown_vat",
+      );
+      const seenContractAdams = new Set(contracts.map((row) => row.adam));
+      const awardsByAdam = new Map(awards.map((row) => [row.adam, row]));
+      for (const row of supplementalContracts) {
+        if (seenContractAdams.has(row.adam)) continue;
+        contracts.push({ ...row, procurement_adam: row.procurement_adam ?? awardsByAdam.get(row.award_adam ?? "")?.procurement_adam ?? null });
+        seenContractAdams.add(row.adam);
+      }
+    }
     const contractAdams = contracts.map((row) => row.adam);
     const [awardCpvs, awardContractors, contractContractors] = await Promise.all([
       relatedRows<CpvRow>(
