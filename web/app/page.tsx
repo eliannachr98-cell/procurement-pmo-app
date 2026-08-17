@@ -631,7 +631,7 @@ function MultiSearchInput({ label, type, values, onChange, placeholder, onSelect
         const code = separatorIndex === -1 ? fullLabel : fullLabel.slice(0, separatorIndex);
         const description = separatorIndex === -1 ? "" : fullLabel.slice(separatorIndex + 3);
         return <span className="filterChip" key={value}>
-          <b className="chipCode">{code}</b>{description && <span className="chipDesc">{description}</span>}
+          <b className="chipCode">{code}</b>{description && <span className="chipDesc" title={description}>{description}</span>}
           <button type="button" aria-label={`Αφαίρεση ${fullLabel}`} onClick={() => onChange(values.filter((item) => item !== value))}>×</button>
         </span>;
       })}
@@ -887,7 +887,7 @@ function AlertsPanel() {
   const [watchlist, setWatchlist] = useState<WatchlistItem[]>([]);
   const [alerts, setAlerts] = useState<AlertItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showPassed, setShowPassed] = useState(false);
+  const [alertTab, setAlertTab] = useState<"recent" | "active" | "inactive">("active");
   const [error, setError] = useState("");
   const [selectedTender, setSelectedTender] = useState<Tender | null>(null);
   const [loadingTender, setLoadingTender] = useState(false);
@@ -999,23 +999,31 @@ function AlertsPanel() {
     {!watchlist.length && <article className="panel empty"><span>♢</span><h2>Δεν παρακολουθείς κανένα CPV</h2><p>Πρόσθεσε έναν ή περισσότερους κωδικούς CPV παραπάνω για να ξεκινήσεις να βλέπεις εδώ τους νέους διαγωνισμούς που ταιριάζουν.</p></article>}
     {error && <div className="dataBanner error">{error}</div>}
     {watchlist.length > 0 && (() => {
-      const isRecent = (item: AlertItem) => item.publicationDate ? (Date.now() - new Date(item.publicationDate).getTime()) < 3 * 86400000 : false;
-      // Three groups instead of one flat sorted list: freshly published
-      // tenders would otherwise land anywhere in the αποσφράγιση sort and
-      // get lost among older-but-still-active ones.
+      const isWithinDays = (item: AlertItem, days: number) => item.publicationDate ? (Date.now() - new Date(item.publicationDate).getTime()) < days * 86400000 : false;
+      // Πρόσφατα = published in the last 5 days (with a ΝΕΟ badge for the
+      // last-3-days sub-tier within it), Ενεργά = everything else still
+      // open (colored by how close its αποσφράγιση is), Ανενεργοί = passed.
       const passed = alerts.filter((item) => alertUrgency(item.openingDate) === "passed");
-      const recent = alerts.filter((item) => alertUrgency(item.openingDate) !== "passed" && isRecent(item));
-      const active = alerts.filter((item) => alertUrgency(item.openingDate) !== "passed" && !isRecent(item));
-      const visibleCount = recent.length + active.length + (showPassed ? passed.length : 0);
+      const recent = alerts.filter((item) => alertUrgency(item.openingDate) !== "passed" && isWithinDays(item, 5));
+      const active = alerts.filter((item) => alertUrgency(item.openingDate) !== "passed" && !isWithinDays(item, 5));
+      const tabs: { key: "recent" | "active" | "inactive"; label: string; items: AlertItem[] }[] = [
+        { key: "recent", label: "Πρόσφατα", items: recent },
+        { key: "active", label: "Ενεργά", items: active },
+        { key: "inactive", label: "Ανενεργοί", items: passed },
+      ];
+      const shownItems = tabs.find((tab) => tab.key === alertTab)?.items ?? [];
 
-      const renderCard = (item: AlertItem, group: "recent" | "active" | "passed") => {
+      const renderCard = (item: AlertItem) => {
         // A tender can carry many CPVs, most of them irrelevant - lead
         // with the ones that actually matched the watchlist, and fall
         // back to the full list only if none matched for some reason.
         const relevantCpvs = item.cpvs.filter((cpv) => item.matchedCpv.includes(cpv.code));
         const shownCpvs = relevantCpvs.length ? relevantCpvs : item.cpvs;
-        return <button type="button" className={`alertCard is-${group}`} key={item.adam} onClick={() => openTender(item.adam)}>
-        <span className="alertCardHead"><strong>{item.title}</strong><span>{isRecent(item) && <b className="newBadge">ΝΕΟ</b>}{formatDate(item.publicationDate ?? undefined)}</span></span>
+        const colorClass = alertTab === "recent" ? "is-recent"
+          : alertTab === "inactive" ? "is-passed"
+          : alertUrgency(item.openingDate) === "urgent" ? "is-active-urgent" : "is-active-open";
+        return <button type="button" className={`alertCard ${colorClass}`} key={item.adam} onClick={() => openTender(item.adam)}>
+        <span className="alertCardHead"><strong>{item.title}</strong><span>{alertTab === "recent" && isWithinDays(item, 3) && <b className="newBadge">ΝΕΟ</b>}{formatDate(item.publicationDate ?? undefined)}</span></span>
         <span className="alertCardAuthority">{item.authority}</span>
         <span className="alertCardFacts">
           <span><b>ΑΔΑΜ</b>{item.adam}</span>
@@ -1028,15 +1036,16 @@ function AlertsPanel() {
       };
 
       return <article className="panel tablePanel">
-      <PanelHeader title="Νέοι διαγωνισμοί" caption={`${number.format(visibleCount)} διαγωνισμοί τις τελευταίες 45 ημέρες στα CPV που παρακολουθείς`} onDownload={() => downloadCsv("neoi-diagonismoi.csv", ["ΑΔΑΜ", "Τίτλος", "Αναθέτουσα Αρχή", "Π/Υ", "Αποσφράγιση", "Τύπος σύμβασης"], [...recent, ...active, ...(showPassed ? passed : [])].map((item) => [item.adam, item.title, item.authority, item.budget, item.openingDate ?? "", item.contractType ?? ""]))} />
+      <PanelHeader title="Νέοι διαγωνισμοί" caption={`${number.format(recent.length + active.length + passed.length)} διαγωνισμοί τις τελευταίες 45 ημέρες στα CPV που παρακολουθείς`} onDownload={() => downloadCsv("neoi-diagonismoi.csv", ["ΑΔΑΜ", "Τίτλος", "Αναθέτουσα Αρχή", "Π/Υ", "Αποσφράγιση", "Τύπος σύμβασης"], shownItems.map((item) => [item.adam, item.title, item.authority, item.budget, item.openingDate ?? "", item.contractType ?? ""]))} />
+      <div className="alertTabs">
+        {tabs.map((tab) => <button type="button" key={tab.key} className={`alertTabBtn ${alertTab === tab.key ? "active" : ""}`} onClick={() => setAlertTab(tab.key)}>
+          {tab.label} <span className="alertTabCount">{number.format(tab.items.length)}</span>
+        </button>)}
+      </div>
       {loading && <p className="noRows">Φόρτωση ειδοποιήσεων…</p>}
       {!loading && !alerts.length && <p className="noRows">Δεν βρέθηκαν νέοι διαγωνισμοί ακόμη.</p>}
-      {!loading && recent.length > 0 && <><h3 className="alertGroupHeading">Πιο πρόσφατα</h3><div className="alertList">{recent.map((item) => renderCard(item, "recent"))}</div></>}
-      {!loading && active.length > 0 && <><h3 className="alertGroupHeading">Ενεργά</h3><div className="alertList">{active.map((item) => renderCard(item, "active"))}</div></>}
-      {!loading && !showPassed && passed.length > 0 && <button type="button" className="loadMoreBtn" onClick={() => setShowPassed(true)}>
-        Εμφάνιση {number.format(passed.length)} ακόμη (έχει παρέλθει η αποσφράγιση)
-      </button>}
-      {!loading && showPassed && passed.length > 0 && <><h3 className="alertGroupHeading">Έληξαν</h3><div className="alertList">{passed.map((item) => renderCard(item, "passed"))}</div></>}
+      {!loading && alerts.length > 0 && !shownItems.length && <p className="noRows">Δεν υπάρχουν διαγωνισμοί σε αυτή την κατηγορία.</p>}
+      {!loading && shownItems.length > 0 && <div className="alertList">{shownItems.map(renderCard)}</div>}
       {loadingTender && <p className="noRows">Φόρτωση στοιχείων διαγωνισμού…</p>}
     </article>;
     })()}
