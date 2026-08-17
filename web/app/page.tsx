@@ -990,37 +990,45 @@ function AlertsPanel() {
     {!watchlist.length && <article className="panel empty"><span>♢</span><h2>Δεν παρακολουθείς κανένα CPV</h2><p>Πρόσθεσε έναν ή περισσότερους κωδικούς CPV παραπάνω για να ξεκινήσεις να βλέπεις εδώ τους νέους διαγωνισμούς που ταιριάζουν.</p></article>}
     {error && <div className="dataBanner error">{error}</div>}
     {watchlist.length > 0 && (() => {
-      const passedCount = alerts.filter((item) => alertUrgency(item.openingDate) === "passed").length;
-      const visibleAlerts = showPassed ? alerts : alerts.filter((item) => alertUrgency(item.openingDate) !== "passed");
+      const isRecent = (item: AlertItem) => item.publicationDate ? (Date.now() - new Date(item.publicationDate).getTime()) < 3 * 86400000 : false;
+      // Three groups instead of one flat sorted list: freshly published
+      // tenders would otherwise land anywhere in the αποσφράγιση sort and
+      // get lost among older-but-still-active ones.
+      const passed = alerts.filter((item) => alertUrgency(item.openingDate) === "passed");
+      const recent = alerts.filter((item) => alertUrgency(item.openingDate) !== "passed" && isRecent(item));
+      const active = alerts.filter((item) => alertUrgency(item.openingDate) !== "passed" && !isRecent(item));
+      const visibleCount = recent.length + active.length + (showPassed ? passed.length : 0);
+
+      const renderCard = (item: AlertItem) => {
+        const urgency = alertUrgency(item.openingDate);
+        // A tender can carry many CPVs, most of them irrelevant - lead
+        // with the ones that actually matched the watchlist, and fall
+        // back to the full list only if none matched for some reason.
+        const relevantCpvs = item.cpvs.filter((cpv) => item.matchedCpv.includes(cpv.code));
+        const shownCpvs = relevantCpvs.length ? relevantCpvs : item.cpvs;
+        return <button type="button" className={`alertCard is-${urgency}`} key={item.adam} onClick={() => openTender(item.adam)}>
+        <span className="alertCardHead"><strong>{item.title}</strong><span>{isRecent(item) && <b className="newBadge">ΝΕΟ</b>}{formatDate(item.publicationDate ?? undefined)}</span></span>
+        <span className="alertCardAuthority">{item.authority}</span>
+        <span className="alertCardFacts">
+          <span><b>ΑΔΑΜ</b>{item.adam}</span>
+          <span title={item.cpvs.map((cpv) => cpv.code).join(", ")}><b>CPV</b>{shownCpvs.map((cpv) => cpv.code).join(", ") || "—"}</span>
+          <span><b>Π/Υ</b>{euro.format(item.budget)}</span>
+          <span><b>Αποσφράγιση</b>{formatDate(item.openingDate ?? undefined)}</span>
+          <span><b>Τύπος σύμβασης</b>{item.contractType ?? "—"}</span>
+        </span>
+      </button>;
+      };
+
       return <article className="panel tablePanel">
-      <PanelHeader title="Νέοι διαγωνισμοί" caption={`${number.format(visibleAlerts.length)} διαγωνισμοί τις τελευταίες 45 ημέρες στα CPV που παρακολουθείς`} onDownload={() => downloadCsv("neoi-diagonismoi.csv", ["ΑΔΑΜ", "Τίτλος", "Αναθέτουσα Αρχή", "Π/Υ", "Αποσφράγιση", "Τύπος σύμβασης"], visibleAlerts.map((item) => [item.adam, item.title, item.authority, item.budget, item.openingDate ?? "", item.contractType ?? ""]))} />
+      <PanelHeader title="Νέοι διαγωνισμοί" caption={`${number.format(visibleCount)} διαγωνισμοί τις τελευταίες 45 ημέρες στα CPV που παρακολουθείς`} onDownload={() => downloadCsv("neoi-diagonismoi.csv", ["ΑΔΑΜ", "Τίτλος", "Αναθέτουσα Αρχή", "Π/Υ", "Αποσφράγιση", "Τύπος σύμβασης"], [...recent, ...active, ...(showPassed ? passed : [])].map((item) => [item.adam, item.title, item.authority, item.budget, item.openingDate ?? "", item.contractType ?? ""]))} />
       {loading && <p className="noRows">Φόρτωση ειδοποιήσεων…</p>}
       {!loading && !alerts.length && <p className="noRows">Δεν βρέθηκαν νέοι διαγωνισμοί ακόμη.</p>}
-      {!loading && visibleAlerts.length > 0 && <div className="alertList">
-        {visibleAlerts.map((item) => {
-          const urgency = alertUrgency(item.openingDate);
-          // A tender can carry many CPVs, most of them irrelevant - lead
-          // with the ones that actually matched the watchlist, and fall
-          // back to the full list only if none matched for some reason.
-          const relevantCpvs = item.cpvs.filter((cpv) => item.matchedCpv.includes(cpv.code));
-          const shownCpvs = relevantCpvs.length ? relevantCpvs : item.cpvs;
-          const isNew = item.publicationDate ? (Date.now() - new Date(item.publicationDate).getTime()) < 3 * 86400000 : false;
-          return <button type="button" className={`alertCard is-${urgency}`} key={item.adam} onClick={() => openTender(item.adam)}>
-          <span className="alertCardHead"><strong>{item.title}</strong><span>{isNew && <b className="newBadge">ΝΕΟ</b>}{formatDate(item.publicationDate ?? undefined)}</span></span>
-          <span className="alertCardAuthority">{item.authority}</span>
-          <span className="alertCardFacts">
-            <span><b>ΑΔΑΜ</b>{item.adam}</span>
-            <span title={item.cpvs.map((cpv) => cpv.code).join(", ")}><b>CPV</b>{shownCpvs.map((cpv) => cpv.code).join(", ") || "—"}</span>
-            <span><b>Π/Υ</b>{euro.format(item.budget)}</span>
-            <span><b>Αποσφράγιση</b>{formatDate(item.openingDate ?? undefined)}</span>
-            <span><b>Τύπος σύμβασης</b>{item.contractType ?? "—"}</span>
-          </span>
-        </button>;
-        })}
-      </div>}
-      {!loading && !showPassed && passedCount > 0 && <button type="button" className="loadMoreBtn" onClick={() => setShowPassed(true)}>
-        Εμφάνιση {number.format(passedCount)} ακόμη (έχει παρέλθει η αποσφράγιση)
+      {!loading && recent.length > 0 && <><h3 className="alertGroupHeading">Πιο πρόσφατα</h3><div className="alertList">{recent.map(renderCard)}</div></>}
+      {!loading && active.length > 0 && <><h3 className="alertGroupHeading">Ενεργά</h3><div className="alertList">{active.map(renderCard)}</div></>}
+      {!loading && !showPassed && passed.length > 0 && <button type="button" className="loadMoreBtn" onClick={() => setShowPassed(true)}>
+        Εμφάνιση {number.format(passed.length)} ακόμη (έχει παρέλθει η αποσφράγιση)
       </button>}
+      {!loading && showPassed && passed.length > 0 && <><h3 className="alertGroupHeading">Έληξαν</h3><div className="alertList">{passed.map(renderCard)}</div></>}
       {loadingTender && <p className="noRows">Φόρτωση στοιχείων διαγωνισμού…</p>}
     </article>;
     })()}
