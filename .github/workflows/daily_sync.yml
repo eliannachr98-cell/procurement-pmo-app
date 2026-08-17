@@ -21,7 +21,10 @@ concurrency:
 jobs:
   sync:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    # Sized for an occasional large manual catch-up (e.g. closing a multi-day
+    # gap), not just the normal 3-day trailing window - KHMDHS rate-limits
+    # (HTTP 429) and retries with backoff can add real time per source.
+    timeout-minutes: 150
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -48,19 +51,33 @@ jobs:
               output.write(f"date_from={date_from}\n")
               output.write(f"date_to={date_to}\n")
 
-      - name: Prepare compact data (notices, auctions, contracts)
-        run: >
-          python -u prepare_compact_data.py
-          --date-from "${{ steps.window.outputs.date_from }}"
-          --date-to "${{ steps.window.outputs.date_to }}"
-          --source all
-          --output-dir staging/compact
-
-      - name: Write to the compact database
+      # Each source is prepared AND written before moving to the next one -
+      # confirmed live that a rate-limit failure partway through "all" three
+      # sources discarded even the sources that had already finished
+      # fetching, because the write only happened once at the very end.
+      - name: Sync notices
         env:
           DATABASE_URL: ${{ secrets.COMPACT_DATABASE_URL }}
           EXPECTED_DB_REF: gunzsfttzijoxteppskb
-        run: python -u load_compact_data.py --input-dir staging/compact --write
+        run: |
+          python -u prepare_compact_data.py --date-from "${{ steps.window.outputs.date_from }}" --date-to "${{ steps.window.outputs.date_to }}" --source notice --output-dir staging/compact
+          python -u load_compact_data.py --input-dir staging/compact --write
+
+      - name: Sync auctions
+        env:
+          DATABASE_URL: ${{ secrets.COMPACT_DATABASE_URL }}
+          EXPECTED_DB_REF: gunzsfttzijoxteppskb
+        run: |
+          python -u prepare_compact_data.py --date-from "${{ steps.window.outputs.date_from }}" --date-to "${{ steps.window.outputs.date_to }}" --source auction --output-dir staging/compact
+          python -u load_compact_data.py --input-dir staging/compact --write
+
+      - name: Sync contracts
+        env:
+          DATABASE_URL: ${{ secrets.COMPACT_DATABASE_URL }}
+          EXPECTED_DB_REF: gunzsfttzijoxteppskb
+        run: |
+          python -u prepare_compact_data.py --date-from "${{ steps.window.outputs.date_from }}" --date-to "${{ steps.window.outputs.date_to }}" --source contract --output-dir staging/compact
+          python -u load_compact_data.py --input-dir staging/compact --write
 
       - name: Refresh dashboard caches
         env:
