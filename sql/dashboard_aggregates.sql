@@ -59,9 +59,14 @@ begin
       where a.procurement_adam in (select adam from matched)
     ),
     has_contract as (
-      select distinct c.procurement_adam as adam
+      -- A contract's own procurement_adam is often unset - it's still
+      -- linked to the notice through its award. Missing that fallback
+      -- silently left completed tenders (real signed contract) bucketed as
+      -- merely Ανατεθειμένος - confirmed live against actual contract rows.
+      select distinct m.adam
       from public.contracts_compact c
-      where c.procurement_adam in (select adam from matched)
+      left join public.awards_compact a on a.adam = c.award_adam
+      join matched m on m.adam = coalesce(c.procurement_adam, a.procurement_adam)
     ),
     status_calc as (
       select m.adam, m.nuts_name, m.nuts_code, m.budget, m.publication_date, m.authority_name,
@@ -233,9 +238,14 @@ begin
       where a.procurement_adam in (select adam from matched)
     ),
     has_contract as (
-      select distinct c.procurement_adam as adam
+      -- A contract's own procurement_adam is often unset - it's still
+      -- linked to the notice through its award. Missing that fallback
+      -- silently left completed tenders (real signed contract) bucketed as
+      -- merely Ανατεθειμένος - confirmed live against actual contract rows.
+      select distinct m.adam
       from public.contracts_compact c
-      where c.procurement_adam in (select adam from matched)
+      left join public.awards_compact a on a.adam = c.award_adam
+      join matched m on m.adam = coalesce(c.procurement_adam, a.procurement_adam)
     ),
     status_calc as (
       select m.adam, m.nuts_name, m.nuts_code, m.budget, m.publication_date, m.authority_name,
