@@ -112,6 +112,14 @@ export async function GET(request: Request) {
       return NextResponse.json({ options });
     }
 
+    if (type === "authority") {
+      const rows = await supabaseRows<{ authority_name: string | null }>(
+        `procurements_compact?select=authority_name&authority_name=ilike.${value}&limit=300`,
+      );
+      const unique = [...new Set(rows.map((row) => row.authority_name).filter((name): name is string => Boolean(name)))].sort((a, b) => a.localeCompare(b, "el"));
+      return NextResponse.json({ options: unique.slice(0, 20).map((name) => ({ value: name, label: name })) });
+    }
+
     if (type === "cpv") {
       const filter = /^\d{2,8}(-\d)?$/.test(query)
         ? `cpv_code=ilike.${encodeURIComponent(`${query}*`)}`

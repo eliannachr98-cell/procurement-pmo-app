@@ -571,7 +571,7 @@ type SearchOption = { value: string; label: string };
 
 function MultiSearchInput({ label, type, values, onChange, placeholder, onSelectOption, initialLabels }: {
   label: string;
-  type: "contractor" | "cpv";
+  type: "contractor" | "cpv" | "authority";
   values: string[];
   onChange: (values: string[]) => void;
   placeholder: string;
@@ -635,7 +635,7 @@ function MultiSearchInput({ label, type, values, onChange, placeholder, onSelect
           <button type="button" aria-label={`Αφαίρεση ${fullLabel}`} onClick={() => onChange(values.filter((item) => item !== value))}>×</button>
         </span>;
       })}
-      <input value={text} onChange={(event) => setText(event.target.value)} placeholder={values.length ? "Πρόσθεσε ακόμη μία επιλογή" : placeholder} autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false} />
+      <span className="multiAddInput"><span className="multiAddIcon">+</span><input value={text} onChange={(event) => setText(event.target.value)} placeholder={values.length ? "Πρόσθεσε ακόμη μία επιλογή" : placeholder} autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false} /></span>
     </div>
     {(searching || options.length > 0) && <div className="suggestions">
       {searching && <span>Αναζήτηση…</span>}
@@ -888,13 +888,37 @@ function AlertsPanel() {
   const [alerts, setAlerts] = useState<AlertItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [alertTab, setAlertTab] = useState<"recent" | "active" | "inactive">("active");
-  const [authorityFilter, setAuthorityFilter] = useState("");
+  const [authorityFilter, setAuthorityFilter] = useState<string[]>([]);
   const [error, setError] = useState("");
   const [selectedTender, setSelectedTender] = useState<Tender | null>(null);
   const [loadingTender, setLoadingTender] = useState(false);
   const [recipients, setRecipients] = useState<{ email: string }[]>([]);
   const [newEmail, setNewEmail] = useState("");
   const [recipientError, setRecipientError] = useState("");
+  const [submittedAdams, setSubmittedAdams] = useState<Set<string>>(new Set());
+
+  const loadSubmissions = useCallback(() => {
+    fetch("/api/alert-submissions")
+      .then((response) => response.ok ? response.json() : { items: [] })
+      .then((payload) => setSubmittedAdams(new Set((payload.items ?? []).map((item: { adam: string }) => item.adam))))
+      .catch(() => setSubmittedAdams(new Set()));
+  }, []);
+
+  useEffect(() => { loadSubmissions(); }, [loadSubmissions]);
+
+  const toggleSubmitted = (adam: string) => {
+    const isMarked = submittedAdams.has(adam);
+    setSubmittedAdams((current) => {
+      const next = new Set(current);
+      if (isMarked) next.delete(adam); else next.add(adam);
+      return next;
+    });
+    if (isMarked) {
+      fetch(`/api/alert-submissions?adam=${encodeURIComponent(adam)}`, { method: "DELETE" }).then(loadSubmissions);
+    } else {
+      fetch("/api/alert-submissions", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ adam }) }).then(loadSubmissions);
+    }
+  };
 
   const loadRecipients = useCallback(() => {
     fetch("/api/alert-recipients")
@@ -1001,8 +1025,10 @@ function AlertsPanel() {
     {error && <div className="dataBanner error">{error}</div>}
     {watchlist.length > 0 && (() => {
       const isWithinDays = (item: AlertItem, days: number) => item.publicationDate ? (Date.now() - new Date(item.publicationDate).getTime()) < days * 86400000 : false;
-      const authorityTerm = authorityFilter.trim().toLocaleLowerCase("el");
-      const scoped = authorityTerm ? alerts.filter((item) => item.authority.toLocaleLowerCase("el").includes(authorityTerm)) : alerts;
+      const authorityTerms = authorityFilter.map((item) => item.toLocaleLowerCase("el"));
+      const scoped = authorityTerms.length
+        ? alerts.filter((item) => authorityTerms.some((term) => item.authority.toLocaleLowerCase("el").includes(term)))
+        : alerts;
       // Πρόσφατα = published in the last 5 days (with a ΝΕΟ badge for the
       // last-3-days sub-tier within it), Ενεργά = everything else still
       // open (colored by how close its αποσφράγιση is), Ανενεργοί = passed.
@@ -1030,7 +1056,16 @@ function AlertsPanel() {
         const colorClass = alertTab === "recent" ? "is-recent"
           : alertTab === "inactive" ? "is-passed"
           : alertUrgency(item.openingDate) === "urgent" ? "is-active-urgent" : "is-active-open";
-        return <button type="button" className={`alertCard ${colorClass}`} key={item.adam} onClick={() => openTender(item.adam)}>
+        const isMarked = submittedAdams.has(item.adam);
+        return <button type="button" className={`alertCard ${colorClass} ${isMarked ? "isSubmitted" : ""}`} key={item.adam} onClick={() => openTender(item.adam)}>
+        <span
+          className="markToggle"
+          role="button"
+          tabIndex={0}
+          title={isMarked ? "Έχει κατατεθεί προσφορά - πάτησε για αναίρεση" : "Σημείωσε ότι κατατέθηκε προσφορά"}
+          onClick={(event) => { event.stopPropagation(); toggleSubmitted(item.adam); }}
+          onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); event.stopPropagation(); toggleSubmitted(item.adam); } }}
+        >{isMarked ? "✓ Υποβλήθηκε" : "Σήμανση προσφοράς"}</span>
         <span className="alertCardHead"><strong>{item.title}</strong><span>{alertTab === "recent" && isWithinDays(item, 3) && <b className="newBadge">ΝΕΟ</b>}{formatDate(item.publicationDate ?? undefined)}</span></span>
         <span className="alertCardAuthority">{item.authority}</span>
         <span className="alertCardFacts">
@@ -1046,13 +1081,13 @@ function AlertsPanel() {
       return <article className="panel tablePanel">
       <PanelHeader title="Νέοι διαγωνισμοί" caption={`${number.format(recent.length + active.length + passed.length)} διαγωνισμοί τις τελευταίες 45 ημέρες στα CPV που παρακολουθείς`} onDownload={() => downloadCsv("neoi-diagonismoi.csv", ["ΑΔΑΜ", "Τίτλος", "Αναθέτουσα Αρχή", "Π/Υ", "Αποσφράγιση", "Τύπος σύμβασης"], shownItems.map((item) => [item.adam, item.title, item.authority, item.budget, item.openingDate ?? "", item.contractType ?? ""]))} />
       <div className="alertAuthorityFilter">
-        <input
-          type="text"
-          value={authorityFilter}
-          onChange={(event) => setAuthorityFilter(event.target.value)}
+        <MultiSearchInput
+          label="Αναθέτουσα Αρχή"
+          type="authority"
+          values={authorityFilter}
+          onChange={setAuthorityFilter}
           placeholder="Φίλτρο αναθέτουσας αρχής (π.χ. Δήμος Αθηναίων)"
         />
-        {authorityFilter && <button type="button" onClick={() => setAuthorityFilter("")} aria-label="Καθαρισμός φίλτρου">×</button>}
       </div>
       <div className="alertTabs">
         {tabs.map((tab) => <button type="button" key={tab.key} className={`alertTabBtn ${alertTab === tab.key ? "active" : ""}`} onClick={() => setAlertTab(tab.key)}>
