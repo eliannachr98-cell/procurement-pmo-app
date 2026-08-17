@@ -993,7 +993,7 @@ function AlertsPanel() {
           // back to the full list only if none matched for some reason.
           const relevantCpvs = item.cpvs.filter((cpv) => item.matchedCpv.includes(cpv.code));
           const shownCpvs = relevantCpvs.length ? relevantCpvs : item.cpvs;
-          const isNew = item.publicationDate ? (Date.now() - new Date(item.publicationDate).getTime()) < 2 * 86400000 : false;
+          const isNew = item.publicationDate ? (Date.now() - new Date(item.publicationDate).getTime()) < 3 * 86400000 : false;
           return <button type="button" className={`alertCard is-${urgency}`} key={item.adam} onClick={() => openTender(item.adam)}>
           <span className="alertCardHead"><strong>{item.title}</strong><span>{isNew && <b className="newBadge">ΝΕΟ</b>}{formatDate(item.publicationDate ?? undefined)}</span></span>
           <span className="alertCardAuthority">{item.authority}</span>
