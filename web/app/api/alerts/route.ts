@@ -3,7 +3,11 @@ import { supabaseGet, supabaseRpc } from "@/lib/matching";
 
 export const dynamic = "force-dynamic";
 
-const ALERT_WINDOW_DAYS = 45;
+// Πρόσφατοι/Ενεργοί only ever look at the last few days or still-open
+// notices, so they're unaffected by this being wide - but Ανενεργοί
+// (expired) needs to reach back to the start of 2026 to be useful as a
+// browsable history instead of just the last month and a half.
+const ALERT_WINDOW_DAYS = Math.ceil((Date.now() - new Date("2026-01-01T00:00:00Z").getTime()) / 86400000);
 
 type WatchlistRow = { cpv_code: string; cpv_label: string | null };
 type AlertRow = {

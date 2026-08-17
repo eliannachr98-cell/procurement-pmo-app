@@ -982,7 +982,10 @@ function AlertsPanel() {
 
   if (selectedTender) return <TenderDetail tender={selectedTender} onBack={() => setSelectedTender(null)} />;
 
+  const submittedItems = alerts.filter((item) => submittedAdams.has(item.adam));
+
   return <>
+    <div className="alertsTopGrid">
     <article className="panel watchlistPanel">
       <div className="watchlistRow cpvWatchRow">
         <div><p className="eyebrow">CPV ALERTS</p><h2>Παρακολούθηση CPV</h2></div>
@@ -1021,6 +1024,19 @@ function AlertsPanel() {
         {recipients.map((item) => <span className="recipientChip" key={item.email}>{item.email}<button type="button" onClick={() => removeRecipient(item.email)} aria-label={`Αφαίρεση ${item.email}`}>×</button></span>)}
       </div>}
     </article>
+    <article className="panel submittedPanel">
+      <p className="eyebrow">ΚΑΤΑΤΕΘΕΙΜΕΝΕΣ</p>
+      <h2>Υποβεβλημένες προσφορές</h2>
+      {!submittedItems.length && <p className="noRows">Δεν έχεις σημειώσει ακόμη κάποιον διαγωνισμό ως υποβεβλημένο. Πάτησε «Σήμανση προσφοράς» σε μια κάρτα παρακάτω.</p>}
+      {submittedItems.length > 0 && <ul className="submittedList">
+        {submittedItems.map((item) => <li key={item.adam}>
+          <button type="button" className="submittedTitle" onClick={() => openTender(item.adam)}>{item.title}</button>
+          <span className="submittedMeta">{item.authority}</span>
+          <button type="button" className="submittedUnmark" onClick={() => toggleSubmitted(item.adam)} aria-label={`Αναίρεση σήμανσης ${item.title}`}>Αναίρεση</button>
+        </li>)}
+      </ul>}
+    </article>
+    </div>
     {!watchlist.length && <article className="panel empty"><span>♢</span><h2>Δεν παρακολουθείς κανένα CPV</h2><p>Πρόσθεσε έναν ή περισσότερους κωδικούς CPV παραπάνω για να ξεκινήσεις να βλέπεις εδώ τους νέους διαγωνισμούς που ταιριάζουν.</p></article>}
     {error && <div className="dataBanner error">{error}</div>}
     {watchlist.length > 0 && (() => {
@@ -1029,8 +1045,8 @@ function AlertsPanel() {
       const scoped = authorityTerms.length
         ? alerts.filter((item) => authorityTerms.some((term) => item.authority.toLocaleLowerCase("el").includes(term)))
         : alerts;
-      // Πρόσφατα = published in the last 5 days (with a ΝΕΟ badge for the
-      // last-3-days sub-tier within it), Ενεργά = everything else still
+      // Πρόσφατοι = published in the last 5 days (with a ΝΕΟ badge for the
+      // last-3-days sub-tier within it), Ενεργοί = everything else still
       // open (colored by how close its αποσφράγιση is), Ανενεργοί = passed.
       const passed = scoped.filter((item) => alertUrgency(item.openingDate) === "passed");
       // Newest publication first within Πρόσφατα - the rest of the app
@@ -1041,8 +1057,8 @@ function AlertsPanel() {
         .sort((a, b) => (b.publicationDate ?? "").localeCompare(a.publicationDate ?? ""));
       const active = scoped.filter((item) => alertUrgency(item.openingDate) !== "passed" && !isWithinDays(item, 5));
       const tabs: { key: "recent" | "active" | "inactive"; label: string; items: AlertItem[] }[] = [
-        { key: "recent", label: "Πρόσφατα", items: recent },
-        { key: "active", label: "Ενεργά", items: active },
+        { key: "recent", label: "Πρόσφατοι", items: recent },
+        { key: "active", label: "Ενεργοί", items: active },
         { key: "inactive", label: "Ανενεργοί", items: passed },
       ];
       const shownItems = tabs.find((tab) => tab.key === alertTab)?.items ?? [];
@@ -1079,7 +1095,7 @@ function AlertsPanel() {
       };
 
       return <article className="panel tablePanel">
-      <PanelHeader title="Νέοι διαγωνισμοί" caption={`${number.format(recent.length + active.length + passed.length)} διαγωνισμοί τις τελευταίες 45 ημέρες στα CPV που παρακολουθείς`} onDownload={() => downloadCsv("neoi-diagonismoi.csv", ["ΑΔΑΜ", "Τίτλος", "Αναθέτουσα Αρχή", "Π/Υ", "Αποσφράγιση", "Τύπος σύμβασης"], shownItems.map((item) => [item.adam, item.title, item.authority, item.budget, item.openingDate ?? "", item.contractType ?? ""]))} />
+      <PanelHeader title="Νέοι διαγωνισμοί" caption={`${number.format(recent.length + active.length + passed.length)} διαγωνισμοί από τις αρχές του 2026 στα CPV που παρακολουθείς`} onDownload={() => downloadCsv("neoi-diagonismoi.csv", ["ΑΔΑΜ", "Τίτλος", "Αναθέτουσα Αρχή", "Π/Υ", "Αποσφράγιση", "Τύπος σύμβασης"], shownItems.map((item) => [item.adam, item.title, item.authority, item.budget, item.openingDate ?? "", item.contractType ?? ""]))} />
       <div className="alertAuthorityFilter">
         <MultiSearchInput
           label="Αναθέτουσα Αρχή"
