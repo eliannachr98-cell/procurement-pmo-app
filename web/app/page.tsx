@@ -1007,7 +1007,12 @@ function AlertsPanel() {
       // last-3-days sub-tier within it), Ενεργά = everything else still
       // open (colored by how close its αποσφράγιση is), Ανενεργοί = passed.
       const passed = scoped.filter((item) => alertUrgency(item.openingDate) === "passed");
-      const recent = scoped.filter((item) => alertUrgency(item.openingDate) !== "passed" && isWithinDays(item, 5));
+      // Newest publication first within Πρόσφατα - the rest of the app
+      // sorts by αποσφράγιση, but "recent" is specifically about what just
+      // got published, so it needs its own sort key.
+      const recent = scoped
+        .filter((item) => alertUrgency(item.openingDate) !== "passed" && isWithinDays(item, 5))
+        .sort((a, b) => (b.publicationDate ?? "").localeCompare(a.publicationDate ?? ""));
       const active = scoped.filter((item) => alertUrgency(item.openingDate) !== "passed" && !isWithinDays(item, 5));
       const tabs: { key: "recent" | "active" | "inactive"; label: string; items: AlertItem[] }[] = [
         { key: "recent", label: "Πρόσφατα", items: recent },
