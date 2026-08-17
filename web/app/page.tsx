@@ -560,20 +560,29 @@ function CheckboxDropdown({ label, options, values, onChange }: {
 
 type SearchOption = { value: string; label: string };
 
-function MultiSearchInput({ label, type, values, onChange, placeholder, onSelectOption }: {
+function MultiSearchInput({ label, type, values, onChange, placeholder, onSelectOption, initialLabels }: {
   label: string;
   type: "contractor" | "cpv";
   values: string[];
   onChange: (values: string[]) => void;
   placeholder: string;
   onSelectOption?: (option: SearchOption) => void;
+  // Values loaded from the database (not picked in this session, e.g. a
+  // watchlist restored on page load) have no entry in labelByValue below,
+  // since that only ever gets populated by select() - without this, those
+  // chips fall back to showing the raw code instead of its description.
+  initialLabels?: Record<string, string>;
 }) {
   const [text, setText] = useState("");
   const [options, setOptions] = useState<SearchOption[]>([]);
   const [searching, setSearching] = useState(false);
   // Contractor values are sometimes a VAT number (to match precisely), not a
   // readable name, so chips need their own label separate from the filter value.
-  const [labelByValue, setLabelByValue] = useState<Record<string, string>>({});
+  const [labelByValue, setLabelByValue] = useState<Record<string, string>>(initialLabels ?? {});
+
+  useEffect(() => {
+    if (initialLabels) setLabelByValue((current) => ({ ...initialLabels, ...current }));
+  }, [initialLabels]);
 
   useEffect(() => {
     const query = text.trim();
@@ -936,6 +945,7 @@ function AlertsPanel() {
           label="CPV"
           type="cpv"
           values={watchlist.map((item) => item.cpv_code)}
+          initialLabels={Object.fromEntries(watchlist.map((item) => [item.cpv_code, item.cpv_label ?? item.cpv_code]))}
           onChange={(nextValues) => {
             const removed = watchlist.map((item) => item.cpv_code).find((code) => !nextValues.includes(code));
             if (removed) removeCpv(removed);
@@ -978,12 +988,18 @@ function AlertsPanel() {
       {!loading && visibleAlerts.length > 0 && <div className="alertList">
         {visibleAlerts.map((item) => {
           const urgency = alertUrgency(item.openingDate);
+          // A tender can carry many CPVs, most of them irrelevant - lead
+          // with the ones that actually matched the watchlist, and fall
+          // back to the full list only if none matched for some reason.
+          const relevantCpvs = item.cpvs.filter((cpv) => item.matchedCpv.includes(cpv.code));
+          const shownCpvs = relevantCpvs.length ? relevantCpvs : item.cpvs;
+          const isNew = item.publicationDate ? (Date.now() - new Date(item.publicationDate).getTime()) < 2 * 86400000 : false;
           return <button type="button" className={`alertCard is-${urgency}`} key={item.adam} onClick={() => openTender(item.adam)}>
-          <span className="alertCardHead"><strong>{item.title}</strong><span>{formatDate(item.publicationDate ?? undefined)}</span></span>
+          <span className="alertCardHead"><strong>{item.title}</strong><span>{isNew && <b className="newBadge">ΝΕΟ</b>}{formatDate(item.publicationDate ?? undefined)}</span></span>
           <span className="alertCardAuthority">{item.authority}</span>
           <span className="alertCardFacts">
             <span><b>ΑΔΑΜ</b>{item.adam}</span>
-            <span><b>CPV</b>{item.cpvs.map((cpv) => cpv.code).join(", ") || "—"}</span>
+            <span title={item.cpvs.map((cpv) => cpv.code).join(", ")}><b>CPV</b>{shownCpvs.map((cpv) => cpv.code).join(", ") || "—"}</span>
             <span><b>Π/Υ</b>{euro.format(item.budget)}</span>
             <span><b>Αποσφράγιση</b>{formatDate(item.openingDate ?? undefined)}</span>
             <span><b>Τύπος σύμβασης</b>{item.contractType ?? "—"}</span>
