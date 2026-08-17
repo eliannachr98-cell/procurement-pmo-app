@@ -569,7 +569,7 @@ function CheckboxDropdown({ label, options, values, onChange }: {
 
 type SearchOption = { value: string; label: string };
 
-function MultiSearchInput({ label, type, values, onChange, placeholder, onSelectOption, initialLabels, collapsible }: {
+function MultiSearchInput({ label, type, values, onChange, placeholder, onSelectOption, initialLabels }: {
   label: string;
   type: "contractor" | "cpv" | "authority";
   values: string[];
@@ -581,14 +581,10 @@ function MultiSearchInput({ label, type, values, onChange, placeholder, onSelect
   // since that only ever gets populated by select() - without this, those
   // chips fall back to showing the raw code instead of its description.
   initialLabels?: Record<string, string>;
-  // On the Ειδοποιήσεις tab the search box starts hidden behind the "+" and
-  // only appears once clicked, instead of always sitting open on the page.
-  collapsible?: boolean;
 }) {
   const [text, setText] = useState("");
   const [options, setOptions] = useState<SearchOption[]>([]);
   const [searching, setSearching] = useState(false);
-  const [expanded, setExpanded] = useState(!collapsible);
   // Contractor values are sometimes a VAT number (to match precisely), not a
   // readable name, so chips need their own label separate from the filter value.
   const [labelByValue, setLabelByValue] = useState<Record<string, string>>(initialLabels ?? {});
@@ -639,19 +635,15 @@ function MultiSearchInput({ label, type, values, onChange, placeholder, onSelect
           <button type="button" aria-label={`Αφαίρεση ${fullLabel}`} onClick={() => onChange(values.filter((item) => item !== value))}>×</button>
         </span>;
       })}
-      {collapsible && !expanded
-        ? <button type="button" className="multiAddTrigger" onClick={() => setExpanded(true)}><span className="multiAddIcon">+</span><span className="multiAddTriggerText">{placeholder}</span></button>
-        : <span className="multiAddInput">
-            <span className="multiAddIcon">+</span>
-            <input
-              value={text}
-              onChange={(event) => setText(event.target.value)}
-              onBlur={() => { if (collapsible && !text.trim()) setExpanded(false); }}
-              placeholder={values.length ? "Πρόσθεσε ακόμη μία επιλογή" : placeholder}
-              autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false}
-              autoFocus={collapsible}
-            />
-          </span>}
+      <span className="multiAddInput">
+        <span className="multiAddIcon">+</span>
+        <input
+          value={text}
+          onChange={(event) => setText(event.target.value)}
+          placeholder={values.length ? "Πρόσθεσε ακόμη μία επιλογή" : placeholder}
+          autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false}
+        />
+      </span>
     </div>
     {(searching || options.length > 0) && <div className="suggestions">
       {searching && <span>Αναζήτηση…</span>}
@@ -1019,7 +1011,6 @@ function AlertsPanel() {
               .then(load);
           }}
           placeholder="Αναζήτησε κωδικό ή περιγραφή CPV"
-          collapsible
         />
       </div>
       <p className="watchlistCaption">Οι νέοι διαγωνισμοί που δημοσιεύονται σε αυτά τα CPV εμφανίζονται παρακάτω, με αποδελτίωση των βασικών στοιχείων.</p>
@@ -1120,7 +1111,6 @@ function AlertsPanel() {
           values={authorityFilter}
           onChange={setAuthorityFilter}
           placeholder="Αναζητήστε Αναθέτουσα Αρχή"
-          collapsible
         />
       </div>
       <div className="alertTabs">
