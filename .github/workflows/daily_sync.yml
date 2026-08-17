@@ -1,0 +1,87 @@
+name: Daily KHMDHS sync
+
+on:
+  schedule:
+    # 03:00 UTC = 06:00 Athens time (EEST) - well outside business hours.
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+    inputs:
+      days_back:
+        description: Trailing days to re-sync (overlap makes a missed/slow run self-heal)
+        required: false
+        default: "3"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: daily-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install pinned dependencies
+        run: pip install "requests>=2.32,<3" "psycopg[binary]>=3.2,<4"
+
+      - name: Compute trailing date window
+        id: window
+        shell: python
+        env:
+          DAYS_BACK: ${{ github.event.inputs.days_back || '3' }}
+        run: |
+          import os
+          from datetime import date, timedelta
+
+          days_back = int(os.environ["DAYS_BACK"])
+          today = date.today()
+          date_from = (today - timedelta(days=days_back)).isoformat()
+          date_to = today.isoformat()
+
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              output.write(f"date_from={date_from}\n")
+              output.write(f"date_to={date_to}\n")
+
+      - name: Prepare compact data (notices, auctions, contracts)
+        run: >
+          python -u prepare_compact_data.py
+          --date-from "${{ steps.window.outputs.date_from }}"
+          --date-to "${{ steps.window.outputs.date_to }}"
+          --source all
+          --output-dir staging/compact
+
+      - name: Write to the compact database
+        env:
+          DATABASE_URL: ${{ secrets.COMPACT_DATABASE_URL }}
+          EXPECTED_DB_REF: gunzsfttzijoxteppskb
+        run: python -u load_compact_data.py --input-dir staging/compact --write
+
+      - name: Refresh dashboard caches
+        env:
+          DATABASE_URL: ${{ secrets.COMPACT_DATABASE_URL }}
+        run: |
+          python -c "
+          import os
+          import psycopg
+
+          with psycopg.connect(os.environ['DATABASE_URL'], connect_timeout=30) as conn:
+              with conn.cursor() as cur:
+                  cur.execute(\"set statement_timeout = '280000'\")
+                  cur.execute('select public.refresh_dashboard_caches();')
+              conn.commit()
+          print('dashboard caches refreshed')
+          "
+
+      - name: Save failed batch for diagnosis
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: daily-sync-failure-${{ github.run_id }}
+          path: staging/compact
+          retention-days: 7
