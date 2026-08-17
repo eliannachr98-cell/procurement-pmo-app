@@ -614,7 +614,18 @@ function MultiSearchInput({ label, type, values, onChange, placeholder, onSelect
 
   return <div className="multiSearch"><span className="multiSearchLabel">{label}{values.length > 0 && <span className="multiSearchCount">{values.length} επιλεγμέν{values.length === 1 ? "ος" : "οι"}</span>}</span>
     <div className="multiBox">
-      {values.map((value) => <span className="filterChip" key={value}>{labelByValue[value] ?? value}<button type="button" aria-label={`Αφαίρεση ${labelByValue[value] ?? value}`} onClick={() => onChange(values.filter((item) => item !== value))}>×</button></span>)}
+      {values.map((value) => {
+        const fullLabel = labelByValue[value] ?? value;
+        // CPV labels are "code — description" - keep the code prominent and
+        // the description small/muted instead of both at equal visual weight.
+        const separatorIndex = fullLabel.indexOf(" — ");
+        const code = separatorIndex === -1 ? fullLabel : fullLabel.slice(0, separatorIndex);
+        const description = separatorIndex === -1 ? "" : fullLabel.slice(separatorIndex + 3);
+        return <span className="filterChip" key={value}>
+          <b className="chipCode">{code}</b>{description && <span className="chipDesc">{description}</span>}
+          <button type="button" aria-label={`Αφαίρεση ${fullLabel}`} onClick={() => onChange(values.filter((item) => item !== value))}>×</button>
+        </span>;
+      })}
       <input value={text} onChange={(event) => setText(event.target.value)} placeholder={values.length ? "Πρόσθεσε ακόμη μία επιλογή" : placeholder} autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false} />
     </div>
     {(searching || options.length > 0) && <div className="suggestions">
@@ -939,7 +950,7 @@ function AlertsPanel() {
 
   return <>
     <article className="panel watchlistPanel">
-      <div className="watchlistRow">
+      <div className="watchlistRow cpvWatchRow">
         <div><p className="eyebrow">CPV ALERTS</p><h2>Παρακολούθηση CPV</h2></div>
         <MultiSearchInput
           label="CPV"
