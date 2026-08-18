@@ -1,11 +1,32 @@
+export type ColumnType = "text" | "number" | "currency" | "date";
+
 export type ExportPayload = {
   filename: string;
   title: string;
   headers: string[];
   rows: (string | number)[][];
+  // Parallel to headers - defaults to "text" for any column left unset, so
+  // €/count columns can render as 5.132.124 € / 1.502 instead of raw digits.
+  columnTypes?: ColumnType[];
 };
 
 export type ChartImage = { dataUrl: string; width: number; height: number };
+
+const numberFormatter = new Intl.NumberFormat("el-GR");
+const currencyFormatter = new Intl.NumberFormat("el-GR", { style: "currency", currency: "EUR", maximumFractionDigits: 0 });
+const dateFormatter = new Intl.DateTimeFormat("el-GR");
+
+function formatCell(value: string | number, type: ColumnType | undefined): string {
+  if (type === "date" && value !== "" && value !== null) {
+    const date = new Date(value);
+    if (!Number.isNaN(date.getTime())) return dateFormatter.format(date);
+  }
+  if (typeof value === "number") {
+    if (type === "currency") return currencyFormatter.format(value);
+    if (type === "number") return numberFormatter.format(value);
+  }
+  return String(value);
+}
 
 // Charts here are plain DOM (CSS bars/gradients), not <canvas>, so they need
 // to be rasterized before they can go into an Excel sheet or PDF page.
@@ -26,7 +47,7 @@ export async function downloadExcel(payload: ExportPayload, chartImage?: ChartIm
   const response = await fetch("/api/export/excel", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ filename: payload.filename, headers: payload.headers, rows: payload.rows, chartImage }),
+    body: JSON.stringify({ filename: payload.filename, headers: payload.headers, rows: payload.rows, columnTypes: payload.columnTypes, chartImage }),
   });
   if (!response.ok) throw new Error(`Η δημιουργία του Excel απέτυχε (${response.status})`);
   saveBlob(await response.blob(), `${payload.filename}.xlsx`);
@@ -115,12 +136,12 @@ function buildPrintableReport(payload: ExportPayload, chartImage: ChartImage | u
   payload.rows.forEach((row, index) => {
     const tr = document.createElement("tr");
     tr.style.background = index % 2 ? "#f3f7f8" : "#ffffff";
-    for (const cell of row) {
+    row.forEach((cell, columnIndex) => {
       const td = document.createElement("td");
-      td.textContent = String(cell);
+      td.textContent = formatCell(cell, payload.columnTypes?.[columnIndex]);
       td.style.cssText = "padding:6px 8px;border:1px solid #d7e2e7;word-break:break-word;";
       tr.appendChild(td);
-    }
+    });
     tbody.appendChild(tr);
   });
   table.appendChild(tbody);

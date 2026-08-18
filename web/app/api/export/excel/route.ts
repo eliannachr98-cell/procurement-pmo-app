@@ -10,11 +10,20 @@ function contentDisposition(filename: string) {
   return `attachment; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(filename)}`;
 }
 
+type ColumnType = "text" | "number" | "currency" | "date";
+
 type ExportBody = {
   filename: string;
   headers: string[];
   rows: (string | number)[][];
+  columnTypes?: ColumnType[];
   chartImage?: { dataUrl: string; width: number; height: number };
+};
+
+const EXCEL_NUM_FMT: Partial<Record<ColumnType, string>> = {
+  number: "#,##0",
+  currency: '#,##0" €"',
+  date: "dd/mm/yyyy",
 };
 
 export async function POST(request: Request) {
@@ -28,8 +37,21 @@ export async function POST(request: Request) {
     sheet.getRow(1).eachCell((cell) => {
       cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFEFF3F5" } };
     });
-    for (const row of body.rows) sheet.addRow(row);
-    sheet.columns.forEach((column) => {
+    // Date columns arrive as ISO strings over JSON - turn them into real
+    // Date cell values so Excel treats them as dates rather than text.
+    for (const row of body.rows) {
+      const cells: (string | number | Date)[] = row.map((cell, index) => {
+        if (body.columnTypes?.[index] === "date" && cell !== "" && cell !== null) {
+          const date = new Date(cell);
+          return Number.isNaN(date.getTime()) ? "" : date;
+        }
+        return cell;
+      });
+      sheet.addRow(cells);
+    }
+    sheet.columns.forEach((column, index) => {
+      const format = EXCEL_NUM_FMT[body.columnTypes?.[index] ?? "text"];
+      if (format) column.numFmt = format;
       let maxLength = 10;
       column.eachCell?.((cell) => { maxLength = Math.max(maxLength, String(cell.value ?? "").length); });
       column.width = Math.min(60, maxLength + 2);
