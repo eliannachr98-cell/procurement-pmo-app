@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type RefObject, type SyntheticEvent } from "react";
 import "leaflet/dist/leaflet.css";
 import { captureChartImage, downloadExcel, downloadPdf, type ExportPayload } from "@/lib/exports";
 
@@ -933,6 +933,15 @@ function AlertsPanel() {
   const [newEmail, setNewEmail] = useState("");
   const [recipientError, setRecipientError] = useState("");
   const [submittedAdams, setSubmittedAdams] = useState<Set<string>>(new Set());
+  const [copiedAdam, setCopiedAdam] = useState<string | null>(null);
+
+  const copyAdam = useCallback((adam: string, event: SyntheticEvent) => {
+    event.stopPropagation();
+    navigator.clipboard.writeText(adam).then(() => {
+      setCopiedAdam(adam);
+      window.setTimeout(() => setCopiedAdam((current) => (current === adam ? null : current)), 1500);
+    });
+  }, []);
 
   const loadSubmissions = useCallback(() => {
     fetch("/api/alert-submissions")
@@ -1072,7 +1081,7 @@ function AlertsPanel() {
           <span className="submittedFacts">
             <span><b>Π/Υ</b>{euro.format(item.budget)}</span>
             <span><b>Αποσφράγιση</b>{formatDate(item.openingDate ?? undefined)}</span>
-            <span><b>ΑΔΑΜ</b>{item.adam}</span>
+            <span className="adamCopy" role="button" tabIndex={0} title="Αντιγραφή ΑΔΑΜ" onClick={(event) => copyAdam(item.adam, event)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); copyAdam(item.adam, event); } }}><b>ΑΔΑΜ</b>{copiedAdam === item.adam ? "Αντιγράφηκε!" : item.adam}</span>
           </span>
           <button type="button" className="submittedUnmark" onClick={() => toggleSubmitted(item.adam)} aria-label={`Αναίρεση σήμανσης ${item.title}`}>Αναίρεση</button>
         </li>)}
@@ -1132,7 +1141,7 @@ function AlertsPanel() {
         <span className="alertCardHead"><strong>{item.title}</strong><span>{alertTab === "recent" && isWithinDays(item, 3) && <b className="newBadge">ΝΕΟ</b>}{formatDate(item.publicationDate ?? undefined)}</span></span>
         <span className="alertCardAuthority">{item.authority}</span>
         <span className="alertCardFacts">
-          <span><b>ΑΔΑΜ</b>{item.adam}</span>
+          <span className="adamCopy" role="button" tabIndex={0} title="Αντιγραφή ΑΔΑΜ" onClick={(event) => copyAdam(item.adam, event)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); copyAdam(item.adam, event); } }}><b>ΑΔΑΜ</b>{copiedAdam === item.adam ? "Αντιγράφηκε!" : item.adam}</span>
           <span title={item.cpvs.map((cpv) => cpv.code).join(", ")}><b>CPV</b>{shownCpvs.map((cpv) => cpv.code).join(", ") || "—"}</span>
           <span><b>Π/Υ</b>{euro.format(item.budget)}</span>
           <span><b>Αποσφράγιση</b>{formatDate(item.openingDate ?? undefined)}</span>
