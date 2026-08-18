@@ -1,4 +1,4 @@
-export type ColumnType = "text" | "number" | "currency" | "date";
+export type ColumnType = "text" | "number" | "currency" | "date" | "month";
 
 export type ExportPayload = {
   filename: string;
@@ -15,11 +15,12 @@ export type ChartImage = { dataUrl: string; width: number; height: number };
 const numberFormatter = new Intl.NumberFormat("el-GR");
 const currencyFormatter = new Intl.NumberFormat("el-GR", { style: "currency", currency: "EUR", maximumFractionDigits: 0 });
 const dateFormatter = new Intl.DateTimeFormat("el-GR");
+const monthFormatter = new Intl.DateTimeFormat("el-GR", { month: "short", year: "numeric" });
 
 function formatCell(value: string | number, type: ColumnType | undefined): string {
-  if (type === "date" && value !== "" && value !== null) {
+  if ((type === "date" || type === "month") && value !== "" && value !== null) {
     const date = new Date(value);
-    if (!Number.isNaN(date.getTime())) return dateFormatter.format(date);
+    if (!Number.isNaN(date.getTime())) return type === "month" ? monthFormatter.format(date) : dateFormatter.format(date);
   }
   if (typeof value === "number") {
     if (type === "currency") return currencyFormatter.format(value);

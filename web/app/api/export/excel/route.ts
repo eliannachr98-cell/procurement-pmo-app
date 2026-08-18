@@ -10,7 +10,7 @@ function contentDisposition(filename: string) {
   return `attachment; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(filename)}`;
 }
 
-type ColumnType = "text" | "number" | "currency" | "date";
+type ColumnType = "text" | "number" | "currency" | "date" | "month";
 
 type ExportBody = {
   filename: string;
@@ -24,7 +24,10 @@ const EXCEL_NUM_FMT: Partial<Record<ColumnType, string>> = {
   number: "#,##0",
   currency: '#,##0" €"',
   date: "dd/mm/yyyy",
+  month: "mmm yyyy",
 };
+
+const DATE_COLUMN_TYPES = new Set<ColumnType>(["date", "month"]);
 
 export async function POST(request: Request) {
   try {
@@ -41,7 +44,8 @@ export async function POST(request: Request) {
     // Date cell values so Excel treats them as dates rather than text.
     for (const row of body.rows) {
       const cells: (string | number | Date)[] = row.map((cell, index) => {
-        if (body.columnTypes?.[index] === "date" && cell !== "" && cell !== null) {
+        const type = body.columnTypes?.[index];
+        if (type && DATE_COLUMN_TYPES.has(type) && cell !== "" && cell !== null) {
           const date = new Date(cell);
           return Number.isNaN(date.getTime()) ? "" : date;
         }
