@@ -631,11 +631,13 @@ function MultiSearchInput({ label, type, values, onChange, placeholder, onSelect
         const code = separatorIndex === -1 ? fullLabel : fullLabel.slice(0, separatorIndex);
         const description = separatorIndex === -1 ? "" : fullLabel.slice(separatorIndex + 3);
         return <span className="filterChip" key={value}>
-          <b className="chipCode">{code}</b>{description && <span className="chipDesc" title={description}>{description}</span>}
+          {description
+            ? <><b className="chipCode">{code}</b><span className="chipDesc" title={description}>{description}</span></>
+            : <span className="chipLabel" title={fullLabel}>{fullLabel}</span>}
           <button type="button" aria-label={`Αφαίρεση ${fullLabel}`} onClick={() => onChange(values.filter((item) => item !== value))}>×</button>
         </span>;
       })}
-      <span className="multiAddInput">
+      <label className="multiAddInput">
         <span className="multiAddIcon">+</span>
         <input
           value={text}
@@ -643,7 +645,7 @@ function MultiSearchInput({ label, type, values, onChange, placeholder, onSelect
           placeholder={values.length ? "Πρόσθεσε ακόμη μία επιλογή" : placeholder}
           autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false}
         />
-      </span>
+      </label>
     </div>
     {(searching || options.length > 0) && <div className="suggestions">
       {searching && <span>Αναζήτηση…</span>}
