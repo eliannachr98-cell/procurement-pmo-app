@@ -1,0 +1,98 @@
+name: Reclassify 2026 Jan-Jul notices
+
+# One-off fix: notices loaded before the document_category classifier was
+# corrected (see "Classify notices using the real KHMDHS noticeType field")
+# got tagged "invitation" instead of "declaration" en masse - confirmed live
+# that Jan-Jul 2026 is almost entirely "invitation" while August (loaded
+# after the fix) is correctly "declaration"-dominant, and 2025 (loaded
+# entirely after the fix) has zero "invitation" rows. Re-fetching and
+# re-upserting just the notice source for this window corrects the stored
+# document_category without touching awards/contracts, which don't carry it.
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Run a one-week test first, then choose full
+        required: true
+        type: choice
+        options:
+          - test
+          - full
+        default: test
+
+permissions:
+  contents: read
+
+concurrency:
+  group: compact-2026-reclassify
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+    steps:
+      - id: matrix
+        env:
+          MODE: ${{ inputs.mode }}
+        shell: python
+        run: |
+          import json, os
+          from datetime import date, timedelta
+
+          if os.environ["MODE"] == "test":
+              windows = [{"date_from": "2026-01-01", "date_to": "2026-01-07", "max_pages": 1}]
+          else:
+              windows = []
+              current, end = date(2026, 1, 1), date(2026, 7, 31)
+              while current <= end:
+                  window_end = min(current + timedelta(days=6), end)
+                  windows.append({"date_from": current.isoformat(), "date_to": window_end.isoformat(), "max_pages": 0})
+                  current = window_end + timedelta(days=1)
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              output.write("matrix=" + json.dumps({"include": windows}, separators=(",", ":")) + "\n")
+
+  load:
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    # Sequential, same reasoning as load_compact_2025.yml - concurrent
+    # matrix jobs hitting KHMDHS at once produced far more 429/500s.
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix: ${{ fromJson(needs.prepare.outputs.matrix) }}
+    name: notice ${{ matrix.date_from }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install pinned dependencies
+        run: pip install "requests>=2.32,<3" "psycopg[binary]>=3.2,<4"
+      - name: Prepare compact data
+        shell: bash
+        run: |
+          args=(
+            --date-from "${{ matrix.date_from }}"
+            --date-to "${{ matrix.date_to }}"
+            --source notice
+            --output-dir staging/compact
+          )
+          if [ "${{ matrix.max_pages }}" -gt 0 ]; then
+            args+=(--max-pages "${{ matrix.max_pages }}")
+          fi
+          python -u prepare_compact_data.py "${args[@]}"
+      - name: Write to the new compact database
+        env:
+          DATABASE_URL: ${{ secrets.COMPACT_DATABASE_URL }}
+          EXPECTED_DB_REF: gunzsfttzijoxteppskb
+        run: python -u load_compact_data.py --input-dir staging/compact --write
+      - name: Save failed batch for diagnosis
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: failed-notice-${{ matrix.date_from }}
+          path: staging/compact
+          retention-days: 7
