@@ -68,11 +68,16 @@ const navItems = [
   ["alerts", "♢", "Ειδοποιήσεις"],
 ] as const;
 
+// Matched to the same hue families as the pastel Metric cards in Επισκόπηση
+// (Ενεργός~mint, Αξιολόγηση~sand, Ανατεθειμένος~lilac, Ολοκληρωμένος~sage,
+// Ακυρωμένος~rose), just at full saturation instead of the pastel tint -
+// they'd drifted apart (Ολοκληρωμένος showed purple here vs green up there,
+// Ανατεθειμένος showed blue here vs purple up there).
 const statusTone: Record<Status, string> = {
-  "Ενεργός": "green",
+  "Ενεργός": "teal",
   "Αξιολόγηση": "amber",
-  "Ανατεθειμένος": "blue",
-  "Ολοκληρωμένος": "purple",
+  "Ανατεθειμένος": "purple",
+  "Ολοκληρωμένος": "green",
   "Ακυρωμένος": "red",
 };
 
