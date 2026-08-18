@@ -877,7 +877,7 @@ function formatDate(value?: string) {
 type WatchlistItem = { cpv_code: string; cpv_label: string | null };
 type AlertItem = {
   adam: string; title: string; authority: string; contractType?: string; documentType?: string | null;
-  publicationDate: string | null; openingDate: string | null; budget: number;
+  publicationDate: string | null; openingDate: string | null; budget: number; hasAward: boolean;
   matchedCpv: string[]; cpvs: { code: string; description: string | null }[];
 };
 
@@ -1056,14 +1056,19 @@ function AlertsPanel() {
       // Πρόσφατοι = published in the last 5 days (with a ΝΕΟ badge for the
       // last-3-days sub-tier within it), Ενεργοί = everything else still
       // open (colored by how close its αποσφράγιση is), Ανενεργοί = passed.
-      const passed = scoped.filter((item) => alertUrgency(item.openingDate) === "passed");
+      // A notice's own opening_at can be stale once ΚΗΜΔΗΣ moves on - a
+      // tender that already has an award (see sql/alerts_feed.sql) is
+      // concluded regardless of what its deadline still claims, so it's
+      // always treated as passed instead of misreading as still open.
+      const isConcluded = (item: AlertItem) => item.hasAward || alertUrgency(item.openingDate) === "passed";
+      const passed = scoped.filter(isConcluded);
       // Newest publication first within Πρόσφατα - the rest of the app
       // sorts by αποσφράγιση, but "recent" is specifically about what just
       // got published, so it needs its own sort key.
       const recent = scoped
-        .filter((item) => alertUrgency(item.openingDate) !== "passed" && isWithinDays(item, 5))
+        .filter((item) => !isConcluded(item) && isWithinDays(item, 5))
         .sort((a, b) => (b.publicationDate ?? "").localeCompare(a.publicationDate ?? ""));
-      const active = scoped.filter((item) => alertUrgency(item.openingDate) !== "passed" && !isWithinDays(item, 5));
+      const active = scoped.filter((item) => !isConcluded(item) && !isWithinDays(item, 5));
       const tabs: { key: "recent" | "active" | "inactive"; label: string; items: AlertItem[] }[] = [
         { key: "recent", label: "Πρόσφατοι", items: recent },
         { key: "active", label: "Ενεργοί", items: active },

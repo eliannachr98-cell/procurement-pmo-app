@@ -19,6 +19,7 @@ type AlertRow = {
   publicationDate: string | null;
   openingDate: string | null;
   budget: number;
+  hasAward: boolean;
   matchedCpv: string[];
   cpvs: { code: string; description: string | null }[];
 };
