@@ -585,7 +585,6 @@ function MultiSearchInput({ label, type, values, onChange, placeholder, onSelect
   const [text, setText] = useState("");
   const [options, setOptions] = useState<SearchOption[]>([]);
   const [searching, setSearching] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
   // Contractor values are sometimes a VAT number (to match precisely), not a
   // readable name, so chips need their own label separate from the filter value.
   const [labelByValue, setLabelByValue] = useState<Record<string, string>>(initialLabels ?? {});
@@ -638,16 +637,14 @@ function MultiSearchInput({ label, type, values, onChange, placeholder, onSelect
           <button type="button" aria-label={`Αφαίρεση ${fullLabel}`} onClick={() => onChange(values.filter((item) => item !== value))}>×</button>
         </span>;
       })}
-      <label className="multiAddInput" onClick={() => inputRef.current?.focus()}>
-        <span className="multiAddIcon">+</span>
+      <span className="multiAddInput">
         <input
-          ref={inputRef}
           value={text}
           onChange={(event) => setText(event.target.value)}
           placeholder={values.length ? "Πρόσθεσε ακόμη μία επιλογή" : placeholder}
           autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false}
         />
-      </label>
+      </span>
     </div>
     {(searching || options.length > 0) && <div className="suggestions">
       {searching && <span>Αναζήτηση…</span>}
@@ -1044,6 +1041,11 @@ function AlertsPanel() {
         {submittedItems.map((item) => <li key={item.adam}>
           <button type="button" className="submittedTitle" onClick={() => openTender(item.adam)}>{item.title}</button>
           <span className="submittedMeta">{item.authority}</span>
+          <span className="submittedFacts">
+            <span><b>Π/Υ</b>{euro.format(item.budget)}</span>
+            <span><b>Αποσφράγιση</b>{formatDate(item.openingDate ?? undefined)}</span>
+            <span><b>ΑΔΑΜ</b>{item.adam}</span>
+          </span>
           <button type="button" className="submittedUnmark" onClick={() => toggleSubmitted(item.adam)} aria-label={`Αναίρεση σήμανσης ${item.title}`}>Αναίρεση</button>
         </li>)}
       </ul>}
@@ -1057,7 +1059,7 @@ function AlertsPanel() {
       const scoped = authorityTerms.length
         ? alerts.filter((item) => authorityTerms.some((term) => item.authority.toLocaleLowerCase("el").includes(term)))
         : alerts;
-      // Πρόσφατοι = published in the last 5 days (with a ΝΕΟ badge for the
+      // Πρόσφατοι = published in the last week (with a ΝΕΟ badge for the
       // last-3-days sub-tier within it), Ενεργοί = everything else still
       // open (colored by how close its αποσφράγιση is), Ανενεργοί = passed.
       // A notice's own opening_at can be stale once ΚΗΜΔΗΣ moves on - a
@@ -1070,9 +1072,9 @@ function AlertsPanel() {
       // sorts by αποσφράγιση, but "recent" is specifically about what just
       // got published, so it needs its own sort key.
       const recent = scoped
-        .filter((item) => !isConcluded(item) && isWithinDays(item, 5))
+        .filter((item) => !isConcluded(item) && isWithinDays(item, 7))
         .sort((a, b) => (b.publicationDate ?? "").localeCompare(a.publicationDate ?? ""));
-      const active = scoped.filter((item) => !isConcluded(item) && !isWithinDays(item, 5));
+      const active = scoped.filter((item) => !isConcluded(item) && !isWithinDays(item, 7));
       const tabs: { key: "recent" | "active" | "inactive"; label: string; items: AlertItem[] }[] = [
         { key: "recent", label: "Πρόσφατοι", items: recent },
         { key: "active", label: "Ενεργοί", items: active },
