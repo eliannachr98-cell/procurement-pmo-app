@@ -36,6 +36,18 @@ language sql stable as $$
     from public.record_cpvs_compact rc
     join notices n on n.adam = rc.record_adam
     where rc.record_type = 'procurement'
+  ),
+  -- A notice's own opening/deadline date is sometimes stale (ΚΗΜΔΗΣ never
+  -- updates it once the tender moves on), so a tender that already has an
+  -- award can still show a future "Αποσφράγιση" and read as still open -
+  -- confirmed live against 26PROC018595288 (deadline shown as 2026-12-31,
+  -- awarded and under contract since 2026-03-12). The frontend uses this
+  -- flag to always bucket such tenders as concluded (Ανενεργοί), regardless
+  -- of what opening_at says.
+  has_award as (
+    select distinct a.procurement_adam as adam
+    from public.awards_compact a
+    where a.procurement_adam in (select adam from notices)
   )
   select coalesce(json_agg(json_build_object(
     'adam', n.adam,
@@ -46,8 +58,10 @@ language sql stable as $$
     'publicationDate', n.publication_date,
     'openingDate', n.opening_at,
     'budget', n.budget,
+    'hasAward', (ha.adam is not null),
     'cpvs', (select coalesce(json_agg(json_build_object('code', nc.cpv_code, 'description', nc.cpv_description)), '[]'::json) from notice_cpvs nc where nc.adam = n.adam),
     'matchedCpv', (select coalesce(json_agg(nc.cpv_code), '[]'::json) from notice_cpvs nc where nc.adam = n.adam and nc.cpv_code = any(p_cpv_codes))
   ) order by n.publication_date desc nulls last), '[]'::json)
-  from notices n;
+  from notices n
+  left join has_award ha on ha.adam = n.adam;
 $$;
