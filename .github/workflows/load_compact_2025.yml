@@ -141,9 +141,12 @@ jobs:
     needs: prepare
     runs-on: ubuntu-latest
     timeout-minutes: 120
+    # Sequential, like daily_sync.yml - two matrix jobs hitting KHMDHS at the
+    # same time (even from separate runners) was producing far more 429/500s
+    # and timeouts than running one fetch+write at a time.
     strategy:
       fail-fast: false
-      max-parallel: 2
+      max-parallel: 1
       matrix: ${{ fromJson(needs.prepare.outputs.matrix) }}
     name: ${{ matrix.source }} ${{ matrix.date_from }} type ${{ matrix.contract_type }} cost ${{ matrix.estimated_cost_from }}-${{ matrix.estimated_cost_to }}
     steps:
