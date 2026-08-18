@@ -585,6 +585,7 @@ function MultiSearchInput({ label, type, values, onChange, placeholder, onSelect
   const [text, setText] = useState("");
   const [options, setOptions] = useState<SearchOption[]>([]);
   const [searching, setSearching] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
   // Contractor values are sometimes a VAT number (to match precisely), not a
   // readable name, so chips need their own label separate from the filter value.
   const [labelByValue, setLabelByValue] = useState<Record<string, string>>(initialLabels ?? {});
@@ -637,9 +638,10 @@ function MultiSearchInput({ label, type, values, onChange, placeholder, onSelect
           <button type="button" aria-label={`Αφαίρεση ${fullLabel}`} onClick={() => onChange(values.filter((item) => item !== value))}>×</button>
         </span>;
       })}
-      <label className="multiAddInput">
+      <label className="multiAddInput" onClick={() => inputRef.current?.focus()}>
         <span className="multiAddIcon">+</span>
         <input
+          ref={inputRef}
           value={text}
           onChange={(event) => setText(event.target.value)}
           placeholder={values.length ? "Πρόσθεσε ακόμη μία επιλογή" : placeholder}
