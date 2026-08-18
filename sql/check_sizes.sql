@@ -1,5 +1,5 @@
-select 'notice' as source, count(*) from public.procurements_compact where publication_date = '2025-08-05'
-union all
-select 'award' as source, count(*) from public.awards_compact where award_date = '2025-08-05'
-union all
-select 'contract' as source, count(*) from public.contracts_compact where signed_date = '2025-08-05';
+select to_char(publication_date, 'YYYY-MM') as month, document_category, count(*)
+from public.procurements_compact
+where publication_date >= '2026-01-01' and publication_date < '2026-09-01'
+group by 1, 2
+order by 1, 3 desc;
