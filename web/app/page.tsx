@@ -937,9 +937,25 @@ function AlertsPanel() {
 
   const copyAdam = useCallback((adam: string, event: SyntheticEvent) => {
     event.stopPropagation();
-    navigator.clipboard.writeText(adam).then(() => {
+    const onCopied = () => {
       setCopiedAdam(adam);
       window.setTimeout(() => setCopiedAdam((current) => (current === adam ? null : current)), 1500);
+    };
+    navigator.clipboard.writeText(adam).then(onCopied, () => {
+      // Some browsers refuse the async Clipboard API outside a focused tab
+      // or a secure context - a hidden textarea + execCommand still works.
+      const textarea = document.createElement("textarea");
+      textarea.value = adam;
+      textarea.style.position = "fixed";
+      textarea.style.left = "-9999px";
+      document.body.appendChild(textarea);
+      textarea.select();
+      try {
+        if (document.execCommand("copy")) onCopied();
+      } catch {
+        // Nothing more we can do - the click still worked, just not the copy.
+      }
+      document.body.removeChild(textarea);
     });
   }, []);
 
