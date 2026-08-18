@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import "leaflet/dist/leaflet.css";
+import { captureChartImage, downloadExcel, downloadPdf, type ExportPayload } from "@/lib/exports";
 
 type Status = "Ενεργός" | "Αξιολόγηση" | "Ανατεθειμένος" | "Ολοκληρωμένος" | "Ακυρωμένος";
 type Tender = {
@@ -84,24 +85,6 @@ const statusTone: Record<Status, string> = {
 const number = new Intl.NumberFormat("el-GR");
 const euro = new Intl.NumberFormat("el-GR", { style: "currency", currency: "EUR", maximumFractionDigits: 0 });
 
-function downloadCsv(filename: string, headers: string[], rows: (string | number)[][]) {
-  const escape = (value: string | number) => {
-    const text = String(value);
-    return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
-  };
-  const csv = [headers, ...rows].map((row) => row.map(escape).join(",")).join("\n");
-  // Leading BOM keeps Excel from mangling the Greek characters on open.
-  const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = filename;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
-}
-
 type DashboardBreakdown = {
   total: number;
   status: { status: string; count: number; budget: number }[];
@@ -135,6 +118,10 @@ export default function Home() {
   const [lastSync, setLastSync] = useState<string | null>(null);
   const latestRequest = useRef(0);
   const latestDashboardRequest = useRef(0);
+  const statusChartRef = useRef<HTMLDivElement>(null);
+  const cpvChartRef = useRef<HTMLDivElement>(null);
+  const monthlyCountChartRef = useRef<HTMLDivElement>(null);
+  const monthlyBudgetChartRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     fetch("/api/last-sync")
@@ -289,14 +276,14 @@ export default function Home() {
               <Metric label="Π/Υ:" value={euro.format(statusBudget("Ακυρωμένος"))} tone="rose" />
             </div>
             <div className="chartGrid">
-              <article className="panel"><PanelHeader title="Διαγωνισμοί ανά στάδιο" caption={`Σύνολο ${number.format(dashboard.total)} διαγωνισμών`} onDownload={() => downloadCsv("diagonismoi-ana-stadio.csv", ["Κατάσταση", "Πλήθος", "Προϋπολογισμός"], dashboard.status.map((item) => [item.status, item.count, item.budget]))} /><StatusBars counts={dashboard.status} /></article>
-              <article className="panel"><PanelHeader title="CPV Distribution" caption="Κορυφαίες κατηγορίες (σύνολο βάσης)" onDownload={() => downloadCsv("cpv-distribution.csv", ["CPV", "Περιγραφή", "Πλήθος"], dashboard.cpv.map((item) => [item.cpv_code, item.cpv_description ?? "", item.count]))} /><CpvDonut counts={dashboard.cpv} total={dashboard.total} cpvTotal={dashboard.cpvTotal} /></article>
+              <article className="panel"><PanelHeader title="Διαγωνισμοί ανά στάδιο" caption={`Σύνολο ${number.format(dashboard.total)} διαγωνισμών`} chartRef={statusChartRef} onDownload={{ filename: "diagonismoi-ana-stadio", title: "Διαγωνισμοί ανά στάδιο", headers: ["Κατάσταση", "Πλήθος", "Προϋπολογισμός"], rows: dashboard.status.map((item) => [item.status, item.count, item.budget]) }} /><div ref={statusChartRef}><StatusBars counts={dashboard.status} /></div></article>
+              <article className="panel"><PanelHeader title="CPV Distribution" caption="Κορυφαίες κατηγορίες (σύνολο βάσης)" chartRef={cpvChartRef} onDownload={{ filename: "cpv-distribution", title: "CPV Distribution", headers: ["CPV", "Περιγραφή", "Πλήθος"], rows: dashboard.cpv.map((item) => [item.cpv_code, item.cpv_description ?? "", item.count]) }} /><div ref={cpvChartRef}><CpvDonut counts={dashboard.cpv} total={dashboard.total} cpvTotal={dashboard.cpvTotal} /></div></article>
             </div>
             <div className="monthlyGrid">
-              <article className="panel monthlyTablePanel"><PanelHeader title="Διαγωνισμοί ανά μήνα" caption="Πλήθος, Π/Υ, CPV και αναθέτουσες αρχές ανά μήνα δημοσίευσης" onDownload={() => downloadCsv("diagonismoi-ana-mina.csv", ["Μήνας", "Διαγωνισμοί", "Συνολική αξία", "CPV", "Αναθέτουσες Αρχές"], dashboard.monthly.map((item) => [monthLabel(item.month), item.count, item.budget, item.cpv, item.authorities]))} /><MonthlyTable months={dashboard.monthly} /></article>
+              <article className="panel monthlyTablePanel"><PanelHeader title="Διαγωνισμοί ανά μήνα" caption="Πλήθος, Π/Υ, CPV και αναθέτουσες αρχές ανά μήνα δημοσίευσης" onDownload={{ filename: "diagonismoi-ana-mina", title: "Διαγωνισμοί ανά μήνα", headers: ["Μήνας", "Διαγωνισμοί", "Συνολική αξία", "CPV", "Αναθέτουσες Αρχές"], rows: dashboard.monthly.map((item) => [monthLabel(item.month), item.count, item.budget, item.cpv, item.authorities]) }} /><MonthlyTable months={dashboard.monthly} /></article>
               <div className="monthlyChartsCol">
-                <article className="panel"><PanelHeader title="Πλήθος ανά μήνα" caption="Αριθμός διαγωνισμών ανά μήνα δημοσίευσης" onDownload={() => downloadCsv("plithos-ana-mina.csv", ["Μήνας", "Διαγωνισμοί"], dashboard.monthly.map((item) => [monthLabel(item.month), item.count]))} /><MonthlyBarChart months={dashboard.monthly} metric="count" formatValue={(value) => number.format(value)} unitLabel="διαγωνισμοί" /></article>
-                <article className="panel"><PanelHeader title="Π/Υ ανά μήνα" caption="Συνολικός προϋπολογισμός ανά μήνα δημοσίευσης" onDownload={() => downloadCsv("proypologismos-ana-mina.csv", ["Μήνας", "Προϋπολογισμός"], dashboard.monthly.map((item) => [monthLabel(item.month), item.budget]))} /><MonthlyBarChart months={dashboard.monthly} metric="budget" formatValue={(value) => euro.format(value)} unitLabel="" /></article>
+                <article className="panel"><PanelHeader title="Πλήθος ανά μήνα" caption="Αριθμός διαγωνισμών ανά μήνα δημοσίευσης" chartRef={monthlyCountChartRef} onDownload={{ filename: "plithos-ana-mina", title: "Πλήθος ανά μήνα", headers: ["Μήνας", "Διαγωνισμοί"], rows: dashboard.monthly.map((item) => [monthLabel(item.month), item.count]) }} /><div ref={monthlyCountChartRef}><MonthlyBarChart months={dashboard.monthly} metric="count" formatValue={(value) => number.format(value)} unitLabel="διαγωνισμοί" /></div></article>
+                <article className="panel"><PanelHeader title="Π/Υ ανά μήνα" caption="Συνολικός προϋπολογισμός ανά μήνα δημοσίευσης" chartRef={monthlyBudgetChartRef} onDownload={{ filename: "proypologismos-ana-mina", title: "Π/Υ ανά μήνα", headers: ["Μήνας", "Προϋπολογισμός"], rows: dashboard.monthly.map((item) => [monthLabel(item.month), item.budget]) }} /><div ref={monthlyBudgetChartRef}><MonthlyBarChart months={dashboard.monthly} metric="budget" formatValue={(value) => euro.format(value)} unitLabel="" /></div></article>
               </div>
             </div>
             <NutsMap counts={dashboard.nuts} />
@@ -338,8 +325,44 @@ function Metric({ label, value, sub, tone }: { label: string; value: string; sub
   return <article className={`metric ${tone}`}><span>{label}</span><strong>{value}</strong>{sub && <small>{sub}</small>}</article>;
 }
 
-function PanelHeader({ title, caption, onDownload }: { title: string; caption: string; onDownload?: () => void }) {
-  return <header className="panelHeader"><div><h2>{title}</h2><p>{caption}</p></div><button type="button" title="Λήψη CSV" disabled={!onDownload} onClick={onDownload}>•••</button></header>;
+function PanelHeader({ title, caption, onDownload, chartRef }: { title: string; caption: string; onDownload?: ExportPayload; chartRef?: RefObject<HTMLElement | null> }) {
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState<"excel" | "pdf" | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onOutside = (event: MouseEvent) => { if (!menuRef.current?.contains(event.target as Node)) setOpen(false); };
+    document.addEventListener("mousedown", onOutside);
+    return () => document.removeEventListener("mousedown", onOutside);
+  }, [open]);
+
+  const run = async (format: "excel" | "pdf") => {
+    if (!onDownload || busy) return;
+    setBusy(format);
+    try {
+      const chartImage = await captureChartImage(chartRef?.current ?? null);
+      if (format === "excel") await downloadExcel(onDownload, chartImage);
+      else await downloadPdf(onDownload, chartImage);
+      setOpen(false);
+    } catch {
+      // Swallow - a failed export shouldn't crash the panel, and the browser
+      // will simply not show a download if the request never completes.
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return <header className="panelHeader">
+    <div><h2>{title}</h2><p>{caption}</p></div>
+    <div className="downloadMenu" ref={menuRef}>
+      <button type="button" title="Λήψη" disabled={!onDownload} onClick={() => setOpen((value) => !value)}>•••</button>
+      {open && <div className="downloadMenuList">
+        <button type="button" onClick={() => run("excel")} disabled={busy !== null}>{busy === "excel" ? "Δημιουργία…" : "Λήψη Excel"}</button>
+        <button type="button" onClick={() => run("pdf")} disabled={busy !== null}>{busy === "pdf" ? "Δημιουργία…" : "Λήψη PDF"}</button>
+      </div>}
+    </div>
+  </header>;
 }
 
 function StatusBars({ counts }: { counts: { status: string; count: number }[] }) {
@@ -426,7 +449,7 @@ function MonthlyBarChart({ months, metric, formatValue, unitLabel }: {
 function TenderTable({ rows, expanded = false, title = "Λίστα διαγωνισμών", caption, onViewAll }: { rows: Tender[]; expanded?: boolean; title?: string; caption?: string; onViewAll?: () => void }) {
   const [selected, setSelected] = useState<Tender | null>(null);
   if (selected) return <TenderDetail tender={selected} onBack={() => setSelected(null)} />;
-  return <article className={`panel tablePanel ${expanded ? "expanded" : ""}`}><PanelHeader title={title} caption={caption ?? `${number.format(rows.length)} εγγραφές μετά τα φίλτρα`} onDownload={() => downloadCsv(`${title}.csv`, ["ΑΔΑΜ","Τίτλος","Αναθέτουσα Αρχή","CPV","Περιγραφή CPV","Κατάσταση","Δημοσίευση"], rows.map((item) => [item.adam, item.title, item.authority, item.cpv, item.cpvDescription ?? "", item.status, item.publicationDate ?? ""]))} /><div className="tableScroll"><table><thead><tr><th>ΑΔΑΜ</th><th>Τίτλος</th><th>Αναθέτουσα Αρχή</th><th>CPV / Τίτλος</th><th>Κατάσταση</th><th>Δημοσίευση</th><th /></tr></thead><tbody>{rows.map((item) => <tr key={item.adam}><td className="adam">{item.adam}</td><td>{item.title}</td><td>{item.authority}</td><td><strong>{item.cpv}</strong><small className="cellSub">{item.cpvDescription}</small></td><td><span className={`status ${statusTone[item.status]}`}>{item.status}</span></td><td>{formatDate(item.publicationDate)}</td><td><button className="view" aria-label={`Προβολή ${item.adam}`} onClick={() => setSelected(item)}>→</button></td></tr>)}</tbody></table></div>{!rows.length && <p className="noRows">Δεν βρέθηκαν διαγωνισμοί για τα επιλεγμένα φίλτρα.</p>}{onViewAll && <button className="viewAll" onClick={onViewAll}>Προβολή όλων των διαγωνισμών →</button>}</article>;
+  return <article className={`panel tablePanel ${expanded ? "expanded" : ""}`}><PanelHeader title={title} caption={caption ?? `${number.format(rows.length)} εγγραφές μετά τα φίλτρα`} onDownload={{ filename: title, title, headers: ["ΑΔΑΜ", "Τίτλος", "Αναθέτουσα Αρχή", "CPV", "Περιγραφή CPV", "Κατάσταση", "Δημοσίευση"], rows: rows.map((item) => [item.adam, item.title, item.authority, item.cpv, item.cpvDescription ?? "", item.status, item.publicationDate ?? ""]) }} /><div className="tableScroll"><table><thead><tr><th>ΑΔΑΜ</th><th>Τίτλος</th><th>Αναθέτουσα Αρχή</th><th>CPV / Τίτλος</th><th>Κατάσταση</th><th>Δημοσίευση</th><th /></tr></thead><tbody>{rows.map((item) => <tr key={item.adam}><td className="adam">{item.adam}</td><td>{item.title}</td><td>{item.authority}</td><td><strong>{item.cpv}</strong><small className="cellSub">{item.cpvDescription}</small></td><td><span className={`status ${statusTone[item.status]}`}>{item.status}</span></td><td>{formatDate(item.publicationDate)}</td><td><button className="view" aria-label={`Προβολή ${item.adam}`} onClick={() => setSelected(item)}>→</button></td></tr>)}</tbody></table></div>{!rows.length && <p className="noRows">Δεν βρέθηκαν διαγωνισμοί για τα επιλεγμένα φίλτρα.</p>}{onViewAll && <button className="viewAll" onClick={onViewAll}>Προβολή όλων των διαγωνισμών →</button>}</article>;
 }
 
 function TenderDetail({ tender, onBack }: { tender: Tender; onBack: () => void }) {
@@ -492,7 +515,7 @@ function NutsMap({ counts }: { counts: { nuts_code: string; nuts_name: string; c
 
   useEffect(() => () => { mapRef.current?.remove(); mapRef.current = null; }, []);
 
-  return <article className="panel nutsPanel"><PanelHeader title="Διαγωνισμοί ανά NUTS" caption={`${number.format(total)} διαγωνισμοί με τα τρέχοντα φίλτρα`} onDownload={() => downloadCsv("diagonismoi-ana-nuts.csv", ["NUTS", "Περιοχή", "Πλήθος"], regions.map((item) => [item.nuts_code, item.nuts_name, item.count]))} /><div className="nutsMap"><div className="realMap" ref={mapElRef} /><div className="nutsLegend">{regions.slice(0,10).map((item) => <div key={item.nuts_code}><span title={item.nuts_name}>{item.nuts_name}</span><i><b style={{width:`${(item.count/max)*100}%`}} /></i><strong>{number.format(item.count)}</strong></div>)}</div></div></article>;
+  return <article className="panel nutsPanel"><PanelHeader title="Διαγωνισμοί ανά NUTS" caption={`${number.format(total)} διαγωνισμοί με τα τρέχοντα φίλτρα`} onDownload={{ filename: "diagonismoi-ana-nuts", title: "Διαγωνισμοί ανά NUTS", headers: ["NUTS", "Περιοχή", "Πλήθος"], rows: regions.map((item) => [item.nuts_code, item.nuts_name, item.count]) }} /><div className="nutsMap"><div className="realMap" ref={mapElRef} /><div className="nutsLegend">{regions.slice(0,10).map((item) => <div key={item.nuts_code}><span title={item.nuts_name}>{item.nuts_name}</span><i><b style={{width:`${(item.count/max)*100}%`}} /></i><strong>{number.format(item.count)}</strong></div>)}</div></div></article>;
 }
 
 // Approximate centroid [lat, lon] per Greek NUTS unit (official 2021
@@ -785,7 +808,7 @@ function MarketPanel({ awards, contracts, cpv, setCpv, contractor, authority, qu
     {hasSelection && <>
       <label className="search marketContractorSearch"><span>⌕</span><input value={contractorSearch} onChange={(event) => setContractorSearch(event.target.value)} placeholder="Αναζήτηση αναδόχου" /></label>
       <article className="panel tablePanel">
-        <PanelHeader title="Ανάδοχοι" caption="Ταξινομημένοι κατά αριθμό διαγωνισμών. Πάτησε πάνω σε έναν ανάδοχο για να δεις τους διαγωνισμούς και τις συμβάσεις του." onDownload={() => downloadCsv("anadoxoi.csv", ["Ανάδοχος", "Διαγωνισμοί", "Συμβάσεις", "Αναθέτουσες Αρχές", "Αξία"], contractorRows.map((item) => [item.name, item.tenders, item.contracts, item.authorities, item.value]))} />
+        <PanelHeader title="Ανάδοχοι" caption="Ταξινομημένοι κατά αριθμό διαγωνισμών. Πάτησε πάνω σε έναν ανάδοχο για να δεις τους διαγωνισμούς και τις συμβάσεις του." onDownload={{ filename: "anadoxoi", title: "Ανάδοχοι", headers: ["Ανάδοχος", "Διαγωνισμοί", "Συμβάσεις", "Αναθέτουσες Αρχές", "Αξία"], rows: contractorRows.map((item) => [item.name, item.tenders, item.contracts, item.authorities, item.value]) }} />
         <div className="tableScroll"><table>
           <thead><tr><th /><th>Ανάδοχος</th><th>Διαγωνισμοί</th><th>Συμβάσεις</th><th>Συνολική αξία</th><th>Αναθέτουσες Αρχές</th></tr></thead>
           <tbody>{visibleRows.map((item) => (
@@ -1119,7 +1142,7 @@ function AlertsPanel() {
       };
 
       return <article className="panel tablePanel">
-      <PanelHeader title="Νέοι διαγωνισμοί" caption={`${number.format(recent.length + active.length + passed.length)} διαγωνισμοί από τις αρχές του 2026 στα CPV που παρακολουθείς`} onDownload={() => downloadCsv("neoi-diagonismoi.csv", ["ΑΔΑΜ", "Τίτλος", "Αναθέτουσα Αρχή", "Π/Υ", "Αποσφράγιση", "Τύπος σύμβασης"], shownItems.map((item) => [item.adam, item.title, item.authority, item.budget, item.openingDate ?? "", item.contractType ?? ""]))} />
+      <PanelHeader title="Νέοι διαγωνισμοί" caption={`${number.format(recent.length + active.length + passed.length)} διαγωνισμοί από τις αρχές του 2026 στα CPV που παρακολουθείς`} onDownload={{ filename: "neoi-diagonismoi", title: "Νέοι διαγωνισμοί", headers: ["ΑΔΑΜ", "Τίτλος", "Αναθέτουσα Αρχή", "Π/Υ", "Αποσφράγιση", "Τύπος σύμβασης"], rows: shownItems.map((item) => [item.adam, item.title, item.authority, item.budget, item.openingDate ?? "", item.contractType ?? ""]) }} />
       <div className="alertAuthorityFilter">
         <MultiSearchInput
           label="Αναθέτουσα Αρχή"
