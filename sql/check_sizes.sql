@@ -1,4 +1,5 @@
-select indexname, indexdef
-from pg_indexes
-where schemaname = 'public' and tablename in ('record_cpvs_compact', 'record_contractors_compact', 'awards_compact', 'contracts_compact')
-order by tablename, indexname;
+analyze public.procurements_compact;
+analyze public.record_cpvs_compact;
+analyze public.record_contractors_compact;
+analyze public.awards_compact;
+analyze public.contracts_compact;
