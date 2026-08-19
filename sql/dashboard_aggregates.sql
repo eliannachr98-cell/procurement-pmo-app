@@ -189,6 +189,14 @@ declare
   where_sql text := '';
   sql_text text;
 begin
+  -- A broad, low-selectivity Τύπος σύμβασης filter with no year (e.g.
+  -- "Προμήθειες" alone, ~124k matching rows) pushes the join+aggregation
+  -- work past the default statement_timeout even with a supporting index -
+  -- give this specific call more room rather than erroring on real usage.
+  if p_contract_type is not null or p_document_type is not null then
+    set local statement_timeout = '40000';
+  end if;
+
   only_year_filter := p_adams is null and p_query is null and p_authority is null
     and p_contract_type is null and p_document_type is null;
 
