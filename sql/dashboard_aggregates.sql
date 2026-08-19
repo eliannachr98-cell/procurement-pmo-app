@@ -44,7 +44,14 @@ begin
     with matched as (
       select p.adam, p.opening_at, p.cancelled_at, p.status as raw_status,
              p.nuts_name, p.nuts_code, p.publication_date, p.authority_name,
-             coalesce(p.budget_inc_vat, p.budget_ex_vat, p.budget_unknown_vat, 0) as budget
+             -- A handful of notices carry an obviously mistyped budget (a
+             -- small municipal truck rental listed at >1 trillion euros) -
+             -- treat anything above the biggest plausible single Greek
+             -- public tender as a data-entry error rather than let it
+             -- swamp the sum for its whole month.
+             case when coalesce(p.budget_inc_vat, p.budget_ex_vat, p.budget_unknown_vat, 0) > 2000000000
+                  then 0
+                  else coalesce(p.budget_inc_vat, p.budget_ex_vat, p.budget_unknown_vat, 0) end as budget
       from public.procurements_compact p
       -- Only count original tender notices, not follow-up documents
       -- (amendment/clarification/extension/summary/decision) about the same
@@ -228,7 +235,14 @@ begin
     with matched as (
       select p.adam, p.opening_at, p.cancelled_at, p.status as raw_status,
              p.nuts_name, p.nuts_code, p.publication_date, p.authority_name,
-             coalesce(p.budget_inc_vat, p.budget_ex_vat, p.budget_unknown_vat, 0) as budget
+             -- A handful of notices carry an obviously mistyped budget (a
+             -- small municipal truck rental listed at >1 trillion euros) -
+             -- treat anything above the biggest plausible single Greek
+             -- public tender as a data-entry error rather than let it
+             -- swamp the sum for its whole month.
+             case when coalesce(p.budget_inc_vat, p.budget_ex_vat, p.budget_unknown_vat, 0) > 2000000000
+                  then 0
+                  else coalesce(p.budget_inc_vat, p.budget_ex_vat, p.budget_unknown_vat, 0) end as budget
       from public.procurements_compact p
   $sql1$ || where_sql || $sql2$
     ),
