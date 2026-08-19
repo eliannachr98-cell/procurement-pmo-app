@@ -53,10 +53,12 @@ begin
                   then 0
                   else coalesce(p.budget_inc_vat, p.budget_ex_vat, p.budget_unknown_vat, 0) end as budget
       from public.procurements_compact p
-      -- Only count original tender notices, not follow-up documents
-      -- (amendment/clarification/extension/summary/decision) about the same
-      -- tender -- otherwise one tender inflates into several "διαγωνισμοί".
-      where p.document_category in ('declaration', 'announcement')
+      -- Only count the original διακήρυξη, not "προκήρυξη" (announcement)
+      -- or any other follow-up document (amendment/clarification/extension/
+      -- summary/decision) about the same tender - otherwise one tender
+      -- inflates into several "διαγωνισμοί", or counts a notice type the
+      -- user doesn't consider a real tender in the first place.
+      where p.document_category = 'declaration'
         and (target_year is null
          or (p.publication_date >= (target_year || '-01-01')::date and p.publication_date <= (target_year || '-12-31')::date))
     ),
@@ -224,7 +226,7 @@ begin
   else
     -- No explicit document-type filter: default to real tenders only, same
     -- as the cached (unfiltered / year-only) path -- see refresh_dashboard_caches().
-    conditions := conditions || $q$p.document_category in ('declaration', 'announcement')$q$::text;
+    conditions := conditions || $q$p.document_category = 'declaration'$q$::text;
   end if;
 
   if array_length(conditions, 1) > 0 then
