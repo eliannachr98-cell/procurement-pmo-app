@@ -21,12 +21,18 @@ type Breakdown = {
 export async function GET(request: Request) {
   try {
     const searchParams = new URL(request.url).searchParams;
+    // Τύπος εγγράφου/σύμβασης deliberately don't narrow this view - passing
+    // either one to dashboard_breakdown skips the cached fast path and forces
+    // the live query, which reliably blows past PostgREST's own timeout
+    // regardless of how selective the value is (confirmed even "Έργα", one
+    // of the smallest categories, times out the same as the broadest one -
+    // an index, ANALYZE, and consolidating the repeated CPV join all made no
+    // difference, so the ceiling isn't query cost). Only these four narrow
+    // what the dashboard shows.
     const authority = searchParams.get("authority")?.trim() ?? "";
     const contractors = searchParams.getAll("contractor").flatMap((value) => value.split(",")).map((value) => value.trim()).filter(Boolean);
     const cpvs = searchParams.getAll("cpv").flatMap((value) => value.split(",")).map((value) => value.trim()).filter(Boolean);
     const year = searchParams.get("year")?.trim() ?? "";
-    const contractTypes = searchParams.getAll("contractType").flatMap((value) => value.split(",")).map((value) => value.trim()).filter(Boolean);
-    const documentType = searchParams.get("documentType")?.trim() ?? "";
 
     let matchingAdams: string[] | null = null;
     if (contractors.length) {
@@ -48,8 +54,8 @@ export async function GET(request: Request) {
       p_query: null,
       p_authority: authority || null,
       p_year: /^\d{4}$/.test(year) ? year : null,
-      p_contract_type: contractTypes.length ? contractTypes : null,
-      p_document_type: documentType && documentType !== "Όλοι" ? documentType : null,
+      p_contract_type: null,
+      p_document_type: null,
       p_adams: matchingAdams,
     });
 

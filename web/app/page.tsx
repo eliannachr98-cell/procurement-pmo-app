@@ -100,6 +100,7 @@ export default function Home() {
   const [awards, setAwards] = useState<Award[]>([]);
   const [contracts, setContracts] = useState<Contract[]>([]);
   const [dashboard, setDashboard] = useState<DashboardBreakdown>(emptyDashboard);
+  const [dashboardError, setDashboardError] = useState("");
   const [years, setYears] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [dataError, setDataError] = useState("");
@@ -180,21 +181,24 @@ export default function Home() {
     contractor.forEach((item) => params.append("contractor", item));
     cpv.forEach((item) => params.append("cpv", item));
     if (year !== "Όλα") params.set("year", year);
-    contractType.forEach((item) => params.append("contractType", item));
-    if (documentType !== "Όλοι") params.set("documentType", documentType);
+    // Τύπος σύμβασης/εγγράφου deliberately don't reach the dashboard - see
+    // the comment in /api/dashboard/route.ts for why.
     fetch(`/api/dashboard?${params.toString()}`)
       .then((response) => response.ok ? response.json() : Promise.reject(new Error("dashboard request failed")))
       .then((payload) => {
         if (requestId !== latestDashboardRequest.current) return;
         setDashboard(payload);
+        setDashboardError("");
       })
       .catch(() => {
         // A very broad, unfiltered-by-year combination can still time out
-        // server-side -- show nothing rather than silently stale numbers
-        // from the previous filter selection.
-        if (requestId === latestDashboardRequest.current) setDashboard(emptyDashboard);
+        // server-side - show nothing, but say so explicitly instead of a
+        // silent "0", which reads as "no such tenders exist" and is wrong.
+        if (requestId !== latestDashboardRequest.current) return;
+        setDashboard(emptyDashboard);
+        setDashboardError("Πολύ ευρύ φίλτρο για να υπολογιστεί - πρόσθεσε έτος ή άλλο φίλτρο για να στενέψει.");
       });
-  }, [authority, contractor, cpv, year, contractType, documentType]);
+  }, [authority, contractor, cpv, year]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => { loadTenderPage(1); loadDashboard(); }, 350);
@@ -254,6 +258,7 @@ export default function Home() {
           </div>
           {loading && tenders.length === 0 && <div className="dataBanner">Φόρτωση πραγματικών δεδομένων από Supabase…</div>}
           {dataError && <div className="dataBanner error">{dataError} · εμφανίζεται προσωρινό δείγμα.</div>}
+          {page === "overview" && dashboardError && <div className="dataBanner error">{dashboardError}</div>}
 
           {page === "overview" && <>
             <div className="metrics">
