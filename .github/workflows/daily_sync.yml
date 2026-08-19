@@ -89,7 +89,7 @@ jobs:
 
           with psycopg.connect(os.environ['DATABASE_URL'], connect_timeout=30) as conn:
               with conn.cursor() as cur:
-                  cur.execute(\"set statement_timeout = '280000'\")
+                  cur.execute(\"set statement_timeout = '900000'\")
                   cur.execute('select public.refresh_dashboard_caches();')
               conn.commit()
           print('dashboard caches refreshed')

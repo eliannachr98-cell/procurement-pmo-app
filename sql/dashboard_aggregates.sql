@@ -39,8 +39,19 @@ language plpgsql as $$
 declare
   result json;
   target_year text;
+  target_contract_type text;
+  cache_key text;
+  -- Τύπος σύμβασης has a small, fixed set of real values - precomputing
+  -- every (year x type) combination sidesteps the live-query path for it
+  -- entirely, which reliably blew past PostgREST's own timeout no matter
+  -- how selective the value was (confirmed even the smallest category,
+  -- "Έργα", failed identically to the largest - an index, ANALYZE, and
+  -- consolidating the repeated CPV join into one materialized CTE made no
+  -- measurable difference, so the ceiling wasn't query cost).
+  contract_types text[] := array[null::text, 'Έργα', 'Μελέτες', 'Προμήθειες', 'Τεχνικές ή λοιπές συναφείς υπηρεσίες', 'Υπηρεσίες'];
 begin
   for target_year in select year from public.available_years() union all select null loop
+    foreach target_contract_type in array contract_types loop
     with matched as (
       select p.adam, p.opening_at, p.cancelled_at, p.status as raw_status,
              p.nuts_name, p.nuts_code, p.publication_date, p.authority_name,
@@ -61,6 +72,7 @@ begin
       where p.document_category = 'declaration'
         and (target_year is null
          or (p.publication_date >= (target_year || '-01-01')::date and p.publication_date <= (target_year || '-12-31')::date))
+        and (target_contract_type is null or p.contract_type = target_contract_type)
     ),
     has_award as (
       select distinct a.procurement_adam as adam
@@ -166,9 +178,14 @@ begin
     )
     into result;
 
+    -- Keeps the existing "2026"/"all" keys for the no-type case (backward
+    -- compatible with the year-only lookup below) and adds "2026|Προμήθειες"
+    -- style keys once a type is included.
+    cache_key := coalesce(target_year, 'all') || case when target_contract_type is null then '' else '|' || target_contract_type end;
     insert into public.dashboard_cache (cache_key, payload, refreshed_at)
-    values (coalesce(target_year, 'all'), result, now())
+    values (cache_key, result, now())
     on conflict (cache_key) do update set payload = excluded.payload, refreshed_at = excluded.refreshed_at;
+    end loop;
   end loop;
 end;
 $$;
@@ -188,6 +205,7 @@ language plpgsql stable as $$
 declare
   result json;
   only_year_filter boolean;
+  cacheable_single_type boolean;
   conditions text[] := array[]::text[];
   where_sql text := '';
   sql_text text;
@@ -197,6 +215,22 @@ begin
 
   if only_year_filter then
     select payload into result from public.dashboard_cache where cache_key = coalesce(p_year, 'all');
+    if found then
+      return result;
+    end if;
+  end if;
+
+  -- A single Τύπος σύμβασης value (the common case - the sidebar checkbox
+  -- list, but the dashboard only ever sends one at a time) is precomputed
+  -- into dashboard_cache by refresh_dashboard_caches() too, same idea as
+  -- the year-only path above - the live query for this filter reliably hit
+  -- PostgREST's own timeout regardless of how selective the value was.
+  cacheable_single_type := p_adams is null and p_query is null and p_authority is null
+    and p_document_type is null and p_contract_type is not null and array_length(p_contract_type, 1) = 1;
+
+  if cacheable_single_type then
+    select payload into result from public.dashboard_cache
+    where cache_key = coalesce(p_year, 'all') || '|' || p_contract_type[1];
     if found then
       return result;
     end if;
