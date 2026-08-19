@@ -1,4 +1,2 @@
-select indexname, indexdef
-from pg_indexes
-where schemaname = 'public' and tablename = 'procurements_compact'
-order by indexname;
+set statement_timeout = '90000';
+select public.dashboard_breakdown(p_contract_type := array['Έργα']) is not null as ok;
