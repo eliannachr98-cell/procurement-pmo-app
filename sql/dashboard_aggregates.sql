@@ -181,7 +181,9 @@ create or replace function public.dashboard_breakdown(
   p_adams text[] default null
 )
 returns json
-language plpgsql stable as $$
+-- volatile (not stable) because it needs `set local statement_timeout`
+-- below for the broad-filter case - Postgres forbids SET in stable functions.
+language plpgsql volatile as $$
 declare
   result json;
   only_year_filter boolean;
