@@ -8,6 +8,11 @@ import {
 } from "@/lib/matching";
 
 export const dynamic = "force-dynamic";
+// Some filter combinations (e.g. two large Τύπος σύμβασης categories at
+// once) genuinely need more than Vercel's 10s default to finish against
+// the compact tables - matches the raised anon-role statement_timeout
+// in sql/raise_anon_statement_timeout.sql.
+export const maxDuration = 120;
 
 type Breakdown = {
   total: number;
