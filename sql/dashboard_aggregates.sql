@@ -40,7 +40,7 @@ declare
   result json;
   target_year text;
   target_contract_type text;
-  cache_key text;
+  v_cache_key text;
   -- Τύπος σύμβασης has a small, fixed set of real values - precomputing
   -- every (year x type) combination sidesteps the live-query path for it
   -- entirely, which reliably blew past PostgREST's own timeout no matter
@@ -181,9 +181,9 @@ begin
     -- Keeps the existing "2026"/"all" keys for the no-type case (backward
     -- compatible with the year-only lookup below) and adds "2026|Προμήθειες"
     -- style keys once a type is included.
-    cache_key := coalesce(target_year, 'all') || case when target_contract_type is null then '' else '|' || target_contract_type end;
+    v_cache_key := coalesce(target_year, 'all') || case when target_contract_type is null then '' else '|' || target_contract_type end;
     insert into public.dashboard_cache (cache_key, payload, refreshed_at)
-    values (cache_key, result, now())
+    values (v_cache_key, result, now())
     on conflict (cache_key) do update set payload = excluded.payload, refreshed_at = excluded.refreshed_at;
     end loop;
   end loop;
