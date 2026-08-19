@@ -99,12 +99,19 @@ begin
     status_agg as (
       select status, count(*) as n, sum(budget) as budget from status_calc group by status
     ),
-    cpv_agg as (
-      select rc.cpv_code, min(rc.cpv_description) as cpv_description, count(*) as n
+    -- cpv_agg/cpv_total/monthly_cpv all used to run this exact join against
+    -- record_cpvs_compact (1.7M rows, by far the biggest table) separately -
+    -- one shared, materialized pass instead.
+    cpv_matches as materialized (
+      select rc.cpv_code, rc.cpv_description, m.adam, m.publication_date
       from public.record_cpvs_compact rc
       join matched m on m.adam = rc.record_adam
       where rc.record_type = 'procurement'
-      group by rc.cpv_code
+    ),
+    cpv_agg as (
+      select cpv_code, min(cpv_description) as cpv_description, count(*) as n
+      from cpv_matches
+      group by cpv_code
       order by n desc
       limit 12
     ),
@@ -113,10 +120,7 @@ begin
     -- CPV codes exist", which was always exactly 12. This counts the real
     -- total distinct CPV codes across the matched set instead.
     cpv_total as (
-      select count(distinct rc.cpv_code) as n
-      from public.record_cpvs_compact rc
-      join matched m on m.adam = rc.record_adam
-      where rc.record_type = 'procurement'
+      select count(distinct cpv_code) as n from cpv_matches
     ),
     nuts_agg as (
       -- Group by the actual NUTS code (precise region), not just its label --
@@ -139,11 +143,10 @@ begin
       group by 1
     ),
     monthly_cpv as (
-      select to_char(date_trunc('month', m.publication_date), 'YYYY-MM') as month,
-             count(distinct rc.cpv_code) as n
-      from public.record_cpvs_compact rc
-      join matched m on m.adam = rc.record_adam
-      where rc.record_type = 'procurement' and m.publication_date is not null
+      select to_char(date_trunc('month', publication_date), 'YYYY-MM') as month,
+             count(distinct cpv_code) as n
+      from cpv_matches
+      where publication_date is not null
       group by 1
     )
     select json_build_object(
@@ -181,9 +184,7 @@ create or replace function public.dashboard_breakdown(
   p_adams text[] default null
 )
 returns json
--- volatile (not stable) because it needs `set local statement_timeout`
--- below for the broad-filter case - Postgres forbids SET in stable functions.
-language plpgsql volatile as $$
+language plpgsql stable as $$
 declare
   result json;
   only_year_filter boolean;
@@ -191,14 +192,6 @@ declare
   where_sql text := '';
   sql_text text;
 begin
-  -- A broad, low-selectivity Τύπος σύμβασης filter with no year (e.g.
-  -- "Προμήθειες" alone, ~124k matching rows) pushes the join+aggregation
-  -- work past the default statement_timeout even with a supporting index -
-  -- give this specific call more room rather than erroring on real usage.
-  if p_contract_type is not null or p_document_type is not null then
-    set local statement_timeout = '40000';
-  end if;
-
   only_year_filter := p_adams is null and p_query is null and p_authority is null
     and p_contract_type is null and p_document_type is null;
 
@@ -295,20 +288,26 @@ begin
     status_agg as (
       select status, count(*) as n, sum(budget) as budget from status_calc group by status
     ),
-    cpv_agg as (
-      select rc.cpv_code, min(rc.cpv_description) as cpv_description, count(*) as n
+    -- cpv_agg/cpv_total/monthly_cpv all used to run this exact join against
+    -- record_cpvs_compact (1.7M rows, by far the biggest table) separately -
+    -- three passes over it per call was the main cost behind a broad,
+    -- no-year Τύπος σύμβασης filter timing out even with a supporting index.
+    -- One shared, materialized pass instead.
+    cpv_matches as materialized (
+      select rc.cpv_code, rc.cpv_description, m.adam, m.publication_date
       from public.record_cpvs_compact rc
       join matched m on m.adam = rc.record_adam
       where rc.record_type = 'procurement'
-      group by rc.cpv_code
+    ),
+    cpv_agg as (
+      select cpv_code, min(cpv_description) as cpv_description, count(*) as n
+      from cpv_matches
+      group by cpv_code
       order by n desc
       limit 12
     ),
     cpv_total as (
-      select count(distinct rc.cpv_code) as n
-      from public.record_cpvs_compact rc
-      join matched m on m.adam = rc.record_adam
-      where rc.record_type = 'procurement'
+      select count(distinct cpv_code) as n from cpv_matches
     ),
     nuts_agg as (
       select coalesce(nuts_code, 'XX') as nuts_code,
@@ -327,11 +326,10 @@ begin
       group by 1
     ),
     monthly_cpv as (
-      select to_char(date_trunc('month', m.publication_date), 'YYYY-MM') as month,
-             count(distinct rc.cpv_code) as n
-      from public.record_cpvs_compact rc
-      join matched m on m.adam = rc.record_adam
-      where rc.record_type = 'procurement' and m.publication_date is not null
+      select to_char(date_trunc('month', publication_date), 'YYYY-MM') as month,
+             count(distinct cpv_code) as n
+      from cpv_matches
+      where publication_date is not null
       group by 1
     )
     select json_build_object(
