@@ -21,16 +21,12 @@ type Breakdown = {
 export async function GET(request: Request) {
   try {
     const searchParams = new URL(request.url).searchParams;
-    // The dashboard charts/tables count "διαγωνισμοί" only (already fixed to
-    // declaration/announcement notices) - Τύπος εγγράφου and Τύπος σύμβασης
-    // describe a different axis of the same records and were also
-    // expensive enough on a low-selectivity value (e.g. "Προμήθειες" alone,
-    // tens of thousands of rows with no year to narrow it) to time out the
-    // live query. Only authority/contractor/cpv/year narrow this view.
     const authority = searchParams.get("authority")?.trim() ?? "";
     const contractors = searchParams.getAll("contractor").flatMap((value) => value.split(",")).map((value) => value.trim()).filter(Boolean);
     const cpvs = searchParams.getAll("cpv").flatMap((value) => value.split(",")).map((value) => value.trim()).filter(Boolean);
     const year = searchParams.get("year")?.trim() ?? "";
+    const contractTypes = searchParams.getAll("contractType").flatMap((value) => value.split(",")).map((value) => value.trim()).filter(Boolean);
+    const documentType = searchParams.get("documentType")?.trim() ?? "";
 
     let matchingAdams: string[] | null = null;
     if (contractors.length) {
@@ -52,8 +48,8 @@ export async function GET(request: Request) {
       p_query: null,
       p_authority: authority || null,
       p_year: /^\d{4}$/.test(year) ? year : null,
-      p_contract_type: null,
-      p_document_type: null,
+      p_contract_type: contractTypes.length ? contractTypes : null,
+      p_document_type: documentType && documentType !== "Όλοι" ? documentType : null,
       p_adams: matchingAdams,
     });
 
