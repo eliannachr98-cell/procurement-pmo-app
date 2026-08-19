@@ -6,10 +6,11 @@
 -- fixed deadline latched at the start of the top-level RPC call, which a
 -- `SET LOCAL statement_timeout` *inside* dashboard_breakdown() could never
 -- override (Postgres does not re-arm an already-running statement's
--- timeout). Raise it well above the ~40s worst-case observed for the
--- slowest live query (Προμήθειες, 124k rows) so any Τύπος σύμβασης
--- combination can run live instead of only single-value cache hits.
-alter role anon set statement_timeout = '60s';
-alter role authenticated set statement_timeout = '60s';
+-- timeout). First raised to 60s (enough for any single Τύπος σύμβασης
+-- value, ~40s worst case), but combining two large categories (e.g.
+-- Προμήθειες + Υπηρεσίες, ~200k matched rows) still hit 60s live -
+-- raised again to 120s to cover multi-select combinations too.
+alter role anon set statement_timeout = '120s';
+alter role authenticated set statement_timeout = '120s';
 
 select rolname, rolconfig from pg_roles where rolname in ('anon', 'authenticated');
