@@ -1,1 +1,2 @@
-select rolname, rolconfig from pg_roles where rolname in ('authenticator','anon','authenticated','postgres','service_role');
+set statement_timeout = '280000';
+select (public.dashboard_breakdown(null, null, null, array['Προμήθειες','Υπηρεσίες'], null, null)->>'total') as total;
