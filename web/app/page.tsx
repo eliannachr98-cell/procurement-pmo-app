@@ -181,10 +181,6 @@ export default function Home() {
     contractor.forEach((item) => params.append("contractor", item));
     cpv.forEach((item) => params.append("cpv", item));
     if (year !== "Όλα") params.set("year", year);
-    // Only a single Τύπος σύμβασης selection is precomputed server-side
-    // (see the comment in /api/dashboard/route.ts) - sending it here is
-    // safe regardless of how many are checked, since the API only honors
-    // the exact shape it can serve from cache and otherwise ignores it.
     contractType.forEach((item) => params.append("contractType", item));
     fetch(`/api/dashboard?${params.toString()}`)
       .then((response) => response.ok ? response.json() : Promise.reject(new Error("dashboard request failed")))

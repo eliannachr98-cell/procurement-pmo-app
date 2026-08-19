@@ -25,15 +25,17 @@ export async function GET(request: Request) {
     const contractors = searchParams.getAll("contractor").flatMap((value) => value.split(",")).map((value) => value.trim()).filter(Boolean);
     const cpvs = searchParams.getAll("cpv").flatMap((value) => value.split(",")).map((value) => value.trim()).filter(Boolean);
     const year = searchParams.get("year")?.trim() ?? "";
-    // Only a single Τύπος σύμβασης value with nothing else active is
-    // precomputed into dashboard_cache by refresh_dashboard_caches() - any
-    // other combination would hit the live query path, which reliably blows
-    // past PostgREST's own timeout regardless of how selective the value is
-    // (confirmed even "Έργα", one of the smallest categories, times out the
-    // same as the broadest one). The client only sends it in that exact
-    // shape; this is just a second guard against calling it otherwise.
+    // A single Τύπος σύμβασης value with nothing else active is precomputed
+    // into dashboard_cache by refresh_dashboard_caches() and served straight
+    // from there inside dashboard_breakdown(). Any other combination (several
+    // types at once, or a type alongside authority/contractor/CPV) falls
+    // through to the live query - that used to reliably blow past PostgREST's
+    // own ~15s timeout no matter how selective the filter was, until we found
+    // the actual cause: the `anon` role's statement_timeout was fixed at 15s
+    // on the role itself (see sql/raise_anon_statement_timeout.sql), a
+    // deadline latched before the function's own SET LOCAL ever ran. Now that
+    // it's raised, the live path has enough headroom for any combination.
     const contractTypes = searchParams.getAll("contractType").flatMap((value) => value.split(",")).map((value) => value.trim()).filter(Boolean);
-    const cacheableContractType = contractTypes.length === 1 && !authority && !contractors.length && !cpvs.length ? contractTypes[0] : null;
 
     let matchingAdams: string[] | null = null;
     if (contractors.length) {
@@ -55,7 +57,7 @@ export async function GET(request: Request) {
       p_query: null,
       p_authority: authority || null,
       p_year: /^\d{4}$/.test(year) ? year : null,
-      p_contract_type: cacheableContractType ? [cacheableContractType] : null,
+      p_contract_type: contractTypes.length ? contractTypes : null,
       p_document_type: null,
       p_adams: matchingAdams,
     });
