@@ -1,5 +1,4 @@
-select contract_type, count(*)
-from public.procurements_compact
-where document_category = 'declaration'
-group by 1
-order by 2 desc;
+select indexname, indexdef
+from pg_indexes
+where schemaname = 'public' and tablename = 'procurements_compact'
+order by indexname;
