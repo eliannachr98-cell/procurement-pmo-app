@@ -1094,18 +1094,20 @@ function AlertsPanel() {
         />
       </div>
       <p className="watchlistCaption">Οι νέοι διαγωνισμοί που δημοσιεύονται σε αυτά τα CPV εμφανίζονται παρακάτω, με αποδελτίωση των βασικών στοιχείων.</p>
-      <div className="watchlistRow recipientsRow">
-        <div><p className="eyebrow">EMAIL</p><h2>Ειδοποιήσεις μέσω email</h2></div>
-        <div className="recipientInput">
-          <input
-            type="email"
-            value={newEmail}
-            onChange={(event) => { setNewEmail(event.target.value); setRecipientError(""); }}
-            onKeyDown={(event) => { if (event.key === "Enter") addRecipient(); }}
-            placeholder="email@example.com"
-          />
-          <button type="button" onClick={addRecipient}>Προσθήκη</button>
-        </div>
+    </article>
+    <article className="panel emailPanel">
+      <p className="eyebrow">EMAIL</p>
+      <h2><span className="emailIcon" aria-hidden="true">✉</span>Ειδοποιήσεις μέσω email</h2>
+      <p className="emailCaption">Στείλε νέους διαγωνισμούς απευθείας στα εισερχόμενα.</p>
+      <div className="recipientInput">
+        <input
+          type="email"
+          value={newEmail}
+          onChange={(event) => { setNewEmail(event.target.value); setRecipientError(""); }}
+          onKeyDown={(event) => { if (event.key === "Enter") addRecipient(); }}
+          placeholder="email@example.com"
+        />
+        <button type="button" onClick={addRecipient}>Προσθήκη</button>
       </div>
       {recipientError && <p className="recipientError">{recipientError}</p>}
       {recipients.length > 0 && <div className="recipientChips">
