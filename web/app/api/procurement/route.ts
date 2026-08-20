@@ -306,11 +306,20 @@ export async function GET(request: Request) {
     // the notice through its award. The scope filter above only matches a
     // contract's *own* procurement_adam, so it silently drops every contract
     // reachable only via award_adam - fetch those separately and merge in.
-    if (marketScopeAdams && marketAwards.length) {
+    // This used to run only when marketScopeAdams was set, which only
+    // happens for a year/document-type filter - an authority-only (or CPV/
+    // contractor-only) selection skipped it entirely, and since
+    // contracts_compact.authority_name is sparsely populated compared to
+    // awards_compact's, that meant almost every real contract for a broad
+    // authority filter was invisible (confirmed live: 332 awards but a
+    // single contract for one authority, when the true count is far
+    // higher). Also dropped the authority re-filter below - the linked
+    // award already satisfied it, so re-checking the contract's own
+    // (often-empty) authority_name field just discarded valid matches.
+    if (marketAwards.length) {
       const scopedAwardAdams = marketAwards.map((row) => row.adam);
       const supplementalFilters = [`award_adam=in.(${scopedAwardAdams.map(encodeURIComponent).join(",")})`];
       if (matchingContractAdams) supplementalFilters.push(`adam=in.(${matchingContractAdams.map(encodeURIComponent).join(",")})`);
-      if (authority) supplementalFilters.push(`authority_name=ilike.${encodeURIComponent(`*${authority}*`)}`);
       if (contractTypes.length) supplementalFilters.push(`contract_type=in.(${contractTypes.map(encodeURIComponent).join(",")})`);
       const supplementalContracts = await supabaseGet<ContractRow[]>(
         "contracts_compact?select=adam,procurement_adam,award_adam,title,authority_name,contract_type,signed_date,delivery_date,amount_ex_vat,amount_inc_vat,amount_unknown_vat" +
