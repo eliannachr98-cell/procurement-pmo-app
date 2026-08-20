@@ -934,6 +934,7 @@ function AlertsPanel() {
   const [newEmail, setNewEmail] = useState("");
   const [recipientError, setRecipientError] = useState("");
   const [submittedAdams, setSubmittedAdams] = useState<Set<string>>(new Set());
+  const [interestedAdams, setInterestedAdams] = useState<Set<string>>(new Set());
   const [copiedAdam, setCopiedAdam] = useState<string | null>(null);
 
   const copyAdam = useCallback((adam: string, event: SyntheticEvent) => {
@@ -980,6 +981,29 @@ function AlertsPanel() {
       fetch(`/api/alert-submissions?adam=${encodeURIComponent(adam)}`, { method: "DELETE" }).then(loadSubmissions);
     } else {
       fetch("/api/alert-submissions", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ adam }) }).then(loadSubmissions);
+    }
+  };
+
+  const loadInterests = useCallback(() => {
+    fetch("/api/alert-interests")
+      .then((response) => response.ok ? response.json() : { items: [] })
+      .then((payload) => setInterestedAdams(new Set((payload.items ?? []).map((item: { adam: string }) => item.adam))))
+      .catch(() => setInterestedAdams(new Set()));
+  }, []);
+
+  useEffect(() => { loadInterests(); }, [loadInterests]);
+
+  const toggleInterested = (adam: string) => {
+    const isMarked = interestedAdams.has(adam);
+    setInterestedAdams((current) => {
+      const next = new Set(current);
+      if (isMarked) next.delete(adam); else next.add(adam);
+      return next;
+    });
+    if (isMarked) {
+      fetch(`/api/alert-interests?adam=${encodeURIComponent(adam)}`, { method: "DELETE" }).then(loadInterests);
+    } else {
+      fetch("/api/alert-interests", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ adam }) }).then(loadInterests);
     }
   };
 
@@ -1046,6 +1070,7 @@ function AlertsPanel() {
   if (selectedTender) return <TenderDetail tender={selectedTender} onBack={() => setSelectedTender(null)} />;
 
   const submittedItems = alerts.filter((item) => submittedAdams.has(item.adam));
+  const interestedItems = alerts.filter((item) => interestedAdams.has(item.adam));
 
   return <>
     <div className="alertsTopGrid">
@@ -1103,6 +1128,23 @@ function AlertsPanel() {
           <button type="button" className="submittedUnmark" onClick={() => toggleSubmitted(item.adam)} aria-label={`Αναίρεση σήμανσης ${item.title}`}>Αναίρεση</button>
         </li>)}
       </ul>}
+      <div className="panelDivider">
+        <p className="eyebrow">ΕΝΔΙΑΦΕΡΟΝ</p>
+        <h2>Ενδιαφέρον για συμμετοχή</h2>
+        {!interestedItems.length && <p className="noRows">Δεν έχεις σημειώσει ακόμη κάποιον διαγωνισμό ως ενδιαφέροντα. Πάτησε «Σήμανση ενδιαφέροντος» σε μια κάρτα παρακάτω.</p>}
+        {interestedItems.length > 0 && <ul className="submittedList">
+          {interestedItems.map((item) => <li key={item.adam}>
+            <button type="button" className="submittedTitle" onClick={() => openTender(item.adam)}>{item.title}</button>
+            <span className="submittedMeta">{item.authority}</span>
+            <span className="submittedFacts">
+              <span><b>Π/Υ</b>{euro.format(item.budget)}</span>
+              <span><b>Αποσφράγιση</b>{formatDate(item.openingDate ?? undefined)}</span>
+              <span className="adamCopy" role="button" tabIndex={0} title="Αντιγραφή ΑΔΑΜ" onClick={(event) => copyAdam(item.adam, event)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); copyAdam(item.adam, event); } }}><b>ΑΔΑΜ</b>{copiedAdam === item.adam ? "Αντιγράφηκε!" : item.adam}</span>
+            </span>
+            <button type="button" className="submittedUnmark" onClick={() => toggleInterested(item.adam)} aria-label={`Αναίρεση σήμανσης ${item.title}`}>Αναίρεση</button>
+          </li>)}
+        </ul>}
+      </div>
     </article>
     </div>
     {!watchlist.length && <article className="panel empty"><span>♢</span><h2>Δεν παρακολουθείς κανένα CPV</h2><p>Πρόσθεσε έναν ή περισσότερους κωδικούς CPV παραπάνω για να ξεκινήσεις να βλέπεις εδώ τους νέους διαγωνισμούς που ταιριάζουν.</p></article>}
@@ -1146,15 +1188,26 @@ function AlertsPanel() {
           : alertTab === "inactive" ? "is-passed"
           : alertUrgency(item.openingDate) === "urgent" ? "is-active-urgent" : "is-active-open";
         const isMarked = submittedAdams.has(item.adam);
-        return <button type="button" className={`alertCard ${colorClass} ${isMarked ? "isSubmitted" : ""}`} key={item.adam} onClick={() => openTender(item.adam)}>
-        <span
-          className="markToggle"
-          role="button"
-          tabIndex={0}
-          title={isMarked ? "Έχει κατατεθεί προσφορά - πάτησε για αναίρεση" : "Σημείωσε ότι κατατέθηκε προσφορά"}
-          onClick={(event) => { event.stopPropagation(); toggleSubmitted(item.adam); }}
-          onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); event.stopPropagation(); toggleSubmitted(item.adam); } }}
-        >{isMarked ? "✓ Υποβλήθηκε" : "Σήμανση προσφοράς"}</span>
+        const isInterestedMarked = interestedAdams.has(item.adam);
+        return <button type="button" className={`alertCard ${colorClass} ${isMarked ? "isSubmitted" : ""} ${isInterestedMarked ? "isInterested" : ""}`} key={item.adam} onClick={() => openTender(item.adam)}>
+        <span className="markToggleRow">
+          <span
+            className="markToggle interest"
+            role="button"
+            tabIndex={0}
+            title={isInterestedMarked ? "Υπό εξέταση για συμμετοχή - πάτησε για αναίρεση" : "Σημείωσε ότι μας ενδιαφέρει / σκεφτόμαστε συμμετοχή"}
+            onClick={(event) => { event.stopPropagation(); toggleInterested(item.adam); }}
+            onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); event.stopPropagation(); toggleInterested(item.adam); } }}
+          >{isInterestedMarked ? "★ Ενδιαφέρον" : "Σήμανση ενδιαφέροντος"}</span>
+          <span
+            className="markToggle"
+            role="button"
+            tabIndex={0}
+            title={isMarked ? "Έχει κατατεθεί προσφορά - πάτησε για αναίρεση" : "Σημείωσε ότι κατατέθηκε προσφορά"}
+            onClick={(event) => { event.stopPropagation(); toggleSubmitted(item.adam); }}
+            onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); event.stopPropagation(); toggleSubmitted(item.adam); } }}
+          >{isMarked ? "✓ Υποβλήθηκε" : "Σήμανση προσφοράς"}</span>
+        </span>
         <span className="alertCardHead"><strong>{item.title}</strong><span>{alertTab === "recent" && isWithinDays(item, 3) && <b className="newBadge">ΝΕΟ</b>}{formatDate(item.publicationDate ?? undefined)}</span></span>
         <span className="alertCardAuthority">{item.authority}</span>
         <span className="alertCardFacts">
