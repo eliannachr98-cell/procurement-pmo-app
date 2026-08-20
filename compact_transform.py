@@ -73,6 +73,14 @@ KEYWORD_CATEGORIES = (
     ("decision", ("\u03b1\u03c0\u03cc\u03c6\u03b1\u03c3\u03b7", "\u03ad\u03b3\u03ba\u03c1\u03b9\u03c3\u03b7")),
 )
 
+# "\u03b4\u03b9\u03cc\u03c1\u03b8\u03c9" is meant to catch documents that correct an existing notice, but
+# it's also a substring of "\u03b5\u03c0\u03b9\u03b4\u03b9\u03cc\u03c1\u03b8\u03c9\u03c3\u03b7" (repair) and appears alongside
+# "\u03c3\u03c5\u03bd\u03c4\u03ae\u03c1\u03b7\u03c3\u03b7" in "\u03b4\u03b9\u03bf\u03c1\u03b8\u03c9\u03c4\u03b9\u03ba\u03ae \u03c3\u03c5\u03bd\u03c4\u03ae\u03c1\u03b7\u03c3\u03b7" (corrective maintenance) - both
+# describe what a brand-new tender is FOR, not a correction to a previous
+# one. Confirmed live: 48 amendment-tagged notices were actually plain
+# repair/maintenance declarations misclassified this way.
+REPAIR_SUBJECT_NEEDLES = ("\u03b5\u03c0\u03b9\u03b4\u03b9\u03cc\u03c1\u03b8\u03c9\u03c3",)
+
 NOTICE_TYPE_CATEGORIES = {
     "2": "announcement",
 }
@@ -84,8 +92,14 @@ def _strip_accents(value: str) -> str:
 
 def classify_document(title: str | None, notice_type: Any = None) -> str:
     source = _strip_accents(" ".join(filter(None, [text(title)])).lower())
+    is_repair_subject = (
+        any(_strip_accents(needle) in source for needle in REPAIR_SUBJECT_NEEDLES)
+        or ("διορθωτικ" in source and "συντηρησ" in source)
+    )
     for category, needles in KEYWORD_CATEGORIES:
-        normalized_needles = (_strip_accents(needle) for needle in needles)
+        normalized_needles = [_strip_accents(needle) for needle in needles]
+        if category == "amendment" and is_repair_subject:
+            normalized_needles = [needle for needle in normalized_needles if needle != _strip_accents("διόρθω")]
         if any(needle in source for needle in normalized_needles):
             return category
 
