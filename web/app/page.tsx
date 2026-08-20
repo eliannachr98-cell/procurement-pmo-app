@@ -62,6 +62,11 @@ const fallbackTenders: Tender[] = [
 
 const contractTypeOptions = ["Έργα", "Μελέτες", "Προμήθειες", "Τεχνικές ή λοιπές συναφείς υπηρεσίες", "Υπηρεσίες"];
 
+// Well beyond any realistic CPV/authority-scoped selection (the whole
+// unfiltered table is 250k+ rows) - a hit here means the current filter is
+// still too broad for a complete Αγορά & Ανταγωνισμός computation.
+const MARKET_AUTO_LOAD_CAP = 3000;
+
 const navItems = [
   ["overview", "▦", "Επισκόπηση"],
   ["tenders", "☷", "Διαγωνισμοί"],
@@ -204,6 +209,20 @@ export default function Home() {
     return () => window.clearTimeout(timer);
   }, [loadTenderPage, loadDashboard]);
 
+  // Αγορά & Ανταγωνισμός computes its stats (Αναθέσεις/Συμβάσεις/Αξία per
+  // ανάδοχος) from whatever tenders are already loaded - fine for the
+  // ordinary "Διαγωνισμοί" list, which is meant to be browsed 100 at a
+  // time, but silently wrong for aggregates unless every matching tender
+  // is loaded. Keep paging automatically while on this tab, up to a safety
+  // cap so an unfiltered/very broad selection can't try to pull the whole
+  // multi-hundred-thousand-row table into the browser.
+  useEffect(() => {
+    if (page !== "market") return;
+    if (!hasMore || loading) return;
+    if (tenders.length >= MARKET_AUTO_LOAD_CAP) return;
+    loadTenderPage(loadedPage + 1, true);
+  }, [page, hasMore, loading, loadedPage, tenders.length, loadTenderPage]);
+
   const filtered = useMemo(() => tenders.filter((tender) => {
     const needle = query.trim().toLocaleLowerCase("el");
     const contractorTerms = contractor.map((item) => item.toLocaleLowerCase("el"));
@@ -297,7 +316,7 @@ export default function Home() {
               {loading ? "Φόρτωση…" : `Φόρτωση περισσότερων (${number.format(tenders.length)} από ${number.format(totalTenders)})`}
             </button>}
           </>}
-          {page === "market" && <MarketPanel awards={awards} contracts={contracts} cpv={cpv} setCpv={setCpv} contractor={contractor} authority={authority} query={query} year={year} contractType={contractType} documentType={documentType} />}
+          {page === "market" && <MarketPanel awards={awards} contracts={contracts} cpv={cpv} setCpv={setCpv} contractor={contractor} authority={authority} query={query} year={year} contractType={contractType} documentType={documentType} loadedCount={tenders.length} totalCount={totalTenders} stillLoading={hasMore && loading} />}
           {page === "alerts" && <AlertsPanel />}
         </section>
 
@@ -686,9 +705,9 @@ type ContractorSummary = { key: string; name: string; awards: number; contracts:
 
 const CONTRACTOR_ALIASES: Record<string, string> = { PWC: "PRICEWATERHOUSECOOPERS", EY: "ERNST" };
 
-function MarketPanel({ awards, contracts, cpv, setCpv, contractor, authority, query, year, contractType, documentType }: {
+function MarketPanel({ awards, contracts, cpv, setCpv, contractor, authority, query, year, contractType, documentType, loadedCount, totalCount, stillLoading }: {
   awards: Award[]; contracts: Contract[]; cpv: string[]; setCpv: (value: string[]) => void; contractor: string[]; authority: string; query: string;
-  year: string; contractType: string[]; documentType: string;
+  year: string; contractType: string[]; documentType: string; loadedCount: number; totalCount: number; stillLoading: boolean;
 }) {
   const [selectedContractor, setSelectedContractor] = useState("");
   const [contractorSearch, setContractorSearch] = useState("");
@@ -812,6 +831,11 @@ function MarketPanel({ awards, contracts, cpv, setCpv, contractor, authority, qu
     </article>
     {!hasSelection && <article className="panel empty marketStart"><span>⌕</span><h2>Επίλεξε CPV ή ανάδοχο</h2><p>Τα αποτελέσματα ανταγωνισμού θα εμφανιστούν μόνο μετά τη δική σου επιλογή.</p></article>}
     {hasSelection && <>
+      {loadedCount < totalCount && <div className={`dataBanner ${stillLoading ? "" : "error"}`}>
+        {stillLoading
+          ? `Υπολογισμός στατιστικών… (${number.format(loadedCount)} από ${number.format(totalCount)} διαγωνισμούς)`
+          : `Το φίλτρο έχει ${number.format(totalCount)} αποτελέσματα - υπολογίστηκαν τα πρώτα ${number.format(loadedCount)}. Στένεψε το φίλτρο (π.χ. πρόσθεσε έτος) για πλήρη ακρίβεια.`}
+      </div>}
       <label className="search marketContractorSearch"><span>⌕</span><input value={contractorSearch} onChange={(event) => setContractorSearch(event.target.value)} placeholder="Αναζήτηση αναδόχου" /></label>
       <article className="panel tablePanel">
         <PanelHeader title="Ανάδοχοι" caption="Ταξινομημένοι κατά αριθμό αναθέσεων. Πάτησε πάνω σε έναν ανάδοχο για να δεις τις αναθέσεις και τις συμβάσεις του." onDownload={{ filename: "anadoxoi", title: "Ανάδοχοι", headers: ["Ανάδοχος", "Αναθέσεις", "Συμβάσεις", "Αναθέτουσες Αρχές", "Αξία"], rows: contractorRows.map((item) => [item.name, item.awards, item.contracts, item.authorities, item.value]), columnTypes: ["text", "number", "number", "number", "currency"] }} />
