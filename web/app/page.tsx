@@ -860,16 +860,38 @@ function ContractorProfile({ name, summary, awards, contracts, onClose }: {
   // Award/contract titles are the title of that document itself (a decision,
   // a signed contract, an amendment...), not of the original tender it came
   // from - showing them here as if they were the tender's own title made
-  // amendments and award decisions look like separate tenders. Only take
-  // rows where the real declaration is known, and use its own title.
-  const tenderMap = new Map<string, { adam: string; title: string; authority: string; cpv: string; cpvDescription?: string }>();
+  // amendments and award decisions look like separate tenders, so real
+  // tender titles are always preferred. But the tender count above (see
+  // MarketPanel's row.tenders Set) counts every distinct noticeAdam-or-own-
+  // adam regardless of whether that join resolved - silently dropping the
+  // unresolved ones here made the table show fewer rows than the "Διαγωνισμοί"
+  // number claimed. Keep every distinct tender key, falling back to a plain
+  // placeholder (never the misleading award/contract title) when the notice
+  // itself wasn't resolved, and only make resolved rows clickable.
+  const tenderMap = new Map<string, { adam: string; title: string; authority: string; cpv: string; cpvDescription?: string; hasNotice: boolean }>();
   for (const item of awards) {
-    if (!item.noticeAdam || !item.noticeTitle) continue;
-    if (!tenderMap.has(item.noticeAdam)) tenderMap.set(item.noticeAdam, { adam: item.noticeAdam, title: item.noticeTitle, authority: item.authority, cpv: item.cpv, cpvDescription: item.cpvDescription });
+    const key = item.noticeAdam ?? item.adam;
+    if (!tenderMap.has(key)) {
+      tenderMap.set(key, {
+        adam: key,
+        title: item.noticeTitle ?? "— (τίτλος μη διαθέσιμος)",
+        authority: item.authority,
+        cpv: item.cpv,
+        cpvDescription: item.cpvDescription,
+        hasNotice: Boolean(item.noticeAdam && item.noticeTitle),
+      });
+    }
   }
   for (const item of contracts) {
-    if (!item.noticeAdam || !item.noticeTitle) continue;
-    tenderMap.set(item.noticeAdam, { adam: item.noticeAdam, title: item.noticeTitle, authority: item.authority, cpv: item.cpv, cpvDescription: item.cpvDescription });
+    const key = item.noticeAdam ?? item.adam;
+    tenderMap.set(key, {
+      adam: key,
+      title: item.noticeTitle ?? "— (τίτλος μη διαθέσιμος)",
+      authority: item.authority,
+      cpv: item.cpv,
+      cpvDescription: item.cpvDescription,
+      hasNotice: Boolean(item.noticeAdam && item.noticeTitle),
+    });
   }
   const tenderRows = [...tenderMap.values()];
 
@@ -893,7 +915,7 @@ function ContractorProfile({ name, summary, awards, contracts, onClose }: {
       <button type="button" className={tab === "contracts" ? "active" : ""} onClick={() => setTab("contracts")}>Συμβάσεις</button>
       <button type="button" className={tab === "distribution" ? "active" : ""} onClick={() => setTab("distribution")}>Κατανομή</button>
     </div>
-    {tab === "tenders" && <div className="tableScroll"><table><thead><tr><th>ΑΔΑΜ Διακήρυξης</th><th>Τίτλος διαγωνισμού</th><th>Αναθέτουσα Αρχή</th><th>CPV</th></tr></thead><tbody>{tenderRows.map((row) => <tr key={row.adam} className="clickableRow" onClick={() => openTender(row.adam)}><td className="adam">{row.adam}</td><td>{row.title}</td><td>{row.authority}</td><td><strong>{row.cpv}</strong><small className="cellSub">{row.cpvDescription}</small></td></tr>)}</tbody></table>{!tenderRows.length && <p className="noRows">Δεν βρέθηκαν διαγωνισμοί.</p>}{loadingTender && <p className="noRows">Φόρτωση στοιχείων διαγωνισμού…</p>}</div>}
+    {tab === "tenders" && <div className="tableScroll"><table><thead><tr><th>ΑΔΑΜ Διακήρυξης</th><th>Τίτλος διαγωνισμού</th><th>Αναθέτουσα Αρχή</th><th>CPV</th></tr></thead><tbody>{tenderRows.map((row) => <tr key={row.adam} className={row.hasNotice ? "clickableRow" : ""} onClick={row.hasNotice ? () => openTender(row.adam) : undefined}><td className="adam">{row.adam}</td><td>{row.title}</td><td>{row.authority}</td><td><strong>{row.cpv}</strong><small className="cellSub">{row.cpvDescription}</small></td></tr>)}</tbody></table>{!tenderRows.length && <p className="noRows">Δεν βρέθηκαν διαγωνισμοί.</p>}{loadingTender && <p className="noRows">Φόρτωση στοιχείων διαγωνισμού…</p>}</div>}
     {tab === "contracts" && <div className="tableScroll"><table><thead><tr><th>ΑΔΑΜ Σύμβασης</th><th>Τίτλος</th><th>Αναθέτουσα Αρχή</th><th>Ημ. υπογραφής</th><th>Αξία</th></tr></thead><tbody>{contracts.map((item) => <tr key={item.adam}><td className="adam">{item.adam}</td><td>{item.title}</td><td>{item.authority}</td><td>{formatDate(item.signedDate)}</td><td>{euro.format(item.value)}</td></tr>)}</tbody></table>{!contracts.length && <p className="noRows">Δεν βρέθηκαν συμβάσεις.</p>}</div>}
     {tab === "distribution" && <div className="bars">{distribution.slice(0, 10).map(([label, value]) => <div className="barRow" key={label}><span title={label}>{label}</span><div><i className="teal" style={{ width: `${(value / distributionTotal) * 100}%` }} /></div><strong>{euro.format(value)}</strong></div>)}{!distribution.length && <p className="noRows">Δεν υπάρχουν δεδομένα κατανομής.</p>}</div>}
   </article>;
