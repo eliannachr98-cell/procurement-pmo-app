@@ -205,7 +205,10 @@ export default function Home() {
   }, [authority, contractor, cpv, year, contractType]);
 
   useEffect(() => {
-    const timer = window.setTimeout(() => { loadTenderPage(1); loadDashboard(); }, 350);
+    // Αναθέτουσα Αρχή applies on every keystroke (no "pick an option" step
+    // like CPV/Ανάδοχος have) - a longer pause here means fewer full
+    // reloads fired while someone is still mid-word.
+    const timer = window.setTimeout(() => { loadTenderPage(1); loadDashboard(); }, 500);
     return () => window.clearTimeout(timer);
   }, [loadTenderPage, loadDashboard]);
 
@@ -223,10 +226,17 @@ export default function Home() {
     // would make this effect retry the same page forever instead of
     // surfacing the error like the rest of the app already does.
     if (dataError) return;
+    // Αναθέτουσα Αρχή has no "pick an option" step, so a short typed prefix
+    // (e.g. the first letter or two) matches far more rows than the person
+    // is actually asking for - only engage the heavy full-load once it's
+    // specific enough that finishing quickly is realistic. The plain 100-
+    // row page still loads normally either way, just without the auto-page.
+    const authorityTooShort = authority.trim().length > 0 && authority.trim() !== "Όλες" && authority.trim().length < 3;
+    if (authorityTooShort) return;
     if (!hasMore || loading) return;
     if (tenders.length >= MARKET_AUTO_LOAD_CAP) return;
     loadTenderPage(loadedPage + 1, true);
-  }, [page, hasMore, loading, loadedPage, tenders.length, loadTenderPage, dataError]);
+  }, [page, hasMore, loading, loadedPage, tenders.length, loadTenderPage, dataError, authority]);
 
   const filtered = useMemo(() => tenders.filter((tender) => {
     const needle = query.trim().toLocaleLowerCase("el");
