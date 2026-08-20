@@ -1074,6 +1074,7 @@ function AlertsPanel() {
 
   return <>
     <div className="alertsTopGrid">
+    <div className="alertsLeftCol">
     <article className="panel watchlistPanel">
       <div className="watchlistRow cpvWatchRow">
         <div className="filterHeading"><div><p className="eyebrow">CPV ALERTS</p><h2>Παρακολούθηση CPV</h2></div><button type="button" title={loading ? "Φόρτωση…" : "Ανανέωση ειδοποιήσεων"} onClick={load}><span className={loading ? "spinIcon" : ""}>↻</span></button></div>
@@ -1114,6 +1115,7 @@ function AlertsPanel() {
         {recipients.map((item) => <span className="recipientChip" key={item.email}>{item.email}<button type="button" onClick={() => removeRecipient(item.email)} aria-label={`Αφαίρεση ${item.email}`}>×</button></span>)}
       </div>}
     </article>
+    </div>
     <article className="panel submittedPanel">
       <p className="eyebrow">ΚΑΤΑΤΕΘΕΙΜΕΝΕΣ</p>
       <h2>Υποβεβλημένες προσφορές</h2>
