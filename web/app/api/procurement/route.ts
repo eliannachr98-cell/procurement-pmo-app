@@ -93,10 +93,17 @@ async function supabasePage<T>(path: string): Promise<{ rows: T; total: number }
   if (!url || !key) throw new Error("Supabase environment variables are missing");
 
   const response = await fetch(`${url}/rest/v1/${path}`, {
-    // An exact count scans the entire historical table and started timing out
-    // once the full backfill was loaded. Planned count keeps pagination open
-    // across the complete dataset without blocking every page request.
-    headers: { apikey: key, Prefer: "count=planned" },
+    // No Prefer: count=... header on purpose. Any count preference (even
+    // "planned", tried after "exact" started timing out on the full
+    // backfilled table) makes PostgREST validate the requested offset
+    // against that count and reject with 416/PGRST103 "range not
+    // satisfiable" once offset exceeds it - confirmed live: a planned
+    // estimate of 37 for a broad authority ILIKE filter blocked every page
+    // past the first even though 234+ rows actually matched. Without a
+    // count preference, limit/offset just apply directly with no such
+    // check, and the accurate total for display comes from
+    // /api/dashboard's real SQL count instead of this endpoint's own.
+    headers: { apikey: key },
     cache: "no-store",
   });
   if (!response.ok) {
@@ -495,15 +502,14 @@ export async function GET(request: Request) {
           source: "Supabase compact",
           page,
           pageSize,
-          total: noticePage.total,
-          // noticePage.total comes from PostgREST's "planned" count (a query
-          // planner estimate, not an exact COUNT - see supabasePage above),
-          // which can badly undercount broad ILIKE filters like authority
-          // name. Trusting only the total-vs-offset comparison made hasMore
-          // go false while most of the real matches were still unloaded. A
-          // full page back is itself evidence there may be more, regardless
-          // of what the estimate says.
-          hasMore: notices.length === pageSize || offset + notices.length < noticePage.total,
+          // No count preference is requested anymore (see supabasePage), so
+          // there's no server-side total to report here - the client uses
+          // /api/dashboard's accurate SQL count for display instead. A full
+          // page back is itself the pagination signal: if there's more, the
+          // next page will return some more rows; if not, an empty/partial
+          // one ends it.
+          total: offset + notices.length,
+          hasMore: notices.length === pageSize,
           loadedAt: new Date().toISOString(),
         },
       },

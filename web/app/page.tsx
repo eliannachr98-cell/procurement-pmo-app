@@ -218,10 +218,15 @@ export default function Home() {
   // multi-hundred-thousand-row table into the browser.
   useEffect(() => {
     if (page !== "market") return;
+    // A failed page fetch leaves hasMore/loadedPage exactly as they were -
+    // without this, a persistent error (e.g. a slow query timing out)
+    // would make this effect retry the same page forever instead of
+    // surfacing the error like the rest of the app already does.
+    if (dataError) return;
     if (!hasMore || loading) return;
     if (tenders.length >= MARKET_AUTO_LOAD_CAP) return;
     loadTenderPage(loadedPage + 1, true);
-  }, [page, hasMore, loading, loadedPage, tenders.length, loadTenderPage]);
+  }, [page, hasMore, loading, loadedPage, tenders.length, loadTenderPage, dataError]);
 
   const filtered = useMemo(() => tenders.filter((tender) => {
     const needle = query.trim().toLocaleLowerCase("el");
