@@ -496,7 +496,14 @@ export async function GET(request: Request) {
           page,
           pageSize,
           total: noticePage.total,
-          hasMore: offset + notices.length < noticePage.total,
+          // noticePage.total comes from PostgREST's "planned" count (a query
+          // planner estimate, not an exact COUNT - see supabasePage above),
+          // which can badly undercount broad ILIKE filters like authority
+          // name. Trusting only the total-vs-offset comparison made hasMore
+          // go false while most of the real matches were still unloaded. A
+          // full page back is itself evidence there may be more, regardless
+          // of what the estimate says.
+          hasMore: notices.length === pageSize || offset + notices.length < noticePage.total,
           loadedAt: new Date().toISOString(),
         },
       },
