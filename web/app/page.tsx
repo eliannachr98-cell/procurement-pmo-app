@@ -241,6 +241,19 @@ export default function Home() {
   }, [loadTenderPage, loadDashboard]);
 
 
+  // The ΑΔΑΜ/τίτλος search box is hidden on Αγορά & Ανταγωνισμός (it targets
+  // one specific tender, which doesn't fit a per-contractor aggregate view),
+  // but the underlying `query` state is shared across all tabs and still
+  // gets sent as `q` to /api/procurement, which DOES apply it server-side to
+  // the market awards/contracts query. Left as-is, a term typed on
+  // Διαγωνισμοί would keep silently narrowing the Αγορά results after
+  // switching tabs, with no visible control left to see or clear it. Clear
+  // it on entry instead - loadTenderPage's query dependency then triggers a
+  // fresh, unfiltered-by-query fetch automatically.
+  useEffect(() => {
+    if (page === "market" && query) setQuery("");
+  }, [page, query]);
+
   // Αγορά & Ανταγωνισμός computes its stats (Αναθέσεις/Συμβάσεις/Αξία per
   // ανάδοχος) from whatever tenders are already loaded - fine for the
   // ordinary "Διαγωνισμοί" list, which is meant to be browsed 100 at a
