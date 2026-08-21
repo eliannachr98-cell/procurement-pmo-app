@@ -266,7 +266,18 @@ export async function GET(request: Request) {
       // check the year/document-type condition against exactly that set -
       // otherwise this would need to page through the entire (100k+ row)
       // table without any guarantee the relevant notices land in the cap.
-      const scopeConstraint = matchingAdams ? `&adam=in.(${matchingAdams.map(encodeURIComponent).join(",")})` : "";
+      // Authority/contract-type need the same treatment: without them, a
+      // single year alone can be 100k+ notices, so the 5000-row, most-
+      // recent-first cap below would silently only cover the tail end of
+      // that year - confirmed live: Έτος + Αναθέτουσα Αρχή together
+      // returned zero awards, because the matching notice (published in
+      // February) never made it into an uncapped-by-authority "last 5000
+      // of the year" slice.
+      const scopeConstraintParts: string[] = [];
+      if (matchingAdams) scopeConstraintParts.push(`adam=in.(${matchingAdams.map(encodeURIComponent).join(",")})`);
+      if (authority) scopeConstraintParts.push(`authority_name=ilike.${encodeURIComponent(`*${authority}*`)}`);
+      if (contractTypes.length) scopeConstraintParts.push(`contract_type=in.(${contractTypes.map(encodeURIComponent).join(",")})`);
+      const scopeConstraint = scopeConstraintParts.map((item) => `&${item}`).join("");
       const scopeRows = await supabaseGet<{ adam: string }[]>(
         `procurements_compact?select=adam&${marketNoticeScopeFilters.join("&")}${scopeConstraint}&order=publication_date.desc.nullslast&limit=5000`,
       );
