@@ -316,7 +316,13 @@ export async function GET(request: Request) {
     // higher). Also dropped the authority re-filter below - the linked
     // award already satisfied it, so re-checking the contract's own
     // (often-empty) authority_name field just discarded valid matches.
-    if (marketAwards.length) {
+    // Gated on marketIsNarrowed (a real contractor/CPV/authority/etc.
+    // filter is active), not just "there are any awards at all" - the
+    // latter is true even for a completely unfiltered request, which made
+    // every single /api/procurement call (including the plain Διαγωνισμοί
+    // list's default view) pay for this extra query, confirmed live as a
+    // real slowdown on the most common, filter-less page load.
+    if (marketIsNarrowed && marketAwards.length) {
       const scopedAwardAdams = marketAwards.map((row) => row.adam);
       const supplementalFilters = [`award_adam=in.(${scopedAwardAdams.map(encodeURIComponent).join(",")})`];
       if (matchingContractAdams) supplementalFilters.push(`adam=in.(${matchingContractAdams.map(encodeURIComponent).join(",")})`);
