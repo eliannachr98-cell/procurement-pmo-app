@@ -116,6 +116,7 @@ export default function Home() {
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("Όλες");
   const [authority, setAuthority] = useState("Όλες");
+  const [authorityOptions, setAuthorityOptions] = useState<string[]>([]);
   const [contractor, setContractor] = useState<string[]>([]);
   const [cpv, setCpv] = useState<string[]>([]);
   const [year, setYear] = useState("Όλα");
@@ -212,6 +213,25 @@ export default function Home() {
     return () => window.clearTimeout(timer);
   }, [loadTenderPage, loadDashboard]);
 
+  // Suggestions for the Αναθέτουσα Αρχή datalist used to come from the
+  // already-loaded tenders - only ever showed authorities that happened to
+  // be in whatever page was currently fetched (and none at all until that
+  // slow, filter-triggered fetch finished), instead of a live, direct
+  // search. /api/options?type=authority already exists and is what
+  // CPV/Ανάδοχος use for exactly this.
+  useEffect(() => {
+    const term = authority.trim();
+    if (term.length < 2 || term === "Όλες") { setAuthorityOptions([]); return; }
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      fetch(`/api/options?type=authority&q=${encodeURIComponent(term)}`, { signal: controller.signal })
+        .then((response) => response.ok ? response.json() : { options: [] })
+        .then((payload) => setAuthorityOptions((payload.options ?? []).map((item: { value: string }) => item.value)))
+        .catch(() => setAuthorityOptions([]));
+    }, 250);
+    return () => { window.clearTimeout(timer); controller.abort(); };
+  }, [authority]);
+
   // Αγορά & Ανταγωνισμός computes its stats (Αναθέσεις/Συμβάσεις/Αξία per
   // ανάδοχος) from whatever tenders are already loaded - fine for the
   // ordinary "Διαγωνισμοί" list, which is meant to be browsed 100 at a
@@ -252,7 +272,6 @@ export default function Home() {
       (documentType === "Όλοι" || tender.documentType === documentType);
   }), [tenders, query, status, authority, contractor, cpv, year, contractType, documentType, page]);
 
-  const authorities = [...new Set(tenders.map((item) => item.authority).filter(Boolean))].sort();
   const documentTypes = [
     ["declaration", "Διακήρυξη"],
     ["announcement", "Προκήρυξη"],
@@ -340,7 +359,7 @@ export default function Home() {
         {page !== "alerts" && <aside className="filters">
           <div className="filterHeading"><div><span>Φίλτρα</span><small>{number.format(tenders.length)} φορτωμένα · {number.format(dashboard.total || totalTenders)} συνολικά</small></div><button title={loading ? "Φόρτωση…" : "Επαναφορά φίλτρων"} onClick={() => { setStatus("Όλες"); setAuthority(""); setContractor([]); setCpv([]); setQuery(""); setYear("Όλα"); setContractType([]); setDocumentType("Όλοι"); }}><span className={loading ? "spinIcon" : ""}>↻</span></button></div>
           <label>Έτος<select value={year} onChange={(event) => setYear(event.target.value)}><option>Όλα</option>{years.map((item) => <option key={item}>{item}</option>)}</select></label>
-          <label>Αναθέτουσα Αρχή<input list="authority-options" value={authority === "Όλες" ? "" : authority} onChange={(event) => setAuthority(event.target.value)} placeholder="Γράψε ή επίλεξε αρχή" /><datalist id="authority-options">{authorities.map((item) => <option key={item} value={item} />)}</datalist></label>
+          <label>Αναθέτουσα Αρχή<input list="authority-options" value={authority === "Όλες" ? "" : authority} onChange={(event) => setAuthority(event.target.value)} placeholder="Γράψε ή επίλεξε αρχή" /><datalist id="authority-options">{authorityOptions.map((item) => <option key={item} value={item} />)}</datalist></label>
           <MultiSearchInput label="Ανάδοχος" type="contractor" values={contractor} onChange={setContractor} placeholder="Αναζήτησε και επίλεξε αναδόχους" />
           {page !== "market" && <MultiSearchInput label="CPV" type="cpv" values={cpv} onChange={setCpv} placeholder="Αναζήτησε κωδικό ή περιγραφή CPV" />}
           <CheckboxDropdown label="Τύπος σύμβασης" options={contractTypeOptions} values={contractType} onChange={setContractType} />
