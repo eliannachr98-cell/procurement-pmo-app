@@ -313,7 +313,7 @@ export default function Home() {
         <section className="content">
           <div className="pageTitle">
             <div><p className="eyebrow">PROCUREMENT INTELLIGENCE</p><h1>{page === "overview" ? "Επισκόπηση" : page === "tenders" ? "Διαγωνισμοί" : page === "market" ? "Αγορά & Ανταγωνισμός" : "Ειδοποιήσεις"}</h1></div>
-            {page !== "alerts" && <label className="search"><span>⌕</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Αναζήτηση με ΑΔΑΜ ή τίτλο…" /></label>}
+            {(page === "overview" || page === "tenders") && <label className="search"><span>⌕</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Αναζήτηση με ΑΔΑΜ ή τίτλο…" /></label>}
           </div>
           {loading && tenders.length === 0 && <div className="dataBanner">Φόρτωση πραγματικών δεδομένων από Supabase…</div>}
           {dataError && <div className="dataBanner error">{dataError} · εμφανίζεται προσωρινό δείγμα.</div>}
@@ -357,7 +357,7 @@ export default function Home() {
               {loading ? "Φόρτωση…" : `Φόρτωση περισσότερων (${number.format(tenders.length)} από ${number.format(totalTenders)})`}
             </button>}
           </>}
-          {page === "market" && <MarketPanel awards={awards} contracts={contracts} cpv={cpv} setCpv={setCpv} contractor={contractor} authority={authority} query={query} year={year} contractType={contractType} documentType={documentType} loadedCount={tenders.length} totalCount={totalTenders} stillLoading={hasMore && loading} />}
+          {page === "market" && <MarketPanel awards={awards} contracts={contracts} cpv={cpv} setCpv={setCpv} contractor={contractor} authority={authority} year={year} contractType={contractType} documentType={documentType} loadedCount={tenders.length} totalCount={totalTenders} stillLoading={hasMore && loading} />}
           {page === "alerts" && <AlertsPanel />}
         </section>
 
@@ -814,14 +814,14 @@ type ContractorSummary = { key: string; name: string; awards: number; contracts:
 
 const CONTRACTOR_ALIASES: Record<string, string> = { PWC: "PRICEWATERHOUSECOOPERS", EY: "ERNST" };
 
-function MarketPanel({ awards, contracts, cpv, setCpv, contractor, authority, query, year, contractType, documentType, loadedCount, totalCount, stillLoading }: {
-  awards: Award[]; contracts: Contract[]; cpv: string[]; setCpv: (value: string[]) => void; contractor: string[]; authority: string; query: string;
+function MarketPanel({ awards, contracts, cpv, setCpv, contractor, authority, year, contractType, documentType, loadedCount, totalCount, stillLoading }: {
+  awards: Award[]; contracts: Contract[]; cpv: string[]; setCpv: (value: string[]) => void; contractor: string[]; authority: string;
   year: string; contractType: string[]; documentType: string; loadedCount: number; totalCount: number; stillLoading: boolean;
 }) {
   const [selectedContractor, setSelectedContractor] = useState("");
   const [contractorSearch, setContractorSearch] = useState("");
   const [visibleCount, setVisibleCount] = useState(10);
-  useEffect(() => { setVisibleCount(10); }, [contractor, cpv, authority, query, year, contractType, documentType, contractorSearch]);
+  useEffect(() => { setVisibleCount(10); }, [contractor, cpv, authority, year, contractType, documentType, contractorSearch]);
   // This grouping (dedupe-by-VAT, Union-Find merge, per-contractor totals)
   // is the expensive part of this panel - re-running it on every render was
   // fine while awards/contracts stayed small, but once the Αγορά page
@@ -944,7 +944,7 @@ function MarketPanel({ awards, contracts, cpv, setCpv, contractor, authority, qu
   const contractorRows = search ? contractorRowsBase.filter((row) => row.name.toLocaleLowerCase("el").includes(search)) : contractorRowsBase;
   const visibleRows = contractorRows.slice(0, visibleCount);
 
-  const hasSelection = cpv.length > 0 || contractor.length > 0 || (authority.trim() !== "" && authority !== "Όλες") || query.trim().length > 0 ||
+  const hasSelection = cpv.length > 0 || contractor.length > 0 || (authority.trim() !== "" && authority !== "Όλες") ||
     year !== "Όλα" || contractType.length > 0 || documentType !== "Όλοι";
   const selectedSummary = contractorRows.find((row) => row.key === selectedContractor);
 
