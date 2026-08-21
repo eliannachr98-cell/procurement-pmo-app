@@ -113,11 +113,12 @@ export async function GET(request: Request) {
     }
 
     if (type === "authority") {
-      const rows = await supabaseRows<{ authority_name: string | null }>(
-        `procurements_compact?select=authority_name&authority_name=ilike.${value}&limit=300`,
-      );
-      const unique = [...new Set(rows.map((row) => row.authority_name).filter((name): name is string => Boolean(name)))].sort((a, b) => a.localeCompare(b, "el"));
-      return NextResponse.json({ options: unique.slice(0, 20).map((name) => ({ value: name, label: name })) });
+      // A real DISTINCT at the database level (search_authorities), not a
+      // sample of raw rows deduped client-side - a short/broad term used to
+      // silently miss real matches when the sample happened to be dominated
+      // by a few high-volume authorities.
+      const rows = await supabaseRpc<{ authority_name: string }[]>("search_authorities", { p_query: query });
+      return NextResponse.json({ options: rows.map((row) => ({ value: row.authority_name, label: row.authority_name })) });
     }
 
     if (type === "cpv") {
