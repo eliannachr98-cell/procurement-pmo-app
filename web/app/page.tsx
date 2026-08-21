@@ -1117,6 +1117,7 @@ function AlertsPanel() {
   const [recipientError, setRecipientError] = useState("");
   const [submittedAdams, setSubmittedAdams] = useState<Set<string>>(new Set());
   const [interestedAdams, setInterestedAdams] = useState<Set<string>>(new Set());
+  const [trackedItems, setTrackedItems] = useState<AlertItem[]>([]);
   const [copiedAdam, setCopiedAdam] = useState<string | null>(null);
 
   const copyAdam = useCallback((adam: string, event: SyntheticEvent) => {
@@ -1189,6 +1190,22 @@ function AlertsPanel() {
     }
   };
 
+  // "Υποβεβλημένες προσφορές"/"Ενδιαφέρον για συμμετοχή" are the user's own
+  // tracked ADAMs, looked up directly - unlike `alerts` (below), which is
+  // scoped to whatever CPVs are currently on the watchlist within a recent
+  // window, so it would otherwise make an already-tracked tender vanish from
+  // these lists the moment its CPV is unwatched.
+  useEffect(() => {
+    const adams = [...new Set([...submittedAdams, ...interestedAdams])];
+    if (!adams.length) { setTrackedItems([]); return; }
+    const params = new URLSearchParams();
+    adams.forEach((adam) => params.append("adam", adam));
+    fetch(`/api/alert-tenders?${params.toString()}`)
+      .then((response) => response.ok ? response.json() : { items: [] })
+      .then((payload) => setTrackedItems(payload.items ?? []))
+      .catch(() => setTrackedItems([]));
+  }, [submittedAdams, interestedAdams]);
+
   const loadRecipients = useCallback(() => {
     fetch("/api/alert-recipients")
       .then((response) => response.ok ? response.json() : { items: [] })
@@ -1251,8 +1268,8 @@ function AlertsPanel() {
 
   if (selectedTender) return <TenderDetail tender={selectedTender} onBack={() => setSelectedTender(null)} />;
 
-  const submittedItems = alerts.filter((item) => submittedAdams.has(item.adam));
-  const interestedItems = alerts.filter((item) => interestedAdams.has(item.adam));
+  const submittedItems = trackedItems.filter((item) => submittedAdams.has(item.adam));
+  const interestedItems = trackedItems.filter((item) => interestedAdams.has(item.adam));
 
   return <>
     <div className="alertsTopGrid">
