@@ -87,6 +87,34 @@ const statusTone: Record<Status, string> = {
   "Ακυρωμένος": "red",
 };
 
+const contractTypeTone: Record<string, string> = {
+  "Έργα": "blue",
+  "Μελέτες": "purple",
+  "Προμήθειες": "teal",
+  "Τεχνικές ή λοιπές συναφείς υπηρεσίες": "amber",
+  "Υπηρεσίες": "green",
+};
+
+const documentTypeLabels: Record<string, string> = {
+  declaration: "Διακήρυξη",
+  announcement: "Προκήρυξη",
+  summary: "Περίληψη",
+  clarification: "Διευκρίνιση",
+  extension: "Παράταση / μετάθεση",
+  amendment: "Τροποποίηση",
+  decision: "Απόφαση / έγκριση",
+};
+
+const documentTypeTone: Record<string, string> = {
+  declaration: "teal",
+  announcement: "blue",
+  summary: "purple",
+  clarification: "amber",
+  extension: "green",
+  amendment: "red",
+  decision: "slate",
+};
+
 const number = new Intl.NumberFormat("el-GR");
 const euro = new Intl.NumberFormat("el-GR", { style: "currency", currency: "EUR", maximumFractionDigits: 0 });
 
@@ -278,15 +306,7 @@ export default function Home() {
       (documentType === "Όλοι" || tender.documentType === documentType);
   }), [tenders, query, status, authority, year, contractType, documentType, page]);
 
-  const documentTypes = [
-    ["declaration", "Διακήρυξη"],
-    ["announcement", "Προκήρυξη"],
-    ["summary", "Περίληψη"],
-    ["clarification", "Διευκρίνιση"],
-    ["extension", "Παράταση / μετάθεση"],
-    ["amendment", "Τροποποίηση"],
-    ["decision", "Απόφαση / έγκριση"],
-  ];
+  const documentTypes = Object.entries(documentTypeLabels);
   const statusCount = (value: Status) => dashboard.status.find((item) => item.status === value)?.count ?? 0;
   const statusBudget = (value: Status) => dashboard.status.find((item) => item.status === value)?.budget ?? 0;
   const totalBudget = dashboard.status.reduce((sum, item) => sum + item.budget, 0);
@@ -509,7 +529,7 @@ function MonthlyBarChart({ months, metric, formatValue, unitLabel }: {
 function TenderTable({ rows, expanded = false, title = "Λίστα διαγωνισμών", caption, onViewAll }: { rows: Tender[]; expanded?: boolean; title?: string; caption?: string; onViewAll?: () => void }) {
   const [selected, setSelected] = useState<Tender | null>(null);
   if (selected) return <TenderDetail tender={selected} onBack={() => setSelected(null)} />;
-  return <article className={`panel tablePanel ${expanded ? "expanded" : ""}`}><PanelHeader title={title} caption={caption ?? `${number.format(rows.length)} εγγραφές μετά τα φίλτρα`} onDownload={{ filename: title, title, headers: ["ΑΔΑΜ", "Τίτλος", "Αναθέτουσα Αρχή", "CPV", "Περιγραφή CPV", "Κατάσταση", "Δημοσίευση"], rows: rows.map((item) => [item.adam, item.title, item.authority, item.cpv, item.cpvDescription ?? "", item.status, item.publicationDate ?? ""]), columnTypes: ["text", "text", "text", "text", "text", "text", "date"] }} /><div className="tableScroll"><table><thead><tr><th>ΑΔΑΜ</th><th>Τίτλος</th><th>Αναθέτουσα Αρχή</th><th>CPV / Τίτλος</th><th>Κατάσταση</th><th>Δημοσίευση</th><th /></tr></thead><tbody>{rows.map((item) => <tr key={item.adam}><td className="adam">{item.adam}</td><td>{item.title}</td><td>{item.authority}</td><td><strong>{item.cpv}</strong><small className="cellSub">{item.cpvDescription}</small></td><td><span className={`status ${statusTone[item.status]}`}>{item.status}</span></td><td>{formatDate(item.publicationDate)}</td><td><button className="view" aria-label={`Προβολή ${item.adam}`} onClick={() => setSelected(item)}>→</button></td></tr>)}</tbody></table></div>{!rows.length && <p className="noRows">Δεν βρέθηκαν διαγωνισμοί για τα επιλεγμένα φίλτρα.</p>}{onViewAll && <button className="viewAll" onClick={onViewAll}>Προβολή όλων των διαγωνισμών →</button>}</article>;
+  return <article className={`panel tablePanel ${expanded ? "expanded" : ""}`}><PanelHeader title={title} caption={caption ?? `${number.format(rows.length)} εγγραφές μετά τα φίλτρα`} onDownload={{ filename: title, title, headers: ["ΑΔΑΜ", "Τίτλος", "Αναθέτουσα Αρχή", "CPV", "Περιγραφή CPV", "Τύπος σύμβασης", "Τύπος εγγράφου", "Κατάσταση", "Δημοσίευση"], rows: rows.map((item) => [item.adam, item.title, item.authority, item.cpv, item.cpvDescription ?? "", item.contractType ?? "", documentTypeLabels[item.documentType ?? ""] ?? item.documentType ?? "", item.status, item.publicationDate ?? ""]), columnTypes: ["text", "text", "text", "text", "text", "text", "text", "text", "date"] }} /><div className="tableScroll"><table><thead><tr><th>ΑΔΑΜ</th><th>Τίτλος</th><th>Αναθέτουσα Αρχή</th><th>CPV / Τίτλος</th><th>Τύπος σύμβασης</th><th>Τύπος εγγράφου</th><th>Κατάσταση</th><th>Δημοσίευση</th><th /></tr></thead><tbody>{rows.map((item) => <tr key={item.adam}><td className="adam">{item.adam}</td><td>{item.title}</td><td>{item.authority}</td><td><strong>{item.cpv}</strong><small className="cellSub">{item.cpvDescription}</small></td><td>{item.contractType && <span className={`status ${contractTypeTone[item.contractType] ?? "slate"}`}>{item.contractType}</span>}</td><td>{item.documentType && <span className={`status ${documentTypeTone[item.documentType] ?? "slate"}`}>{documentTypeLabels[item.documentType] ?? item.documentType}</span>}</td><td><span className={`status ${statusTone[item.status]}`}>{item.status}</span></td><td>{formatDate(item.publicationDate)}</td><td><button className="view" aria-label={`Προβολή ${item.adam}`} onClick={() => setSelected(item)}>→</button></td></tr>)}</tbody></table></div>{!rows.length && <p className="noRows">Δεν βρέθηκαν διαγωνισμοί για τα επιλεγμένα φίλτρα.</p>}{onViewAll && <button className="viewAll" onClick={onViewAll}>Προβολή όλων των διαγωνισμών →</button>}</article>;
 }
 
 function TenderDetail({ tender, onBack }: { tender: Tender; onBack: () => void }) {
