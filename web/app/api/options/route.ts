@@ -51,13 +51,13 @@ export async function GET(request: Request) {
     const value = encodeURIComponent(`*${query}*`);
 
     if (type === "contractor") {
-      const brand = query.toLocaleUpperCase("en-US");
-      const brands: Record<string, { value: string; label: string }> = {
-        PWC: { value: "PWC", label: "PWC — όλες οι επωνυμίες PricewaterhouseCoopers" },
-        EY: { value: "EY", label: "EY — όλες οι επωνυμίες Ernst & Young" },
-        OCTANE: { value: "OCTANE", label: "OCTANE — όλες οι επωνυμίες" },
-      };
-      if (brands[brand]) return NextResponse.json({ options: [brands[brand]] });
+      // "PWC"/"EY"/"OCTANE" used to short-circuit to a single "all brand
+      // names" option that filtered as one unified value - per request,
+      // every legal entity now shows up as its own separate, VAT-grouped
+      // option instead, same as any other contractor search. The alias
+      // expansion below still makes typing "PWC" find the right entities
+      // (it searches for "PRICEWATERHOUSECOOPERS"), it just no longer
+      // collapses them into one selectable value.
       const contractorValue = encodeURIComponent(`*${contractorSearchTerm(query)}*`);
       const rows = await supabaseRows<{ contractor_name: string; contractor_vat: string | null }>(
         `record_contractors_compact?select=contractor_name,contractor_vat&contractor_name=ilike.${contractorValue}&limit=200`,
