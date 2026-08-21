@@ -747,111 +747,126 @@ function MarketPanel({ awards, contracts, cpv, setCpv, contractor, authority, qu
   const [contractorSearch, setContractorSearch] = useState("");
   const [visibleCount, setVisibleCount] = useState(10);
   useEffect(() => { setVisibleCount(10); }, [contractor, cpv, authority, query, year, contractType, documentType, contractorSearch]);
-  const cpvTerms = cpv.map((item) => item.toLocaleLowerCase("el"));
-  const matchesCpv = (item: { cpv: string; cpvDescription?: string }) =>
-    !cpvTerms.length || cpvTerms.some((term) => `${item.cpv} ${item.cpvDescription}`.toLocaleLowerCase("el").includes(term));
-  // A framework agreement's award/contract record can list several co-suppliers
-  // together, so matching by CPV alone would also pull in unrelated companies
-  // that merely share the same framework as the searched contractor. A filter
-  // value is either a VAT number (exact identity) or a free-text/brand name.
-  const contractorFilters = contractor.map((item) => {
-    const trimmed = item.trim();
-    if (/^\d{9}$/.test(trimmed)) return { vat: trimmed } as const;
-    const upper = trimmed.toLocaleUpperCase("en-US");
-    return { name: (CONTRACTOR_ALIASES[upper] ?? trimmed).toLocaleLowerCase("el") } as const;
-  });
-  const matchesContractor = (item: { contractor: string; contractorVat?: string }) =>
-    !contractorFilters.length || contractorFilters.some((filter) =>
-      "vat" in filter ? item.contractorVat === filter.vat : item.contractor.toLocaleLowerCase("el").includes(filter.name),
-    );
-  const relevantAwards = awards.filter((item) => matchesCpv(item) && matchesContractor(item));
-  const relevantContracts = contracts.filter((item) => matchesCpv(item) && matchesContractor(item));
+  // This grouping (dedupe-by-VAT, Union-Find merge, per-contractor totals)
+  // is the expensive part of this panel - re-running it on every render was
+  // fine while awards/contracts stayed small, but once the Αγορά page
+  // started auto-loading hundreds/thousands of rows (see the auto-load
+  // effect in Home) it re-ran in full on every intermediate page too,
+  // which is what made the page feel like it froze while loading a broad
+  // filter. Only cpv/contractor actually change what this computes -
+  // authority/year/etc. only affect which awards/contracts arrive from the
+  // server in the first place.
+  const { relevantAwards, relevantContracts, contractorRowsBase, resolvedKeyFor } = useMemo(() => {
+    const cpvTerms = cpv.map((item) => item.toLocaleLowerCase("el"));
+    const matchesCpv = (item: { cpv: string; cpvDescription?: string }) =>
+      !cpvTerms.length || cpvTerms.some((term) => `${item.cpv} ${item.cpvDescription}`.toLocaleLowerCase("el").includes(term));
+    // A framework agreement's award/contract record can list several co-suppliers
+    // together, so matching by CPV alone would also pull in unrelated companies
+    // that merely share the same framework as the searched contractor. A filter
+    // value is either a VAT number (exact identity) or a free-text/brand name.
+    const contractorFilters = contractor.map((item) => {
+      const trimmed = item.trim();
+      if (/^\d{9}$/.test(trimmed)) return { vat: trimmed } as const;
+      const upper = trimmed.toLocaleUpperCase("en-US");
+      return { name: (CONTRACTOR_ALIASES[upper] ?? trimmed).toLocaleLowerCase("el") } as const;
+    });
+    const matchesContractor = (item: { contractor: string; contractorVat?: string }) =>
+      !contractorFilters.length || contractorFilters.some((filter) =>
+        "vat" in filter ? item.contractorVat === filter.vat : item.contractor.toLocaleLowerCase("el").includes(filter.name),
+      );
+    const relevantAwards = awards.filter((item) => matchesCpv(item) && matchesContractor(item));
+    const relevantContracts = contracts.filter((item) => matchesCpv(item) && matchesContractor(item));
 
-  // The same legal entity is often typed differently across notices ("Α.Ε." vs
-  // "AE" vs an alternate registered name in quotes) - the VAT number is the one
-  // stable identifier, so group by that and fall back to the raw name only when
-  // a record has no VAT on file.
-  // "Αναθέσεις" counts award records directly (not deduped by original
-  // tender) - a contractor profile is about what this company was actually
-  // given, so a 12-lot tender showing 12 awards is correct, not inflated.
-  // valueByTender stays deduped by tender key though: an award and its
-  // eventual signed contract for the very same lot both carry a value, and
-  // summing both would double-count that lot's money.
-  type ContractorGroup = { key: string; names: Map<string, number>; awardCount: number; contracts: Set<string>; authorities: Set<string>; valueByTender: Map<string, number> };
-  const byContractor = new Map<string, ContractorGroup>();
-  const groupKeyFor = (item: { contractor: string; contractorVat?: string }) => item.contractorVat?.trim() || item.contractor;
-  const ensure = (item: { contractor: string; contractorVat?: string }) => {
-    const key = groupKeyFor(item);
-    let row = byContractor.get(key);
-    if (!row) { row = { key, names: new Map(), awardCount: 0, contracts: new Set(), authorities: new Set(), valueByTender: new Map() }; byContractor.set(key, row); }
-    row.names.set(item.contractor, (row.names.get(item.contractor) ?? 0) + 1);
-    return row;
-  };
-  for (const item of relevantAwards) {
-    if (!item.contractor || item.contractor === "Χωρίς ανάδοχο") continue;
-    const row = ensure(item);
-    const tenderKey = item.noticeAdam ?? item.adam;
-    row.awardCount += 1;
-    row.authorities.add(item.authority);
-    // A contract for the same tender (added below) overrides this placeholder.
-    if (!row.valueByTender.has(tenderKey)) row.valueByTender.set(tenderKey, item.value);
-  }
-  for (const item of relevantContracts) {
-    if (!item.contractor || item.contractor === "Χωρίς ανάδοχο") continue;
-    const row = ensure(item);
-    const tenderKey = item.noticeAdam ?? item.adam;
-    row.contracts.add(item.adam);
-    row.authorities.add(item.authority);
-    row.valueByTender.set(tenderKey, item.value);
-  }
-
-  // Some notices record the exact same contractor name under a different
-  // (mistyped) VAT. When a literal name string is shared by more than one VAT
-  // group, they almost certainly refer to the same real company - fold them
-  // together instead of keeping the stray VAT typo as its own row.
-  const parent = new Map<string, string>();
-  const find = (key: string): string => {
-    let root = key;
-    while (parent.has(root) && parent.get(root) !== root) root = parent.get(root)!;
-    return root;
-  };
-  for (const key of byContractor.keys()) parent.set(key, key);
-  const nameOwner = new Map<string, string>();
-  for (const [key, row] of byContractor) {
-    for (const nameSeen of row.names.keys()) {
-      const owner = nameOwner.get(nameSeen);
-      if (!owner) { nameOwner.set(nameSeen, key); continue; }
-      const rootA = find(owner);
-      const rootB = find(key);
-      if (rootA !== rootB) parent.set(rootB, rootA);
+    // The same legal entity is often typed differently across notices ("Α.Ε." vs
+    // "AE" vs an alternate registered name in quotes) - the VAT number is the one
+    // stable identifier, so group by that and fall back to the raw name only when
+    // a record has no VAT on file.
+    // "Αναθέσεις" counts award records directly (not deduped by original
+    // tender) - a contractor profile is about what this company was actually
+    // given, so a 12-lot tender showing 12 awards is correct, not inflated.
+    // valueByTender stays deduped by tender key though: an award and its
+    // eventual signed contract for the very same lot both carry a value, and
+    // summing both would double-count that lot's money.
+    type ContractorGroup = { key: string; names: Map<string, number>; awardCount: number; contracts: Set<string>; authorities: Set<string>; valueByTender: Map<string, number> };
+    const byContractor = new Map<string, ContractorGroup>();
+    const groupKeyFor = (item: { contractor: string; contractorVat?: string }) => item.contractorVat?.trim() || item.contractor;
+    const ensure = (item: { contractor: string; contractorVat?: string }) => {
+      const key = groupKeyFor(item);
+      let row = byContractor.get(key);
+      if (!row) { row = { key, names: new Map(), awardCount: 0, contracts: new Set(), authorities: new Set(), valueByTender: new Map() }; byContractor.set(key, row); }
+      row.names.set(item.contractor, (row.names.get(item.contractor) ?? 0) + 1);
+      return row;
+    };
+    for (const item of relevantAwards) {
+      if (!item.contractor || item.contractor === "Χωρίς ανάδοχο") continue;
+      const row = ensure(item);
+      const tenderKey = item.noticeAdam ?? item.adam;
+      row.awardCount += 1;
+      row.authorities.add(item.authority);
+      // A contract for the same tender (added below) overrides this placeholder.
+      if (!row.valueByTender.has(tenderKey)) row.valueByTender.set(tenderKey, item.value);
     }
-  }
-  const resolvedKeyFor = (item: { contractor: string; contractorVat?: string }) => find(groupKeyFor(item));
-  const mergedGroups = new Map<string, ContractorGroup>();
-  for (const [key, row] of byContractor) {
-    const root = find(key);
-    let target = mergedGroups.get(root);
-    if (!target) { target = { key: root, names: new Map(), awardCount: 0, contracts: new Set(), authorities: new Set(), valueByTender: new Map() }; mergedGroups.set(root, target); }
-    for (const [nameSeen, count] of row.names) target.names.set(nameSeen, (target.names.get(nameSeen) ?? 0) + count);
-    target.awardCount += row.awardCount;
-    for (const item of row.contracts) target.contracts.add(item);
-    for (const item of row.authorities) target.authorities.add(item);
-    for (const [tenderKey, amount] of row.valueByTender) if (!target.valueByTender.has(tenderKey)) target.valueByTender.set(tenderKey, amount);
-  }
+    for (const item of relevantContracts) {
+      if (!item.contractor || item.contractor === "Χωρίς ανάδοχο") continue;
+      const row = ensure(item);
+      const tenderKey = item.noticeAdam ?? item.adam;
+      row.contracts.add(item.adam);
+      row.authorities.add(item.authority);
+      row.valueByTender.set(tenderKey, item.value);
+    }
 
+    // Some notices record the exact same contractor name under a different
+    // (mistyped) VAT. When a literal name string is shared by more than one VAT
+    // group, they almost certainly refer to the same real company - fold them
+    // together instead of keeping the stray VAT typo as its own row.
+    const parent = new Map<string, string>();
+    const find = (key: string): string => {
+      let root = key;
+      while (parent.has(root) && parent.get(root) !== root) root = parent.get(root)!;
+      return root;
+    };
+    for (const key of byContractor.keys()) parent.set(key, key);
+    const nameOwner = new Map<string, string>();
+    for (const [key, row] of byContractor) {
+      for (const nameSeen of row.names.keys()) {
+        const owner = nameOwner.get(nameSeen);
+        if (!owner) { nameOwner.set(nameSeen, key); continue; }
+        const rootA = find(owner);
+        const rootB = find(key);
+        if (rootA !== rootB) parent.set(rootB, rootA);
+      }
+    }
+    const resolvedKeyFor = (item: { contractor: string; contractorVat?: string }) => find(groupKeyFor(item));
+    const mergedGroups = new Map<string, ContractorGroup>();
+    for (const [key, row] of byContractor) {
+      const root = find(key);
+      let target = mergedGroups.get(root);
+      if (!target) { target = { key: root, names: new Map(), awardCount: 0, contracts: new Set(), authorities: new Set(), valueByTender: new Map() }; mergedGroups.set(root, target); }
+      for (const [nameSeen, count] of row.names) target.names.set(nameSeen, (target.names.get(nameSeen) ?? 0) + count);
+      target.awardCount += row.awardCount;
+      for (const item of row.contracts) target.contracts.add(item);
+      for (const item of row.authorities) target.authorities.add(item);
+      for (const [tenderKey, amount] of row.valueByTender) if (!target.valueByTender.has(tenderKey)) target.valueByTender.set(tenderKey, amount);
+    }
+
+    const contractorRowsBase: ContractorSummary[] = [...mergedGroups.values()]
+      .map((row) => ({
+        key: row.key,
+        // Show the spelling that shows up most often across the matched records.
+        name: [...row.names.entries()].sort((a, b) => b[1] - a[1])[0][0],
+        awards: row.awardCount,
+        contracts: row.contracts.size,
+        authorities: row.authorities.size,
+        value: [...row.valueByTender.values()].reduce((sum, item) => sum + item, 0),
+      }))
+      .sort((a, b) => b.awards - a.awards);
+
+    return { relevantAwards, relevantContracts, contractorRowsBase, resolvedKeyFor };
+  }, [awards, contracts, cpv, contractor]);
+
+  // Cheap even on a large base list - no need to memoize the text filter itself.
   const search = contractorSearch.trim().toLocaleLowerCase("el");
-  const contractorRows: ContractorSummary[] = [...mergedGroups.values()]
-    .map((row) => ({
-      key: row.key,
-      // Show the spelling that shows up most often across the matched records.
-      name: [...row.names.entries()].sort((a, b) => b[1] - a[1])[0][0],
-      awards: row.awardCount,
-      contracts: row.contracts.size,
-      authorities: row.authorities.size,
-      value: [...row.valueByTender.values()].reduce((sum, item) => sum + item, 0),
-    }))
-    .filter((row) => !search || row.name.toLocaleLowerCase("el").includes(search))
-    .sort((a, b) => b.awards - a.awards);
+  const contractorRows = search ? contractorRowsBase.filter((row) => row.name.toLocaleLowerCase("el").includes(search)) : contractorRowsBase;
   const visibleRows = contractorRows.slice(0, visibleCount);
 
   const hasSelection = cpv.length > 0 || contractor.length > 0 || (authority.trim() !== "" && authority !== "Όλες") || query.trim().length > 0 ||
