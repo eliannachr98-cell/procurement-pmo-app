@@ -1030,9 +1030,24 @@ function ContractorProfile({ name, summary, awards, contracts, onClose }: {
   // never required for the row to appear or be counted.
   const awardRows = [...awards].sort((a, b) => (b.awardDate ?? "").localeCompare(a.awardDate ?? ""));
 
-  const distribution = [...[...awards, ...contracts].reduce((map, item) => {
-    const label = item.cpvDescription ? `${item.cpv} — ${item.cpvDescription}` : item.cpv;
-    map.set(label, (map.get(label) ?? 0) + item.value);
+  // Same dedup rule as the "Συνολική αξία" metric above (and MarketPanel's
+  // valueByTender): an award and its own eventual signed contract both carry
+  // a value for the same lot, so summing both here would double-count it -
+  // keep one value per tender, letting a contract (the final signed amount)
+  // override its award's placeholder.
+  const valueByTender = new Map<string, { value: number; label: string }>();
+  for (const item of awards) {
+    const key = item.noticeAdam ?? item.adam;
+    if (!valueByTender.has(key)) {
+      valueByTender.set(key, { value: item.value, label: item.cpvDescription ? `${item.cpv} — ${item.cpvDescription}` : item.cpv });
+    }
+  }
+  for (const item of contracts) {
+    const key = item.noticeAdam ?? item.adam;
+    valueByTender.set(key, { value: item.value, label: item.cpvDescription ? `${item.cpv} — ${item.cpvDescription}` : item.cpv });
+  }
+  const distribution = [...[...valueByTender.values()].reduce((map, item) => {
+    map.set(item.label, (map.get(item.label) ?? 0) + item.value);
     return map;
   }, new Map<string, number>())].sort((a, b) => b[1] - a[1]);
   const distributionTotal = distribution.reduce((sum, [, value]) => sum + value, 0) || 1;
