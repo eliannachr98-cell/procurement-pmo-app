@@ -258,19 +258,25 @@ export default function Home() {
     loadTenderPage(loadedPage + 1, true);
   }, [page, hasMore, loading, loadedPage, tenders.length, loadTenderPage, dataError, authority]);
 
+  // contractor/cpv are NOT re-checked here - the server already filtered
+  // `tenders` by them (via /api/procurement's contractor/cpv params), and
+  // its matching is real resolution through record_contractors_compact /
+  // record_cpvs_compact (VAT numbers, brand aliases like PWC ->
+  // PricewaterhouseCoopers, CPV description matches, award/contract
+  // linkage) - nothing a literal substring check against the tender's own
+  // denormalized fields can reproduce. Confirmed live: selecting the PWC
+  // alias correctly returned ~22 tenders from the server, but this re-check
+  // (literally searching each tender's contractor names for the substring
+  // "pwc") kept only the 2 that happened to contain it, discarding the rest.
   const filtered = useMemo(() => tenders.filter((tender) => {
     const needle = query.trim().toLocaleLowerCase("el");
-    const contractorTerms = contractor.map((item) => item.toLocaleLowerCase("el"));
-    const cpvTerms = cpv.map((item) => item.toLocaleLowerCase("el"));
     const matchesQuery = page !== "tenders" || !needle || `${tender.adam} ${tender.title}`.toLocaleLowerCase("el").includes(needle);
     return matchesQuery && (status === "Όλες" || tender.status === status) &&
       (!authority || authority === "Όλες" || tender.authority.toLocaleLowerCase("el").includes(authority.toLocaleLowerCase("el"))) &&
-      (!contractorTerms.length || contractorTerms.some((item) => (tender.contractors ?? []).join(" ").toLocaleLowerCase("el").includes(item))) &&
-      (!cpvTerms.length || cpvTerms.some((item) => `${tender.cpv} ${tender.cpvDescription}`.toLocaleLowerCase("el").includes(item))) &&
       (year === "Όλα" || tender.publicationDate?.startsWith(year)) &&
       (contractType.length === 0 || contractType.includes(tender.contractType ?? "")) &&
       (documentType === "Όλοι" || tender.documentType === documentType);
-  }), [tenders, query, status, authority, contractor, cpv, year, contractType, documentType, page]);
+  }), [tenders, query, status, authority, year, contractType, documentType, page]);
 
   const documentTypes = [
     ["declaration", "Διακήρυξη"],
