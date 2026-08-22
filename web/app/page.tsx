@@ -1286,36 +1286,38 @@ function AlertsPanel() {
     <article className="panel watchlistPanel">
       <div className="watchlistRow cpvWatchRow">
         <div className="filterHeading"><div><p className="eyebrow">CPV ALERTS</p><h2>Παρακολούθηση CPV</h2></div><button type="button" title={loading ? "Φόρτωση…" : "Ανανέωση ειδοποιήσεων"} onClick={load}><span className={loading ? "spinIcon" : ""}>↻</span></button></div>
-        <MultiSearchInput
-          label="CPV"
-          type="cpv"
-          values={watchlist.map((item) => item.cpv_code)}
-          initialLabels={Object.fromEntries(watchlist.map((item) => [item.cpv_code, item.cpv_label ?? item.cpv_code]))}
-          onChange={(nextValues) => {
-            const removed = watchlist.map((item) => item.cpv_code).find((code) => !nextValues.includes(code));
-            if (removed) removeCpv(removed);
-          }}
-          onSelectOption={(option) => {
-            fetch("/api/watchlist", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ cpv_code: option.value, cpv_label: option.label }) })
-              .then(load);
-          }}
-          placeholder="Αναζήτησε κωδικό ή περιγραφή CPV"
-        />
-        <MultiSearchInput
-          label="Περιοχή"
-          type="nuts"
-          values={nutsFilter.map((item) => item.nuts_code)}
-          initialLabels={Object.fromEntries(nutsFilter.map((item) => [item.nuts_code, item.nuts_name ?? item.nuts_code]))}
-          onChange={(nextValues) => {
-            const removed = nutsFilter.map((item) => item.nuts_code).find((code) => !nextValues.includes(code));
-            if (removed) removeNutsFilter(removed);
-          }}
-          onSelectOption={(option) => {
-            fetch("/api/alert-nuts-filter", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ nuts_code: option.value, nuts_name: option.label }) })
-              .then(load);
-          }}
-          placeholder="π.χ. Αττική - αφήστε κενό για όλη τη χώρα"
-        />
+        <div className="cpvNutsRow">
+          <MultiSearchInput
+            label="CPV"
+            type="cpv"
+            values={watchlist.map((item) => item.cpv_code)}
+            initialLabels={Object.fromEntries(watchlist.map((item) => [item.cpv_code, item.cpv_label ?? item.cpv_code]))}
+            onChange={(nextValues) => {
+              const removed = watchlist.map((item) => item.cpv_code).find((code) => !nextValues.includes(code));
+              if (removed) removeCpv(removed);
+            }}
+            onSelectOption={(option) => {
+              fetch("/api/watchlist", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ cpv_code: option.value, cpv_label: option.label }) })
+                .then(load);
+            }}
+            placeholder="Αναζήτησε κωδικό ή περιγραφή CPV"
+          />
+          <MultiSearchInput
+            label="Περιοχή"
+            type="nuts"
+            values={nutsFilter.map((item) => item.nuts_code)}
+            initialLabels={Object.fromEntries(nutsFilter.map((item) => [item.nuts_code, item.nuts_name ?? item.nuts_code]))}
+            onChange={(nextValues) => {
+              const removed = nutsFilter.map((item) => item.nuts_code).find((code) => !nextValues.includes(code));
+              if (removed) removeNutsFilter(removed);
+            }}
+            onSelectOption={(option) => {
+              fetch("/api/alert-nuts-filter", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ nuts_code: option.value, nuts_name: option.label }) })
+                .then(load);
+            }}
+            placeholder="π.χ. Αττική - αφήστε κενό για όλη τη χώρα"
+          />
+        </div>
       </div>
       <p className="watchlistCaption">Οι νέοι διαγωνισμοί που δημοσιεύονται σε αυτά τα CPV εμφανίζονται παρακάτω, με αποδελτίωση των βασικών στοιχείων{nutsFilter.length > 0 && ", περιορισμένοι στην περιοχή που επέλεξες"}.</p>
     </article>
