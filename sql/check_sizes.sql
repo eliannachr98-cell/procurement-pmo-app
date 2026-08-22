@@ -1,9 +1,12 @@
-select extname from pg_extension where extname = 'pg_trgm';
+select count(*) as other_count,
+       min(publication_date) as earliest,
+       max(publication_date) as latest
+from public.procurements_compact
+where document_category = 'other';
 
-select indexname, indexdef
-from pg_indexes
-where tablename = 'procurements_compact'
-  and indexdef ilike '%authority_name%';
-
-select count(distinct authority_name) as distinct_authorities
-from public.procurements_compact;
+select publication_date, count(*)
+from public.procurements_compact
+where document_category = 'other'
+group by publication_date
+order by count(*) desc
+limit 15;
