@@ -5,8 +5,10 @@
 -- excluded), while an existing recipient only ever sees genuinely new items
 -- on later runs - no special-cased "first email" logic needed, it falls out
 -- of the per-recipient check on its own.
-drop table if exists public.alert_notifications_sent;
-create table public.alert_notifications_sent (
+-- (One-off migration from the earlier adam-only-PK version already ran -
+-- kept as create-if-not-exists from here on so re-applying this file for a
+-- future logic tweak can never again silently wipe real send history.)
+create table if not exists public.alert_notifications_sent (
   recipient_email text not null,
   adam text not null,
   notified_at timestamptz not null default now(),
@@ -14,10 +16,6 @@ create table public.alert_notifications_sent (
 );
 
 create extension if not exists pg_trgm;
-
--- CREATE OR REPLACE can't change a function's parameter list - the earlier
--- version took (cpv_codes, nuts_prefixes, days) with no recipient.
-drop function if exists public.alert_email_candidates(text[], text[], int);
 
 -- What's worth emailing to p_recipient_email, for the current watchlist/
 -- region filter:
