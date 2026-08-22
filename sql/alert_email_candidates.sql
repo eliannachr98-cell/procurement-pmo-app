@@ -92,7 +92,17 @@ language sql stable as $$
     'documentType', document_category,
     'publicationDate', publication_date,
     'openingDate', opening_at,
-    'budget', budget
+    'budget', budget,
+    -- No free-text "description" field exists anywhere in the source data -
+    -- the matched CPV description(s) are the closest available stand-in for
+    -- "what is this actually for", limited to the CPVs that matched the
+    -- watchlist (a notice can carry several unrelated CPVs otherwise).
+    'description', (
+      select string_agg(distinct rc.cpv_description, '; ')
+      from public.record_cpvs_compact rc
+      where rc.record_adam = final.adam and rc.record_type = 'procurement'
+        and rc.cpv_code = any(p_cpv_codes) and rc.cpv_description is not null
+    )
   ) order by publication_date desc nulls last), '[]'::json)
   from final;
 $$;
