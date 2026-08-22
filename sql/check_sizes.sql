@@ -1,10 +1,4 @@
-select similarity(
-  'Διακήρυξη για την Μελέτη για τη στρατηγική διαχείρισης ανθρώπινων πόρων',
-  'Προκήρυξη στην ΕΕ για την Μελέτη για τη στρατηγική διαχείρισης ανθρώπινων πόρων'
-) as sim_score;
-
-select public.alert_email_candidates(
-  (select array_agg(cpv_code) from public.cpv_watchlist),
-  (select array_agg(nuts_code) from public.alert_nuts_filter),
-  14
-) as candidates;
+select s.adam, s.notified_at, p.title, p.authority_name, p.document_category, p.publication_date
+from public.alert_notifications_sent s
+join public.procurements_compact p on p.adam = s.adam
+order by s.notified_at, p.adam;
