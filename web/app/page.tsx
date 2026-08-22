@@ -573,9 +573,12 @@ function NutsMap({ counts }: { counts: { nuts_code: string; nuts_name: string; c
       if (!layer) return;
       layer.clearLayers();
       for (const { item, position } of pins) {
-        const size = Math.round(24 + (item.count / max) * 22);
+        const size = Math.round(26 + (item.count / max) * 24);
+        // A 4-6 digit count ("36.250") doesn't fit legibly inside a 24-46px
+        // circle - the exact figure is still available in the tooltip below.
+        const label = item.count >= 1000 ? `${Math.round(item.count / 1000)}χ` : number.format(item.count);
         const icon = L.divIcon({
-          html: `<span class="mapPinBadge">${number.format(item.count)}</span>`,
+          html: `<span class="mapPinBadge">${label}</span>`,
           className: "mapPinWrap",
           iconSize: [size, size],
         });
