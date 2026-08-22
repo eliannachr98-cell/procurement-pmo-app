@@ -91,11 +91,19 @@ language sql stable as $$
         select 1 from candidates c2
         where c2.adam <> c.adam
           and c2.document_category in ('declaration', 'announcement')
-          and c2.document_category <> c.document_category
           and c2.authority_name is not distinct from c.authority_name
           and c2.budget = c.budget
           and similarity(c2.title, c.title) > 0.4
-          and (c2.publication_date, c2.adam) < (c.publication_date, c.adam)
+          and (
+            -- Διακήρυξη always outranks a Προκήρυξη in the same pair,
+            -- regardless of which was published first - per explicit
+            -- request, whichever one exists preferred is the Διακήρυξη.
+            (c2.document_category = 'declaration' and c.document_category = 'announcement')
+            -- Within the same type (e.g. two re-issued declarations, or no
+            -- declaration at all so two announcements), the earlier one -
+            -- by publication_date then adam as a stable tiebreak - wins.
+            or (c2.document_category = c.document_category and (c2.publication_date, c2.adam) < (c.publication_date, c.adam))
+          )
       ) then 0 else 1 end as rn
     from candidates c
     where c.document_category in ('declaration', 'announcement')
