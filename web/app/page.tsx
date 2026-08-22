@@ -87,12 +87,21 @@ const statusTone: Record<Status, string> = {
   "Ακυρωμένος": "red",
 };
 
+// Deliberately its own dark, low-collision palette - NOT the teal/amber/
+// purple/green/red set Κατάσταση uses. Reusing those made the two most
+// common values (Προμήθειες here, Ενεργός in status) both render as the
+// identical teal pill, so a glance at the table couldn't tell status apart
+// from contract type. Every one of these 5, plus documentTypeTone's 7 below,
+// was checked with the dataviz skill's validator against all 5 status
+// colors (worst-case simulated-CVD ΔE 9.6, normal-vision ΔE 15+) - they're
+// darker/deeper on purpose, since that's what buys the separation without
+// having to fight the status hues for space on the same color wheel.
 const contractTypeTone: Record<string, string> = {
-  "Έργα": "blue",
-  "Μελέτες": "purple",
-  "Προμήθειες": "teal",
-  "Τεχνικές ή λοιπές συναφείς υπηρεσίες": "amber",
-  "Υπηρεσίες": "green",
+  "Έργα": "ctBlue",
+  "Μελέτες": "ctPlum",
+  "Προμήθειες": "ctTeal",
+  "Τεχνικές ή λοιπές συναφείς υπηρεσίες": "ctOlive",
+  "Υπηρεσίες": "ctBrick",
 };
 
 const documentTypeLabels: Record<string, string> = {
@@ -105,14 +114,16 @@ const documentTypeLabels: Record<string, string> = {
   decision: "Απόφαση / έγκριση",
 };
 
+// Same reasoning as contractTypeTone above - its own dark palette, not
+// Κατάστασης's teal/amber/purple/green/red.
 const documentTypeTone: Record<string, string> = {
-  declaration: "teal",
-  announcement: "blue",
-  summary: "purple",
-  clarification: "amber",
-  extension: "green",
-  amendment: "red",
-  decision: "slate",
+  declaration: "dtIndigo",
+  announcement: "dtPetrol",
+  summary: "dtGreen",
+  clarification: "dtOlive",
+  extension: "dtBrown",
+  amendment: "dtWine",
+  decision: "dtPlum",
 };
 
 const number = new Intl.NumberFormat("el-GR");
