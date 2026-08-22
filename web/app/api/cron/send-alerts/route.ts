@@ -15,6 +15,7 @@ type CandidateRow = {
   publicationDate: string | null;
   openingDate: string | null;
   budget: number;
+  description: string | null;
 };
 
 const documentTypeLabels: Record<string, string> = {
@@ -31,30 +32,29 @@ function formatDate(value: string | null) {
 
 function buildEmailHtml(items: CandidateRow[]) {
   const euro = new Intl.NumberFormat("el-GR", { style: "currency", currency: "EUR", maximumFractionDigits: 0 });
-  const rows = items.map((item) => `
-    <tr>
-      <td style="padding:10px;border-bottom:1px solid #e1edf0;">
-        <div style="font-weight:600;color:#16222c;">${item.title}</div>
-        <div style="color:#6a7e8b;font-size:12px;margin-top:2px;">${item.authority} · ${documentTypeLabels[item.documentType] ?? item.documentType} · ΑΔΑΜ ${item.adam}</div>
-      </td>
-      <td style="padding:10px;border-bottom:1px solid #e1edf0;white-space:nowrap;text-align:right;">${euro.format(item.budget)}</td>
-      <td style="padding:10px;border-bottom:1px solid #e1edf0;white-space:nowrap;">${formatDate(item.openingDate)}</td>
-    </tr>`).join("");
+  const cards = items.map((item) => `
+    <div style="border:1px solid #e1edf0;border-radius:10px;padding:16px;margin-bottom:14px;">
+      <div style="color:#6a7e8b;font-size:11px;text-transform:uppercase;letter-spacing:.3px;margin-bottom:4px;">${item.authority} · ${documentTypeLabels[item.documentType] ?? item.documentType}</div>
+      <div style="font-weight:700;font-size:15px;color:#16222c;margin-bottom:8px;">${item.title}</div>
+      ${item.description ? `<div style="color:#3d5666;font-size:13px;margin-bottom:10px;">${item.description}</div>` : ""}
+      <table style="width:100%;border-collapse:collapse;font-size:13px;">
+        <tr>
+          <td style="padding:4px 0;color:#6a7e8b;width:50%;">Καταληκτική υποβολής προσφορών</td>
+          <td style="padding:4px 0;font-weight:600;">${formatDate(item.openingDate)}</td>
+        </tr>
+        <tr>
+          <td style="padding:4px 0;color:#6a7e8b;">Ποσό</td>
+          <td style="padding:4px 0;font-weight:600;">${euro.format(item.budget)}</td>
+        </tr>
+      </table>
+      <div style="color:#9aa7ae;font-size:11px;margin-top:8px;">ΑΔΑΜ ${item.adam}</div>
+    </div>`).join("");
   return `
     <div style="font-family:Arial,Helvetica,sans-serif;max-width:640px;margin:0 auto;color:#16222c;">
       <h2 style="color:#0c3b59;margin:0 0 4px;">TenderScope</h2>
       <p style="color:#6a7e8b;font-size:13px;margin:0 0 20px;">${items.length} νέα στοιχεία στα CPV που παρακολουθείς.</p>
-      <table style="width:100%;border-collapse:collapse;font-size:13px;">
-        <thead>
-          <tr style="text-align:left;color:#506b79;background:#eaf1f5;">
-            <th style="padding:10px;">Διαγωνισμός</th>
-            <th style="padding:10px;text-align:right;">Π/Υ</th>
-            <th style="padding:10px;">Αποσφράγιση</th>
-          </tr>
-        </thead>
-        <tbody>${rows}</tbody>
-      </table>
-      <p style="color:#6a7e8b;font-size:11px;margin-top:20px;">Αναζήτησε τον κωδικό ΑΔΑΜ μέσα στο TenderScope για τα πλήρη στοιχεία.</p>
+      ${cards}
+      <p style="color:#6a7e8b;font-size:11px;margin-top:12px;">Αναζήτησε τον κωδικό ΑΔΑΜ μέσα στο TenderScope για τα πλήρη στοιχεία.</p>
     </div>`;
 }
 
