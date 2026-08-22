@@ -1,6 +1,5 @@
-select nuts_code, nuts_name, count(*)
-from public.procurements_compact
-where nuts_name ilike '%αττικ%' or nuts_code ilike 'EL3%'
-group by nuts_code, nuts_name
-order by count(*) desc
-limit 20;
+select public.alert_email_candidates(
+  (select array_agg(cpv_code) from public.cpv_watchlist),
+  (select array_agg(nuts_code) from public.alert_nuts_filter),
+  14
+) as candidates;
