@@ -241,18 +241,21 @@ export default function Home() {
   }, [loadTenderPage, loadDashboard]);
 
 
-  // The ΑΔΑΜ/τίτλος search box is hidden on Αγορά & Ανταγωνισμός (it targets
-  // one specific tender, which doesn't fit a per-contractor aggregate view),
-  // but the underlying `query` state is shared across all tabs and still
-  // gets sent as `q` to /api/procurement, which DOES apply it server-side to
-  // the market awards/contracts query. Left as-is, a term typed on
-  // Διαγωνισμοί would keep silently narrowing the Αγορά results after
+  // The ΑΔΑΜ/τίτλος search box and Τύπος εγγράφου select are both hidden on
+  // Αγορά & Ανταγωνισμός (a specific tender / a notice-lifecycle document
+  // type don't fit a per-contractor aggregate view), but `query` and
+  // `documentType` are shared state across all tabs and still get sent as
+  // `q`/`documentType` to /api/procurement, which DOES apply both
+  // server-side to the market awards/contracts query. Left as-is, a value
+  // set on Διαγωνισμοί would keep silently narrowing the Αγορά results after
   // switching tabs, with no visible control left to see or clear it. Clear
-  // it on entry instead - loadTenderPage's query dependency then triggers a
-  // fresh, unfiltered-by-query fetch automatically.
+  // both on entry instead - loadTenderPage's dependency on them then
+  // triggers a fresh, unfiltered fetch automatically.
   useEffect(() => {
-    if (page === "market" && query) setQuery("");
-  }, [page, query]);
+    if (page !== "market") return;
+    if (query) setQuery("");
+    if (documentType !== "Όλοι") setDocumentType("Όλοι");
+  }, [page, query, documentType]);
 
   // Αγορά & Ανταγωνισμός computes its stats (Αναθέσεις/Συμβάσεις/Αξία per
   // ανάδοχος) from whatever tenders are already loaded - fine for the
