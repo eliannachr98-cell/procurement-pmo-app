@@ -59,14 +59,19 @@ language sql stable as $$
            (select count(*) from public.procurements_compact p2 where p2.nuts_code ilike m.nuts_code || '%') as total_count
     from matches m
   )
-  select c.nuts_code, c.nuts_name, c.total_count,
-         not exists (
-           select 1 from matches other
-           where other.nuts_code <> c.nuts_code
-             and length(other.nuts_code) < length(c.nuts_code)
-             and c.nuts_code ilike other.nuts_code || '%'
-         ) as is_broad
+  select c.nuts_code, c.nuts_name, c.total_count, true as is_broad
   from counted c
+  -- Only the broadest match per family - a narrower sibling already covered
+  -- by another (shorter) match in this same result set is dropped rather
+  -- than shown alongside it, per explicit request: searching "Αττική"
+  -- should surface the one whole-region pick, not it plus every sub-region
+  -- that's already included in it.
+  where not exists (
+    select 1 from matches other
+    where other.nuts_code <> c.nuts_code
+      and length(other.nuts_code) < length(c.nuts_code)
+      and c.nuts_code ilike other.nuts_code || '%'
+  )
   order by length(c.nuts_code), c.nuts_name
   limit 20;
 $$;
