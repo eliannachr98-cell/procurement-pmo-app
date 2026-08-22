@@ -1421,12 +1421,13 @@ function AlertsPanel() {
           <span><b>Π/Υ</b>{euro.format(item.budget)}</span>
           <span><b>Αποσφράγιση</b>{formatDate(item.openingDate ?? undefined)}</span>
           <span><b>Τύπος σύμβασης</b>{item.contractType ?? "—"}</span>
+          <span><b>Τύπος εγγράφου</b>{item.documentType ? (documentTypeLabels[item.documentType] ?? item.documentType) : "—"}</span>
         </span>
       </button>;
       };
 
       return <article className="panel tablePanel">
-      <PanelHeader title="Νέοι διαγωνισμοί" caption={`${number.format(recent.length + active.length + passed.length)} διαγωνισμοί από τις αρχές του 2026 στα CPV που παρακολουθείς`} onDownload={{ filename: "neoi-diagonismoi", title: "Νέοι διαγωνισμοί", headers: ["ΑΔΑΜ", "Τίτλος", "Αναθέτουσα Αρχή", "Π/Υ", "Αποσφράγιση", "Τύπος σύμβασης"], rows: shownItems.map((item) => [item.adam, item.title, item.authority, item.budget, item.openingDate ?? "", item.contractType ?? ""]), columnTypes: ["text", "text", "text", "currency", "date", "text"] }} />
+      <PanelHeader title="Νέοι διαγωνισμοί" caption={`${number.format(recent.length + active.length + passed.length)} διαγωνισμοί από τις αρχές του 2026 στα CPV που παρακολουθείς`} onDownload={{ filename: "neoi-diagonismoi", title: "Νέοι διαγωνισμοί", headers: ["ΑΔΑΜ", "Τίτλος", "Αναθέτουσα Αρχή", "Π/Υ", "Αποσφράγιση", "Τύπος σύμβασης", "Τύπος εγγράφου"], rows: shownItems.map((item) => [item.adam, item.title, item.authority, item.budget, item.openingDate ?? "", item.contractType ?? "", item.documentType ? (documentTypeLabels[item.documentType] ?? item.documentType) : ""]), columnTypes: ["text", "text", "text", "currency", "date", "text", "text"] }} />
       <div className="alertAuthorityFilter">
         <MultiSearchInput
           label="Αναθέτουσα Αρχή"
