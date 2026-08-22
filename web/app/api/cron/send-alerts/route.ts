@@ -55,8 +55,12 @@ function buildEmailHtml(items: CandidateRow[]) {
           ${item.description ? `<div style="color:#3d5666;font-size:13px;line-height:1.4;margin-bottom:12px;">${item.description}</div>` : ""}
           <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-top:1px solid #eef3f5;padding-top:10px;">
             <tr>
-              <td style="padding-top:10px;color:#6a7e8b;font-size:12px;width:60%;">Καταληκτική υποβολής προσφορών</td>
-              <td style="padding-top:10px;color:#16222c;font-size:13px;font-weight:700;text-align:right;">${formatDate(item.openingDate)}</td>
+              <td style="padding-top:10px;color:#6a7e8b;font-size:12px;width:60%;">Ημερομηνία δημοσίευσης</td>
+              <td style="padding-top:10px;color:#16222c;font-size:13px;font-weight:700;text-align:right;">${formatDate(item.publicationDate)}</td>
+            </tr>
+            <tr>
+              <td style="padding-top:4px;color:#6a7e8b;font-size:12px;">Καταληκτική υποβολής προσφορών</td>
+              <td style="padding-top:4px;color:#16222c;font-size:13px;font-weight:700;text-align:right;">${formatDate(item.openingDate)}</td>
             </tr>
             <tr>
               <td style="padding-top:4px;color:#6a7e8b;font-size:12px;">Ποσό</td>
