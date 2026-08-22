@@ -16,7 +16,11 @@
 -- is still something the user wants to see, just filterable client-side:
 -- collapsing them server-side hid real information (e.g. a postponed
 -- opening date) with no way to get it back.
-create or replace function public.alerts_feed(p_cpv_codes text[], p_days int default 45)
+-- p_nuts_prefixes is optional - when set, a notice's own nuts_code must
+-- start with one of the given prefixes (e.g. "EL3" covers every Attica
+-- sub-region: EL30, EL301..EL307) to be included. Null/empty means no
+-- region restriction, same as before this filter existed.
+create or replace function public.alerts_feed(p_cpv_codes text[], p_days int default 45, p_nuts_prefixes text[] default null)
 returns json
 language sql stable as $$
   with matched_notice_adams as (
@@ -30,6 +34,10 @@ language sql stable as $$
     from public.procurements_compact p
     join matched_notice_adams m on m.adam = p.adam
     where p.publication_date >= (current_date - (p_days || ' days')::interval)
+      and (
+        p_nuts_prefixes is null or cardinality(p_nuts_prefixes) = 0
+        or exists (select 1 from unnest(p_nuts_prefixes) np where p.nuts_code ilike np || '%')
+      )
   ),
   notice_cpvs as (
     select rc.record_adam as adam, rc.cpv_code, rc.cpv_description
