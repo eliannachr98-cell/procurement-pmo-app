@@ -87,15 +87,19 @@ const statusTone: Record<Status, string> = {
   "Ακυρωμένος": "red",
 };
 
-// Deliberately its own dark, low-collision palette - NOT the teal/amber/
-// purple/green/red set Κατάσταση uses. Reusing those made the two most
-// common values (Προμήθειες here, Ενεργός in status) both render as the
-// identical teal pill, so a glance at the table couldn't tell status apart
-// from contract type. Every one of these 5, plus documentTypeTone's 7 below,
-// was checked with the dataviz skill's validator against all 5 status
-// colors (worst-case simulated-CVD ΔE 9.6, normal-vision ΔE 15+) - they're
-// darker/deeper on purpose, since that's what buys the separation without
-// having to fight the status hues for space on the same color wheel.
+// Deliberately its own low-collision palette - NOT the teal/amber/purple/
+// green/red set Κατάσταση uses. Reusing those made the two most common
+// values (Προμήθειες here, Ενεργός in status) both render as the identical
+// teal pill, so a glance at the table couldn't tell status apart from
+// contract type. These tone classes (defined in globals.css) render as soft
+// pastel-background/colored-text pills rather than Κατάστασης's solid-
+// fill/white-text ones - softer to match the app's pastel visual language
+// elsewhere (Metric cards, dataBanner), and the different pill STYLE is
+// itself a second, non-color cue that these two systems aren't status. The
+// underlying hues (in the darker text color, not the pale background) were
+// still checked with the dataviz skill's validator against all 5 status
+// colors - worst-case simulated-CVD ΔE 11.1, comfortably above the 8.0
+// target, plus documentTypeTone's 7 below.
 const contractTypeTone: Record<string, string> = {
   "Έργα": "ctBlue",
   "Μελέτες": "ctPlum",
