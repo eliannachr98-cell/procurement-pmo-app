@@ -152,6 +152,11 @@ export default function Home() {
   const [lastSync, setLastSync] = useState<string | null>(null);
   const latestRequest = useRef(0);
   const latestDashboardRequest = useRef(0);
+  // Ειδοποιήσεις has no filters and its own independent data - read via a
+  // ref (not a dependency) so a plain tab switch never re-triggers the fetch
+  // effect below, only an actual filter change does.
+  const pageRef = useRef(page);
+  useEffect(() => { pageRef.current = page; }, [page]);
   const statusChartRef = useRef<HTMLDivElement>(null);
   const cpvChartRef = useRef<HTMLDivElement>(null);
   const monthlyCountChartRef = useRef<HTMLDivElement>(null);
@@ -236,7 +241,14 @@ export default function Home() {
     // Αναθέτουσα Αρχή applies on every keystroke (no "pick an option" step
     // like CPV/Ανάδοχος have) - a longer pause here means fewer full
     // reloads fired while someone is still mid-word.
-    const timer = window.setTimeout(() => { loadTenderPage(1); loadDashboard(); }, 500);
+    const timer = window.setTimeout(() => {
+      // Ειδοποιήσεις has no filter UI and its own independent data fetch -
+      // this pair is wasted there. Checked via a ref, not a `page`
+      // dependency, so switching tabs alone can't retrigger this effect.
+      if (pageRef.current === "alerts") return;
+      loadTenderPage(1);
+      loadDashboard();
+    }, 500);
     return () => window.clearTimeout(timer);
   }, [loadTenderPage, loadDashboard]);
 
@@ -391,7 +403,9 @@ export default function Home() {
               or a not-yet-awarded status, so these two never apply anything meaningful here. */}
           {page !== "market" && <label>Τύπος εγγράφου<select value={documentType} onChange={(event) => setDocumentType(event.target.value)}><option value="Όλοι">Όλοι</option>{documentTypes.map(([value,label]) => <option key={value} value={value}>{label}</option>)}</select></label>}
           {page !== "market" && <label>Κατάσταση<select value={status} onChange={(event) => setStatus(event.target.value)}><option>Όλες</option>{Object.keys(statusTone).map((item) => <option key={item}>{item}</option>)}</select></label>}
-          <div className="filterNote"><span>i</span><p>Τα ίδια φίλτρα εφαρμόζονται στην Επισκόπηση και στους Διαγωνισμούς.</p></div>
+          <div className="filterNote"><span>i</span><p>{page === "market"
+            ? "Το CPV επιλέγεται μέσα στον πίνακα της Αγοράς. Τύπος εγγράφου και Κατάσταση δεν εφαρμόζονται εδώ - αφορούν το στάδιο της ίδιας της διακήρυξης, όχι τις αναθέσεις/συμβάσεις."
+            : "Τα ίδια φίλτρα εφαρμόζονται στην Επισκόπηση και στους Διαγωνισμούς."}</p></div>
         </aside>}
       </div>
     </main>
