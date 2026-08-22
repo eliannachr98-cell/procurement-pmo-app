@@ -24,6 +24,15 @@ const documentTypeLabels: Record<string, string> = {
   extension: "Παράταση / μετάθεση",
 };
 
+// Same tone mapping as .status badges in the app (page.tsx statusTone) -
+// keeps the email visually consistent with TenderScope rather than picking
+// new colors.
+const documentTypeAccent: Record<string, string> = {
+  declaration: "#168c8c",
+  announcement: "#367ca1",
+  extension: "#2e8b57",
+};
+
 function formatDate(value: string | null) {
   if (!value) return "—";
   const date = new Date(value);
@@ -32,30 +41,55 @@ function formatDate(value: string | null) {
 
 function buildEmailHtml(items: CandidateRow[]) {
   const euro = new Intl.NumberFormat("el-GR", { style: "currency", currency: "EUR", maximumFractionDigits: 0 });
-  const cards = items.map((item) => `
-    <div style="border:1px solid #e1edf0;border-radius:10px;padding:16px;margin-bottom:14px;">
-      <div style="color:#6a7e8b;font-size:11px;text-transform:uppercase;letter-spacing:.3px;margin-bottom:4px;">${item.authority} · ${documentTypeLabels[item.documentType] ?? item.documentType}</div>
-      <div style="font-weight:700;font-size:15px;color:#16222c;margin-bottom:8px;">${item.title}</div>
-      ${item.description ? `<div style="color:#3d5666;font-size:13px;margin-bottom:10px;">${item.description}</div>` : ""}
-      <table style="width:100%;border-collapse:collapse;font-size:13px;">
-        <tr>
-          <td style="padding:4px 0;color:#6a7e8b;width:50%;">Καταληκτική υποβολής προσφορών</td>
-          <td style="padding:4px 0;font-weight:600;">${formatDate(item.openingDate)}</td>
-        </tr>
-        <tr>
-          <td style="padding:4px 0;color:#6a7e8b;">Ποσό</td>
-          <td style="padding:4px 0;font-weight:600;">${euro.format(item.budget)}</td>
-        </tr>
+  const appUrl = "https://procurement-pmo-app.vercel.app";
+
+  const cards = items.map((item) => {
+    const accent = documentTypeAccent[item.documentType] ?? "#5f6f7d";
+    return `
+    <tr><td style="padding:0 0 14px;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:separate;background:#ffffff;border:1px solid #e1edf0;border-left:4px solid ${accent};border-radius:10px;">
+        <tr><td style="padding:16px 18px;">
+          <div style="display:inline-block;background:${accent};color:#ffffff;font-size:10px;font-weight:700;letter-spacing:.3px;text-transform:uppercase;padding:3px 9px;border-radius:20px;margin-bottom:10px;">${documentTypeLabels[item.documentType] ?? item.documentType}</div>
+          <div style="color:#6a7e8b;font-size:11px;margin-bottom:2px;">${item.authority}</div>
+          <div style="font-weight:700;font-size:15px;line-height:1.35;color:#16222c;margin-bottom:${item.description ? "8px" : "12px"};">${item.title}</div>
+          ${item.description ? `<div style="color:#3d5666;font-size:13px;line-height:1.4;margin-bottom:12px;">${item.description}</div>` : ""}
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-top:1px solid #eef3f5;padding-top:10px;">
+            <tr>
+              <td style="padding-top:10px;color:#6a7e8b;font-size:12px;width:60%;">Καταληκτική υποβολής προσφορών</td>
+              <td style="padding-top:10px;color:#16222c;font-size:13px;font-weight:700;text-align:right;">${formatDate(item.openingDate)}</td>
+            </tr>
+            <tr>
+              <td style="padding-top:4px;color:#6a7e8b;font-size:12px;">Ποσό</td>
+              <td style="padding-top:4px;color:#16222c;font-size:13px;font-weight:700;text-align:right;">${euro.format(item.budget)}</td>
+            </tr>
+          </table>
+          <div style="color:#b3bec5;font-size:10px;margin-top:10px;">ΑΔΑΜ ${item.adam}</div>
+        </td></tr>
       </table>
-      <div style="color:#9aa7ae;font-size:11px;margin-top:8px;">ΑΔΑΜ ${item.adam}</div>
-    </div>`).join("");
+    </td></tr>`;
+  }).join("");
+
   return `
-    <div style="font-family:Arial,Helvetica,sans-serif;max-width:640px;margin:0 auto;color:#16222c;">
-      <h2 style="color:#0c3b59;margin:0 0 4px;">TenderScope</h2>
-      <p style="color:#6a7e8b;font-size:13px;margin:0 0 20px;">${items.length} ενεργά στοιχεία στα CPV που παρακολουθείς.</p>
-      ${cards}
-      <p style="color:#6a7e8b;font-size:11px;margin-top:12px;">Αναζήτησε τον κωδικό ΑΔΑΜ μέσα στο TenderScope για τα πλήρη στοιχεία.</p>
-    </div>`;
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#eef3f6;padding:32px 12px;font-family:Arial,Helvetica,sans-serif;">
+    <tr><td align="center">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;background:#ffffff;border-radius:14px;overflow:hidden;">
+        <tr><td style="background:linear-gradient(118deg,#0a3855,#155878 68%,#247b8d);padding:26px 28px;">
+          <div style="color:#ffffff;font-size:19px;font-weight:700;letter-spacing:.2px;">⌖ TenderScope</div>
+          <div style="color:#cfe3ea;font-size:12px;margin-top:3px;">Ελληνικό Παρατηρητήριο Δημοσίων Συμβάσεων</div>
+        </td></tr>
+        <tr><td style="padding:24px 24px 4px;">
+          <div style="color:#16222c;font-size:15px;font-weight:700;margin-bottom:2px;">${items.length} ενεργά στοιχεία στα CPV που παρακολουθείς</div>
+          <div style="color:#6a7e8b;font-size:12px;margin-bottom:18px;">Ταξινομημένα κατά ημερομηνία δημοσίευσης, πιο πρόσφατα πρώτα.</div>
+        </td></tr>
+        <tr><td style="padding:0 24px;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0">${cards}</table>
+        </td></tr>
+        <tr><td style="padding:6px 24px 26px;border-top:1px solid #eef3f5;">
+          <div style="color:#9aa7ae;font-size:11px;padding-top:16px;">Αναζήτησε τον κωδικό ΑΔΑΜ μέσα στο <a href="${appUrl}" style="color:#168c8c;text-decoration:none;font-weight:600;">TenderScope</a> για τα πλήρη στοιχεία. Για να σταματήσεις αυτές τις ειδοποιήσεις, αφαίρεσε το email σου από τη σελίδα Ειδοποιήσεις της εφαρμογής.</div>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>`;
 }
 
 // Triggered by Vercel Cron (see web/vercel.json). Vercel sends
