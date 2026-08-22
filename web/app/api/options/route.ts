@@ -124,11 +124,19 @@ export async function GET(request: Request) {
     if (type === "nuts") {
       // Region/NUTS granularity in the source data is inconsistent - the
       // same real region can show up as a broad code (e.g. "EL3" / ΑΤΤΙΚΗ)
-      // or one of its narrower sub-codes (EL301..EL307). Picking the
-      // broadest match still covers every narrower one, since alerts_feed
-      // matches nuts_code by PREFIX, not exact equality.
-      const rows = await supabaseRpc<{ nuts_code: string; nuts_name: string }[]>("search_nuts", { p_query: query });
-      return NextResponse.json({ options: rows.map((row) => ({ value: row.nuts_code, label: row.nuts_name })) });
+      // or one of its narrower sub-codes (EL301..EL307), with no visual cue
+      // to tell them apart. is_broad/total_count (from search_nuts, which
+      // simulates the actual prefix match) make the label say outright
+      // whether picking this one covers the whole region or just part of
+      // it, instead of leaving that to be inferred from code length.
+      const rows = await supabaseRpc<{ nuts_code: string; nuts_name: string; total_count: number; is_broad: boolean }[]>("search_nuts", { p_query: query });
+      const count = new Intl.NumberFormat("el-GR");
+      return NextResponse.json({
+        options: rows.map((row) => ({
+          value: row.nuts_code,
+          label: `${row.nuts_name} — ${row.is_broad ? "όλη η περιοχή" : "μέρος"} (${count.format(row.total_count)})`,
+        })),
+      });
     }
 
     if (type === "cpv") {
