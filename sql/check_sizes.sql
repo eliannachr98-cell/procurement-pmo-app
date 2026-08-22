@@ -1,6 +1,6 @@
-select p.document_category, count(*)
+select p.adam, p.title, p.authority_name, p.document_category,
+       coalesce(p.budget_inc_vat, p.budget_ex_vat, p.budget_unknown_vat, 0) as budget
 from public.alert_notifications_sent s
 join public.procurements_compact p on p.adam = s.adam
 where s.recipient_email = 'eliannachr.98@gmail.com'
-group by p.document_category
-order by count(*) desc;
+order by p.authority_name, p.title;
