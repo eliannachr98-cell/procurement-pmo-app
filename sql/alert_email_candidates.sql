@@ -21,6 +21,8 @@ create table if not exists public.alert_notifications_sent (
 -- generic title like "ΠΡΟΣΚΛΗΣΗ ΥΠΟΒΟΛΗΣ ΠΡΟΣΦΟΡΑΣ" for genuinely
 -- different tenders, confirmed live too) is left untouched so distinct
 -- tenders never silently disappear.
+create extension if not exists pg_trgm;
+
 create or replace function public.alert_email_candidates(p_cpv_codes text[], p_nuts_prefixes text[] default null, p_days int default 14)
 returns json
 language sql stable as $$
@@ -36,8 +38,7 @@ language sql stable as $$
   ),
   candidates as (
     select p.adam, p.title, p.authority_name, p.document_category, p.publication_date, p.opening_at,
-           coalesce(p.budget_inc_vat, p.budget_ex_vat, p.budget_unknown_vat, 0) as budget,
-           regexp_replace(trim(p.title), '\s*\([^)]*\)\s*$', '') as norm_title
+           coalesce(p.budget_inc_vat, p.budget_ex_vat, p.budget_unknown_vat, 0) as budget
     from public.procurements_compact p
     join watched_notice_adams w on w.adam = p.adam
     where p.publication_date >= (current_date - (p_days || ' days')::interval)
@@ -51,30 +52,29 @@ language sql stable as $$
         or (p.document_category = 'extension' and p.adam in (select adam from tracked))
       )
   ),
-  -- Postgres flatly disallows DISTINCT inside any window aggregate (not
-  -- just count()) - "does this group actually mix declaration+announcement"
-  -- has to be a plain GROUP BY, joined back in, rather than computed inline
-  -- over the same partition as the row_number() below.
-  group_stats as (
-    select authority_name, budget, norm_title,
-           count(*) as n,
-           count(distinct document_category) as distinct_categories
-    from candidates
-    where document_category in ('declaration', 'announcement')
-    group by authority_name, budget, norm_title
-  ),
+  -- A ΚΗΜΔΗΣ-generated Διακήρυξη/Προκήρυξη pair for the same tender doesn't
+  -- always differ only by a trailing "(Ε.Ε)" suffix - confirmed live one
+  -- pair differing in the OPENING words too ("Διακήρυξη για X" vs
+  -- "Προκήρυξη στην ΕΕ για X"), which an exact-title match (even
+  -- normalized) missed entirely. Trigram similarity() catches this while
+  -- still requiring an exact authority+budget match as a guard rail, so a
+  -- coincidentally-similar-titled but genuinely different tender doesn't
+  -- get merged. A candidate is suppressed only when an EARLIER candidate
+  -- (by publication_date, then adam, as a stable tiebreak) already covers
+  -- it - the earlier one is what gets emailed.
   declarations as (
     select c.*,
-      case
-        when gs.n > 1 and gs.distinct_categories > 1
-        then row_number() over (partition by c.authority_name, c.budget, c.norm_title order by c.publication_date asc, c.adam asc)
-        else 1
-      end as rn
+      case when exists (
+        select 1 from candidates c2
+        where c2.adam <> c.adam
+          and c2.document_category in ('declaration', 'announcement')
+          and c2.document_category <> c.document_category
+          and c2.authority_name is not distinct from c.authority_name
+          and c2.budget = c.budget
+          and similarity(c2.title, c.title) > 0.4
+          and (c2.publication_date, c2.adam) < (c.publication_date, c.adam)
+      ) then 0 else 1 end as rn
     from candidates c
-    join group_stats gs
-      on gs.authority_name is not distinct from c.authority_name
-     and gs.budget = c.budget
-     and gs.norm_title = c.norm_title
     where c.document_category in ('declaration', 'announcement')
   ),
   extensions as (
