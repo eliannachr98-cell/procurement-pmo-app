@@ -55,7 +55,7 @@ language sql stable as $$
     select c.*,
       case
         when count(*) over (partition by c.authority_name, c.budget, c.norm_title) > 1
-         and count(distinct c.document_category) over (partition by c.authority_name, c.budget, c.norm_title) > 1
+         and cardinality(array_agg(distinct c.document_category) over (partition by c.authority_name, c.budget, c.norm_title)) > 1
         then row_number() over (partition by c.authority_name, c.budget, c.norm_title order by c.publication_date asc, c.adam asc)
         else 1
       end as rn
