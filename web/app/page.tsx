@@ -992,7 +992,7 @@ function MarketPanel({ awards, contracts, cpv, setCpv, contractor, authority, ye
       </div>}
       <label className="search marketContractorSearch"><span>⌕</span><input value={contractorSearch} onChange={(event) => setContractorSearch(event.target.value)} placeholder="Αναζήτηση αναδόχου" /></label>
       <article className="panel tablePanel">
-        <PanelHeader title="Ανάδοχοι" caption="Ταξινομημένοι κατά αριθμό αναθέσεων. Πάτησε πάνω σε έναν ανάδοχο για να δεις τις αναθέσεις και τις συμβάσεις του." onDownload={{ filename: "anadoxoi", title: "Ανάδοχοι", headers: ["Ανάδοχος", "Αναθέσεις", "Συμβάσεις", "Αναθέτουσες Αρχές", "Αξία"], rows: contractorRows.map((item) => [item.name, item.awards, item.contracts, item.authorities, item.value]), columnTypes: ["text", "number", "number", "number", "currency"] }} />
+        <PanelHeader title="Ανάδοχοι" caption="Ταξινομημένοι κατά αριθμό αναθέσεων. Πάτησε πάνω σε έναν ανάδοχο για να δεις τις αναθέσεις και τις συμβάσεις του." onDownload={{ filename: "anadoxoi", title: "Ανάδοχοι", headers: ["Ανάδοχος", "Αναθέσεις", "Συμβάσεις", "Συνολική αξία", "Αναθέτουσες Αρχές"], rows: contractorRows.map((item) => [item.name, item.awards, item.contracts, item.value, item.authorities]), columnTypes: ["text", "number", "number", "currency", "number"] }} />
         <div className="tableScroll"><table>
           <thead><tr><th /><th>Ανάδοχος</th><th>Αναθέσεις</th><th>Συμβάσεις</th><th>Συνολική αξία</th><th>Αναθέτουσες Αρχές</th></tr></thead>
           <tbody>{visibleRows.map((item) => (
