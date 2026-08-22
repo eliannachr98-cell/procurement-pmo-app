@@ -1,16 +1,42 @@
--- Tracks which notices have already triggered an email, so a scheduled
--- sender run never re-notifies about the same ADAM twice.
-create table if not exists public.alert_notifications_sent (
-  adam text primary key,
-  notified_at timestamptz not null default now()
+-- Tracks which notices have already been emailed to which recipient - PER
+-- recipient, not globally. That's what makes a brand-new recipient
+-- automatically get a full catch-up of every currently-active match on
+-- their very first run (nothing is "sent to them" yet, so nothing is
+-- excluded), while an existing recipient only ever sees genuinely new items
+-- on later runs - no special-cased "first email" logic needed, it falls out
+-- of the per-recipient check on its own.
+drop table if exists public.alert_notifications_sent;
+create table public.alert_notifications_sent (
+  recipient_email text not null,
+  adam text not null,
+  notified_at timestamptz not null default now(),
+  primary key (recipient_email, adam)
 );
 
--- What's worth emailing about, for the current watchlist/region filter:
---   1. A brand-new Διακήρυξη/Προκήρυξη - a fresh opportunity.
+create extension if not exists pg_trgm;
+
+-- CREATE OR REPLACE can't change a function's parameter list - the earlier
+-- version took (cpv_codes, nuts_prefixes, days) with no recipient.
+drop function if exists public.alert_email_candidates(text[], text[], int);
+
+-- What's worth emailing to p_recipient_email, for the current watchlist/
+-- region filter:
+--   1. A brand-new Διακήρυξη/Προκήρυξη that's still ΕΝΕΡΓΟΣ - no award yet,
+--      and its submission deadline (opening_at) hasn't passed. This is the
+--      same "still open" definition the Ειδοποιήσεις tabs already use, not
+--      a publication-date cutoff - a tender the recipient hasn't been told
+--      about yet is worth telling them about regardless of when it was
+--      first published, and one whose deadline already passed is worth
+--      telling NO ONE about, no matter how recently it appeared.
 --   2. A Παράταση (extension) for a tender the team already tracks
 --      (marked "Υποβλήθηκε" or "Ενδιαφέρον") - the deadline moved on
---      something they care about, everything else (Διευκρίνιση/Απόφαση/
+--      something they care about. Everything else (Διευκρίνιση/Απόφαση/
 --      Περίληψη/Τροποποίηση) stays in-app only, not worth a fresh email.
+-- p_days bounds how far back to even look, purely so the query doesn't
+-- have to scan the entire historical table - the actual "should this be
+-- sent" decision is the active-status check above, not this cutoff, so it
+-- can stay generous.
+--
 -- A single real tender is often announced via BOTH a Διακήρυξη and a
 -- Προκήρυξη (confirmed live, see the ΑΔΜΗΕ/Επιμελητήριο Χανίων examples
 -- during testing: same authority + budget + title, published the same
@@ -20,10 +46,12 @@ create table if not exists public.alert_notifications_sent (
 -- a group of same-titled declarations ALONE (some authorities reuse a
 -- generic title like "ΠΡΟΣΚΛΗΣΗ ΥΠΟΒΟΛΗΣ ΠΡΟΣΦΟΡΑΣ" for genuinely
 -- different tenders, confirmed live too) is left untouched so distinct
--- tenders never silently disappear.
-create extension if not exists pg_trgm;
-
-create or replace function public.alert_email_candidates(p_cpv_codes text[], p_nuts_prefixes text[] default null, p_days int default 14)
+-- tenders never silently disappear. Title matching uses trigram
+-- similarity(), not exact text, since a real pair's titles don't always
+-- differ only by a trailing "(Ε.Ε)" suffix - confirmed live one pair
+-- differing in the OPENING words too ("Διακήρυξη για X" vs "Προκήρυξη
+-- στην ΕΕ για X").
+create or replace function public.alert_email_candidates(p_recipient_email text, p_cpv_codes text[], p_nuts_prefixes text[] default null, p_days int default 365)
 returns json
 language sql stable as $$
   with watched_notice_adams as (
@@ -46,22 +74,17 @@ language sql stable as $$
         p_nuts_prefixes is null or cardinality(p_nuts_prefixes) = 0
         or exists (select 1 from unnest(p_nuts_prefixes) np where p.nuts_code ilike np || '%')
       )
-      and not exists (select 1 from public.alert_notifications_sent s where s.adam = p.adam)
+      and not exists (
+        select 1 from public.alert_notifications_sent s
+        where s.adam = p.adam and s.recipient_email = p_recipient_email
+      )
+      and not exists (select 1 from public.awards_compact a where a.procurement_adam = p.adam)
+      and (p.opening_at is null or p.opening_at >= now())
       and (
         p.document_category in ('declaration', 'announcement')
         or (p.document_category = 'extension' and p.adam in (select adam from tracked))
       )
   ),
-  -- A ΚΗΜΔΗΣ-generated Διακήρυξη/Προκήρυξη pair for the same tender doesn't
-  -- always differ only by a trailing "(Ε.Ε)" suffix - confirmed live one
-  -- pair differing in the OPENING words too ("Διακήρυξη για X" vs
-  -- "Προκήρυξη στην ΕΕ για X"), which an exact-title match (even
-  -- normalized) missed entirely. Trigram similarity() catches this while
-  -- still requiring an exact authority+budget match as a guard rail, so a
-  -- coincidentally-similar-titled but genuinely different tender doesn't
-  -- get merged. A candidate is suppressed only when an EARLIER candidate
-  -- (by publication_date, then adam, as a stable tiebreak) already covers
-  -- it - the earlier one is what gets emailed.
   declarations as (
     select c.*,
       case when exists (
