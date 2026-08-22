@@ -675,7 +675,7 @@ type SearchOption = { value: string; label: string };
 
 function MultiSearchInput({ label, type, values, onChange, placeholder, onSelectOption, initialLabels }: {
   label: string;
-  type: "contractor" | "cpv" | "authority";
+  type: "contractor" | "cpv" | "authority" | "nuts";
   values: string[];
   onChange: (values: string[]) => void;
   placeholder: string;
@@ -1089,6 +1089,7 @@ function formatDate(value?: string) {
 }
 
 type WatchlistItem = { cpv_code: string; cpv_label: string | null };
+type NutsFilterItem = { nuts_code: string; nuts_name: string | null };
 type AlertItem = {
   adam: string; title: string; authority: string; contractType?: string; documentType?: string | null;
   publicationDate: string | null; openingDate: string | null; budget: number; hasAward: boolean;
@@ -1107,6 +1108,7 @@ function alertUrgency(openingDate: string | null): "open" | "urgent" | "passed" 
 
 function AlertsPanel() {
   const [watchlist, setWatchlist] = useState<WatchlistItem[]>([]);
+  const [nutsFilter, setNutsFilter] = useState<NutsFilterItem[]>([]);
   const [alerts, setAlerts] = useState<AlertItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [alertTab, setAlertTab] = useState<"recent" | "active" | "inactive">("active");
@@ -1242,7 +1244,7 @@ function AlertsPanel() {
       setLoading(true);
       fetch("/api/alerts")
         .then((response) => response.ok ? response.json() : Promise.reject(new Error("alerts request failed")))
-        .then((payload) => { setWatchlist(payload.watchlist ?? []); setAlerts(payload.alerts ?? []); setError(""); setLoading(false); })
+        .then((payload) => { setWatchlist(payload.watchlist ?? []); setNutsFilter(payload.nutsFilter ?? []); setAlerts(payload.alerts ?? []); setError(""); setLoading(false); })
         .catch(() => {
           if (attempt < 2) { window.setTimeout(() => attemptFetch(attempt + 1), 900); return; }
           setError("Δεν ήταν δυνατή η φόρτωση των ειδοποιήσεων.");
@@ -1257,6 +1259,11 @@ function AlertsPanel() {
   const removeCpv = (code: string) => {
     setWatchlist((current) => current.filter((item) => item.cpv_code !== code));
     fetch(`/api/watchlist?cpv_code=${encodeURIComponent(code)}`, { method: "DELETE" }).then(load);
+  };
+
+  const removeNutsFilter = (code: string) => {
+    setNutsFilter((current) => current.filter((item) => item.nuts_code !== code));
+    fetch(`/api/alert-nuts-filter?nuts_code=${encodeURIComponent(code)}`, { method: "DELETE" }).then(load);
   };
 
   const openTender = (adam: string) => {
@@ -1294,8 +1301,23 @@ function AlertsPanel() {
           }}
           placeholder="Αναζήτησε κωδικό ή περιγραφή CPV"
         />
+        <MultiSearchInput
+          label="Περιοχή"
+          type="nuts"
+          values={nutsFilter.map((item) => item.nuts_code)}
+          initialLabels={Object.fromEntries(nutsFilter.map((item) => [item.nuts_code, item.nuts_name ?? item.nuts_code]))}
+          onChange={(nextValues) => {
+            const removed = nutsFilter.map((item) => item.nuts_code).find((code) => !nextValues.includes(code));
+            if (removed) removeNutsFilter(removed);
+          }}
+          onSelectOption={(option) => {
+            fetch("/api/alert-nuts-filter", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ nuts_code: option.value, nuts_name: option.label }) })
+              .then(load);
+          }}
+          placeholder="π.χ. Αττική - αφήστε κενό για όλη τη χώρα"
+        />
       </div>
-      <p className="watchlistCaption">Οι νέοι διαγωνισμοί που δημοσιεύονται σε αυτά τα CPV εμφανίζονται παρακάτω, με αποδελτίωση των βασικών στοιχείων.</p>
+      <p className="watchlistCaption">Οι νέοι διαγωνισμοί που δημοσιεύονται σε αυτά τα CPV εμφανίζονται παρακάτω, με αποδελτίωση των βασικών στοιχείων{nutsFilter.length > 0 && ", περιορισμένοι στην περιοχή που επέλεξες"}.</p>
     </article>
     <article className="panel emailPanel">
       <p className="eyebrow">EMAIL</p>

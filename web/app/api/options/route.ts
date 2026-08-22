@@ -121,6 +121,16 @@ export async function GET(request: Request) {
       return NextResponse.json({ options: rows.map((row) => ({ value: row.authority_name, label: row.authority_name })) });
     }
 
+    if (type === "nuts") {
+      // Region/NUTS granularity in the source data is inconsistent - the
+      // same real region can show up as a broad code (e.g. "EL3" / ΑΤΤΙΚΗ)
+      // or one of its narrower sub-codes (EL301..EL307). Picking the
+      // broadest match still covers every narrower one, since alerts_feed
+      // matches nuts_code by PREFIX, not exact equality.
+      const rows = await supabaseRpc<{ nuts_code: string; nuts_name: string }[]>("search_nuts", { p_query: query });
+      return NextResponse.json({ options: rows.map((row) => ({ value: row.nuts_code, label: row.nuts_name })) });
+    }
+
     if (type === "cpv") {
       const filter = /^\d{2,8}(-\d)?$/.test(query)
         ? `cpv_code=ilike.${encodeURIComponent(`${query}*`)}`

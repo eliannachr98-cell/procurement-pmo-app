@@ -10,6 +10,7 @@ export const dynamic = "force-dynamic";
 const ALERT_WINDOW_DAYS = Math.ceil((Date.now() - new Date("2026-01-01T00:00:00Z").getTime()) / 86400000);
 
 type WatchlistRow = { cpv_code: string; cpv_label: string | null };
+type NutsFilterRow = { nuts_code: string; nuts_name: string | null };
 type AlertRow = {
   adam: string;
   title: string;
@@ -26,8 +27,11 @@ type AlertRow = {
 
 export async function GET() {
   try {
-    const watchlist = await supabaseGet<WatchlistRow[]>("cpv_watchlist?select=cpv_code,cpv_label&order=created_at.desc");
-    if (!watchlist.length) return NextResponse.json({ watchlist, alerts: [] });
+    const [watchlist, nutsFilter] = await Promise.all([
+      supabaseGet<WatchlistRow[]>("cpv_watchlist?select=cpv_code,cpv_label&order=created_at.desc"),
+      supabaseGet<NutsFilterRow[]>("alert_nuts_filter?select=nuts_code,nuts_name&order=created_at.desc"),
+    ]);
+    if (!watchlist.length) return NextResponse.json({ watchlist, nutsFilter, alerts: [] });
 
     // A single inlined query (see sql/alerts_feed.sql) - resolving each
     // watched CPV through the market-route matching helpers and paging
@@ -37,6 +41,7 @@ export async function GET() {
     const alerts = await supabaseRpc<AlertRow[]>("alerts_feed", {
       p_cpv_codes: watchlist.map((item) => item.cpv_code),
       p_days: ALERT_WINDOW_DAYS,
+      p_nuts_prefixes: nutsFilter.length ? nutsFilter.map((item) => item.nuts_code) : null,
     });
 
     // Every matching notice is returned, including extensions/amendments of
@@ -45,7 +50,7 @@ export async function GET() {
     // Later αποσφράγιση (opening/deadline) date first; entries without one sink to the bottom.
     const sorted = [...(alerts ?? [])].sort((a, b) => (b.openingDate ?? "").localeCompare(a.openingDate ?? ""));
 
-    return NextResponse.json({ watchlist, alerts: sorted });
+    return NextResponse.json({ watchlist, nutsFilter, alerts: sorted });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown alerts error";
     return NextResponse.json({ error: message }, { status: 500 });
