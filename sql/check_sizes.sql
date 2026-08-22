@@ -1,12 +1,5 @@
-select count(*) as other_count,
-       min(publication_date) as earliest,
-       max(publication_date) as latest
+select document_category, count(*)
 from public.procurements_compact
-where document_category = 'other';
-
-select publication_date, count(*)
-from public.procurements_compact
-where document_category = 'other'
-group by publication_date
-order by count(*) desc
-limit 15;
+where publication_date between '2025-03-05' and '2025-03-11'
+group by document_category
+order by count(*) desc;
