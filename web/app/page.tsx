@@ -87,27 +87,6 @@ const statusTone: Record<Status, string> = {
   "Ακυρωμένος": "red",
 };
 
-// Deliberately its own low-collision palette - NOT the teal/amber/purple/
-// green/red set Κατάσταση uses. Reusing those made the two most common
-// values (Προμήθειες here, Ενεργός in status) both render as the identical
-// teal pill, so a glance at the table couldn't tell status apart from
-// contract type. These tone classes (defined in globals.css) render as soft
-// pastel-background/colored-text pills rather than Κατάστασης's solid-
-// fill/white-text ones - softer to match the app's pastel visual language
-// elsewhere (Metric cards, dataBanner), and the different pill STYLE is
-// itself a second, non-color cue that these two systems aren't status. The
-// underlying hues (in the darker text color, not the pale background) were
-// still checked with the dataviz skill's validator against all 5 status
-// colors - worst-case simulated-CVD ΔE 11.1, comfortably above the 8.0
-// target, plus documentTypeTone's 7 below.
-const contractTypeTone: Record<string, string> = {
-  "Έργα": "ctBlue",
-  "Μελέτες": "ctPlum",
-  "Προμήθειες": "ctTeal",
-  "Τεχνικές ή λοιπές συναφείς υπηρεσίες": "ctOlive",
-  "Υπηρεσίες": "ctBrick",
-};
-
 const documentTypeLabels: Record<string, string> = {
   declaration: "Διακήρυξη",
   announcement: "Προκήρυξη",
@@ -116,18 +95,6 @@ const documentTypeLabels: Record<string, string> = {
   extension: "Παράταση / μετάθεση",
   amendment: "Τροποποίηση",
   decision: "Απόφαση / έγκριση",
-};
-
-// Same reasoning as contractTypeTone above - its own dark palette, not
-// Κατάστασης's teal/amber/purple/green/red.
-const documentTypeTone: Record<string, string> = {
-  declaration: "dtIndigo",
-  announcement: "dtPetrol",
-  summary: "dtGreen",
-  clarification: "dtOlive",
-  extension: "dtBrown",
-  amendment: "dtWine",
-  decision: "dtPlum",
 };
 
 const number = new Intl.NumberFormat("el-GR");
@@ -555,7 +522,7 @@ function MonthlyBarChart({ months, metric, formatValue, unitLabel }: {
 function TenderTable({ rows, expanded = false, title = "Λίστα διαγωνισμών", caption, onViewAll }: { rows: Tender[]; expanded?: boolean; title?: string; caption?: string; onViewAll?: () => void }) {
   const [selected, setSelected] = useState<Tender | null>(null);
   if (selected) return <TenderDetail tender={selected} onBack={() => setSelected(null)} />;
-  return <article className={`panel tablePanel ${expanded ? "expanded" : ""}`}><PanelHeader title={title} caption={caption ?? `${number.format(rows.length)} εγγραφές μετά τα φίλτρα`} onDownload={{ filename: title, title, headers: ["ΑΔΑΜ", "Τίτλος", "Αναθέτουσα Αρχή", "CPV", "Περιγραφή CPV", "Τύπος σύμβασης", "Τύπος εγγράφου", "Κατάσταση", "Δημοσίευση"], rows: rows.map((item) => [item.adam, item.title, item.authority, item.cpv, item.cpvDescription ?? "", item.contractType ?? "", documentTypeLabels[item.documentType ?? ""] ?? item.documentType ?? "", item.status, item.publicationDate ?? ""]), columnTypes: ["text", "text", "text", "text", "text", "text", "text", "text", "date"] }} /><div className="tableScroll"><table><thead><tr><th>ΑΔΑΜ</th><th>Τίτλος</th><th>Αναθέτουσα Αρχή</th><th>CPV / Τίτλος</th><th>Τύπος σύμβασης</th><th>Τύπος εγγράφου</th><th>Κατάσταση</th><th>Δημοσίευση</th><th /></tr></thead><tbody>{rows.map((item) => <tr key={item.adam}><td className="adam">{item.adam}</td><td>{item.title}</td><td>{item.authority}</td><td><strong>{item.cpv}</strong><small className="cellSub">{item.cpvDescription}</small></td><td>{item.contractType && <span className={`status ${contractTypeTone[item.contractType] ?? "slate"}`}>{item.contractType}</span>}</td><td>{item.documentType && <span className={`status ${documentTypeTone[item.documentType] ?? "slate"}`}>{documentTypeLabels[item.documentType] ?? item.documentType}</span>}</td><td><span className={`status ${statusTone[item.status]}`}>{item.status}</span></td><td>{formatDate(item.publicationDate)}</td><td><button className="view" aria-label={`Προβολή ${item.adam}`} onClick={() => setSelected(item)}>→</button></td></tr>)}</tbody></table></div>{!rows.length && <p className="noRows">Δεν βρέθηκαν διαγωνισμοί για τα επιλεγμένα φίλτρα.</p>}{onViewAll && <button className="viewAll" onClick={onViewAll}>Προβολή όλων των διαγωνισμών →</button>}</article>;
+  return <article className={`panel tablePanel ${expanded ? "expanded" : ""}`}><PanelHeader title={title} caption={caption ?? `${number.format(rows.length)} εγγραφές μετά τα φίλτρα`} onDownload={{ filename: title, title, headers: ["ΑΔΑΜ", "Τίτλος", "Αναθέτουσα Αρχή", "CPV", "Περιγραφή CPV", "Τύπος σύμβασης", "Τύπος εγγράφου", "Κατάσταση", "Δημοσίευση"], rows: rows.map((item) => [item.adam, item.title, item.authority, item.cpv, item.cpvDescription ?? "", item.contractType ?? "", documentTypeLabels[item.documentType ?? ""] ?? item.documentType ?? "", item.status, item.publicationDate ?? ""]), columnTypes: ["text", "text", "text", "text", "text", "text", "text", "text", "date"] }} /><div className="tableScroll"><table><thead><tr><th>ΑΔΑΜ</th><th>Τίτλος</th><th>Αναθέτουσα Αρχή</th><th>CPV / Τίτλος</th><th>Τύπος σύμβασης</th><th>Τύπος εγγράφου</th><th>Κατάσταση</th><th>Δημοσίευση</th><th /></tr></thead><tbody>{rows.map((item) => <tr key={item.adam}><td className="adam">{item.adam}</td><td>{item.title}</td><td>{item.authority}</td><td><strong>{item.cpv}</strong><small className="cellSub">{item.cpvDescription}</small></td><td className="cellPlain">{item.contractType ?? "—"}</td><td className="cellPlain">{item.documentType ? (documentTypeLabels[item.documentType] ?? item.documentType) : "—"}</td><td><span className={`status ${statusTone[item.status]}`}>{item.status}</span></td><td>{formatDate(item.publicationDate)}</td><td><button className="view" aria-label={`Προβολή ${item.adam}`} onClick={() => setSelected(item)}>→</button></td></tr>)}</tbody></table></div>{!rows.length && <p className="noRows">Δεν βρέθηκαν διαγωνισμοί για τα επιλεγμένα φίλτρα.</p>}{onViewAll && <button className="viewAll" onClick={onViewAll}>Προβολή όλων των διαγωνισμών →</button>}</article>;
 }
 
 function TenderDetail({ tender, onBack }: { tender: Tender; onBack: () => void }) {
