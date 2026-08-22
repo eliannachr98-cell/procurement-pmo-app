@@ -51,15 +51,30 @@ language sql stable as $$
         or (p.document_category = 'extension' and p.adam in (select adam from tracked))
       )
   ),
+  -- Postgres flatly disallows DISTINCT inside any window aggregate (not
+  -- just count()) - "does this group actually mix declaration+announcement"
+  -- has to be a plain GROUP BY, joined back in, rather than computed inline
+  -- over the same partition as the row_number() below.
+  group_stats as (
+    select authority_name, budget, norm_title,
+           count(*) as n,
+           count(distinct document_category) as distinct_categories
+    from candidates
+    where document_category in ('declaration', 'announcement')
+    group by authority_name, budget, norm_title
+  ),
   declarations as (
     select c.*,
       case
-        when count(*) over (partition by c.authority_name, c.budget, c.norm_title) > 1
-         and cardinality(array_agg(distinct c.document_category) over (partition by c.authority_name, c.budget, c.norm_title)) > 1
+        when gs.n > 1 and gs.distinct_categories > 1
         then row_number() over (partition by c.authority_name, c.budget, c.norm_title order by c.publication_date asc, c.adam asc)
         else 1
       end as rn
     from candidates c
+    join group_stats gs
+      on gs.authority_name is not distinct from c.authority_name
+     and gs.budget = c.budget
+     and gs.norm_title = c.norm_title
     where c.document_category in ('declaration', 'announcement')
   ),
   extensions as (
