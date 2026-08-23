@@ -368,7 +368,7 @@ export default function Home() {
               {loading ? "Φόρτωση…" : `Φόρτωση περισσότερων (${number.format(tenders.length)} από ${number.format(totalTenders)})`}
             </button>}
           </>}
-          {page === "market" && <MarketGate><MarketPanel awards={awards} contracts={contracts} cpv={cpv} setCpv={setCpv} contractor={contractor} authority={authority} year={year} contractType={contractType} documentType={documentType} loadedCount={tenders.length} totalCount={totalTenders} stillLoading={hasMore && loading} /></MarketGate>}
+          {page === "market" && <MarketGate>{(code) => <MarketPanel awards={awards} contracts={contracts} cpv={cpv} setCpv={setCpv} contractor={contractor} authority={authority} year={year} contractType={contractType} documentType={documentType} loadedCount={tenders.length} totalCount={totalTenders} stillLoading={hasMore && loading} locked={!code} />}</MarketGate>}
           {page === "alerts" && <AlertsPanel />}
         </section>
 
@@ -831,17 +831,13 @@ function SingleSearchInput({ label, type, value, onChange, placeholder }: {
 // just a nicer view of already-public ΚΗΜΔΗΣ records - explicitly chosen as
 // the paid-tier gate, reusing the exact same team passcode as Ειδοποιήσεις
 // (one login unlocks both).
-function MarketGate({ children }: { children: ReactNode }) {
+function MarketGate({ children }: { children: (code: string | null) => ReactNode }) {
   const team = useTeamCode();
   if (team.code === undefined) return null; // brief flash while reading localStorage
 
   return <>
     <TeamCodeBar team={team} />
-    {team.code ? children : <article className="panel empty">
-      <span>◉</span>
-      <h2>Διαθέσιμο με σύνδεση</h2>
-      <p>Η ανάλυση ανταγωνισμού (leaderboard αναδόχων, ποσοστά έκπτωσης) είναι διαθέσιμη μόνο σε συνδεδεμένους χρήστες. Πάτησε πάνω «Σύνδεση».</p>
-    </article>}
+    {children(team.code ?? null)}
   </>;
 }
 
@@ -849,9 +845,9 @@ type ContractorSummary = { key: string; name: string; awards: number; contracts:
 
 const CONTRACTOR_ALIASES: Record<string, string> = { PWC: "PRICEWATERHOUSECOOPERS", EY: "ERNST" };
 
-function MarketPanel({ awards, contracts, cpv, setCpv, contractor, authority, year, contractType, documentType, loadedCount, totalCount, stillLoading }: {
+function MarketPanel({ awards, contracts, cpv, setCpv, contractor, authority, year, contractType, documentType, loadedCount, totalCount, stillLoading, locked }: {
   awards: Award[]; contracts: Contract[]; cpv: string[]; setCpv: (value: string[]) => void; contractor: string[]; authority: string;
-  year: string; contractType: string[]; documentType: string; loadedCount: number; totalCount: number; stillLoading: boolean;
+  year: string; contractType: string[]; documentType: string; loadedCount: number; totalCount: number; stillLoading: boolean; locked: boolean;
 }) {
   const [selectedContractor, setSelectedContractor] = useState("");
   const [contractorSearch, setContractorSearch] = useState("");
@@ -977,7 +973,13 @@ function MarketPanel({ awards, contracts, cpv, setCpv, contractor, authority, ye
   // Cheap even on a large base list - no need to memoize the text filter itself.
   const search = contractorSearch.trim().toLocaleLowerCase("el");
   const contractorRows = search ? contractorRowsBase.filter((row) => row.name.toLocaleLowerCase("el").includes(search)) : contractorRowsBase;
-  const visibleRows = contractorRows.slice(0, visibleCount);
+  // Free mode: the leaderboard itself is browsable (same as everything else
+  // in the app), but only the top 3 rows per selection - full ranking,
+  // drill-down into a contractor's own award/contract history, and export
+  // all need a login, same split as Ειδοποιήσεις (usable without an account,
+  // deeper value behind one).
+  const FREE_ROW_LIMIT = 3;
+  const visibleRows = locked ? contractorRows.slice(0, FREE_ROW_LIMIT) : contractorRows.slice(0, visibleCount);
 
   const hasSelection = cpv.length > 0 || contractor.length > 0 || (authority.trim() !== "" && authority !== "Όλες") ||
     year !== "Όλα" || contractType.length > 0 || documentType !== "Όλοι";
@@ -997,13 +999,13 @@ function MarketPanel({ awards, contracts, cpv, setCpv, contractor, authority, ye
       </div>}
       <label className="search marketContractorSearch"><span>⌕</span><input value={contractorSearch} onChange={(event) => setContractorSearch(event.target.value)} placeholder="Αναζήτηση αναδόχου" /></label>
       <article className="panel tablePanel">
-        <PanelHeader title="Ανάδοχοι" caption="Ταξινομημένοι κατά αριθμό αναθέσεων. Πάτησε πάνω σε έναν ανάδοχο για να δεις τις αναθέσεις και τις συμβάσεις του." onDownload={{ filename: "anadoxoi", title: "Ανάδοχοι", headers: ["Ανάδοχος", "Αναθέσεις", "Συμβάσεις", "Συνολική αξία", "Αναθέτουσες Αρχές"], rows: contractorRows.map((item) => [item.name, item.awards, item.contracts, item.value, item.authorities]), columnTypes: ["text", "number", "number", "currency", "number"] }} />
+        <PanelHeader title="Ανάδοχοι" caption="Ταξινομημένοι κατά αριθμό αναθέσεων. Πάτησε πάνω σε έναν ανάδοχο για να δεις τις αναθέσεις και τις συμβάσεις του." onDownload={locked ? undefined : { filename: "anadoxoi", title: "Ανάδοχοι", headers: ["Ανάδοχος", "Αναθέσεις", "Συμβάσεις", "Συνολική αξία", "Αναθέτουσες Αρχές"], rows: contractorRows.map((item) => [item.name, item.awards, item.contracts, item.value, item.authorities]), columnTypes: ["text", "number", "number", "currency", "number"] }} />
         <div className="tableScroll"><table>
           <thead><tr><th /><th>Ανάδοχος</th><th>Αναθέσεις</th><th>Συμβάσεις</th><th>Συνολική αξία</th><th>Αναθέτουσες Αρχές</th></tr></thead>
           <tbody>{visibleRows.map((item) => (
-            <tr key={item.key} className={selectedContractor === item.key ? "selectedRow" : ""} onClick={() => setSelectedContractor(item.key === selectedContractor ? "" : item.key)}>
-              <td><input type="checkbox" checked={selectedContractor === item.key} readOnly /></td>
-              <td><button className="contractorLink" type="button">{item.name}</button></td>
+            <tr key={item.key} className={selectedContractor === item.key ? "selectedRow" : ""} onClick={() => !locked && setSelectedContractor(item.key === selectedContractor ? "" : item.key)}>
+              <td><input type="checkbox" checked={selectedContractor === item.key} disabled={locked} readOnly /></td>
+              <td><button className="contractorLink" type="button" disabled={locked}>{item.name}</button></td>
               <td>{number.format(item.awards)}</td>
               <td>{number.format(item.contracts)}</td>
               <td>{euro.format(item.value)}</td>
@@ -1012,11 +1014,14 @@ function MarketPanel({ awards, contracts, cpv, setCpv, contractor, authority, ye
           ))}</tbody>
         </table></div>
         {!contractorRows.length && <p className="noRows">Δεν βρέθηκαν αποτελέσματα για τις επιλογές σου.</p>}
-        {contractorRows.length > visibleRows.length && <button className="viewAll" type="button" onClick={() => setVisibleCount((current) => current + 10)}>
+        {!locked && contractorRows.length > visibleRows.length && <button className="viewAll" type="button" onClick={() => setVisibleCount((current) => current + 10)}>
           Φόρτωση περισσότερων ({visibleRows.length} από {number.format(contractorRows.length)})
         </button>}
+        {locked && contractorRows.length > visibleRows.length && <p className="lockedNote">
+          Δες όλους τους αναδόχους ({number.format(contractorRows.length)}), το ιστορικό αναθέσεων τους, και λήψη σε Excel/PDF — Σύνδεση
+        </p>}
       </article>
-      {selectedContractor && selectedSummary && <ContractorProfile
+      {!locked && selectedContractor && selectedSummary && <ContractorProfile
         name={selectedSummary.name}
         summary={selectedSummary}
         awards={relevantAwards.filter((item) => resolvedKeyFor(item) === selectedContractor)}
