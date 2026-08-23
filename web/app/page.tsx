@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type RefObject, type SyntheticEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject, type SyntheticEvent } from "react";
 import "leaflet/dist/leaflet.css";
 import { captureChartImage, downloadExcel, downloadPdf, type ExportPayload } from "@/lib/exports";
 
@@ -367,7 +367,7 @@ export default function Home() {
               {loading ? "Φόρτωση…" : `Φόρτωση περισσότερων (${number.format(tenders.length)} από ${number.format(totalTenders)})`}
             </button>}
           </>}
-          {page === "market" && <MarketPanel awards={awards} contracts={contracts} cpv={cpv} setCpv={setCpv} contractor={contractor} authority={authority} year={year} contractType={contractType} documentType={documentType} loadedCount={tenders.length} totalCount={totalTenders} stillLoading={hasMore && loading} />}
+          {page === "market" && <MarketGate><MarketPanel awards={awards} contracts={contracts} cpv={cpv} setCpv={setCpv} contractor={contractor} authority={authority} year={year} contractType={contractType} documentType={documentType} loadedCount={tenders.length} totalCount={totalTenders} stillLoading={hasMore && loading} /></MarketGate>}
           {page === "alerts" && <AlertsPanel />}
         </section>
 
@@ -825,6 +825,25 @@ function SingleSearchInput({ label, type, value, onChange, placeholder }: {
   </div>;
 }
 
+// Ανάλυση ανταγωνισμού (leaderboard αναδόχων, ποσοστά έκπτωσης) is the one
+// piece of TenderScope that's genuinely value-added analysis rather than
+// just a nicer view of already-public ΚΗΜΔΗΣ records - explicitly chosen as
+// the paid-tier gate, reusing the exact same team passcode as Ειδοποιήσεις
+// (one login unlocks both).
+function MarketGate({ children }: { children: ReactNode }) {
+  const team = useTeamCode();
+  if (team.code === undefined) return null; // brief flash while reading localStorage
+
+  return <>
+    <TeamCodeBar team={team} />
+    {team.code ? children : <article className="panel empty">
+      <span>◉</span>
+      <h2>Διαθέσιμο με σύνδεση</h2>
+      <p>Η ανάλυση ανταγωνισμού (leaderboard αναδόχων, ποσοστά έκπτωσης) είναι διαθέσιμη μόνο σε συνδεδεμένους χρήστες. Πάτησε πάνω «Σύνδεση».</p>
+    </article>}
+  </>;
+}
+
 type ContractorSummary = { key: string; name: string; awards: number; contracts: number; authorities: number; value: number };
 
 const CONTRACTOR_ALIASES: Record<string, string> = { PWC: "PRICEWATERHOUSECOOPERS", EY: "ERNST" };
@@ -1106,16 +1125,11 @@ function alertUrgency(openingDate: string | null): "open" | "urgent" | "passed" 
   return "open";
 }
 
-// The Ειδοποιήσεις page itself stays open to anyone - only the TEAM's own
-// shared picks (CPV/region watchlist, tracked tenders, email recipients) are
-// gated. Without the code, AlertsPanelContent runs in "free" mode: CPV/region
-// search and results work exactly the same, but nothing is written to the
-// shared Supabase tables OR persisted anywhere on this device - it's plain
-// component state, gone on refresh, with no email option (that needs the
-// shared, code-gated recipient list). Entering the passcode switches to
-// "team" mode, which reads/writes the real shared tables, persists across
-// visits, and unlocks email alerts.
-function AlertsPanel() {
+// Shared across every page that gates content behind the team passcode
+// (Ειδοποιήσεις's own data, Αγορά & Ανταγωνισμός) - one login unlocks all of
+// them, since the code is just read from/written to the same localStorage
+// key regardless of which page's hook instance is asking.
+function useTeamCode() {
   const [code, setCode] = useState<string | null | undefined>(undefined);
   const [inputCode, setInputCode] = useState("");
   const [checking, setChecking] = useState(false);
@@ -1156,33 +1170,52 @@ function AlertsPanel() {
     setLockError("Ο κωδικός δεν ισχύει πια.");
   }, []);
 
-  if (code === undefined) return null; // brief flash while reading localStorage
+  return { code, inputCode, setInputCode, checking, lockError, setLockError, showCodeBox, setShowCodeBox, unlock, logout, onUnauthorized };
+}
+
+function TeamCodeBar({ team }: { team: ReturnType<typeof useTeamCode> }) {
+  const { code, inputCode, setInputCode, checking, lockError, setLockError, showCodeBox, setShowCodeBox, unlock, logout } = team;
+  return <div className="teamCodeBar">
+    {code
+      ? <span className="teamCodeStatus">✓ Σύνδεση ενεργή<button type="button" onClick={logout}>Αποσύνδεση</button></span>
+      : showCodeBox
+        ? <span className="teamCodeStatus">
+            <input type="password" value={inputCode} onChange={(event) => { setInputCode(event.target.value); setLockError(""); }} onKeyDown={(event) => { if (event.key === "Enter") unlock(); }} placeholder="Κωδικός πρόσβασης" autoFocus />
+            <button type="button" onClick={unlock} disabled={checking}>{checking ? "…" : "Είσοδος"}</button>
+            {lockError && <span className="recipientError">{lockError}</span>}
+          </span>
+        : <span className="teamCodeStatus">
+            <button type="button" className="teamCodeToggle" onClick={() => setShowCodeBox(true)}>Σύνδεση</button>
+            {/* Not wired up yet - individual self-service registration is a
+                separate, bigger feature to build later (own login +
+                persistent profile per person, distinct from this shared
+                passcode). Shown now, disabled, so the entry point is
+                already in place. */}
+            <button type="button" className="teamCodeSignup" disabled title="Σύντομα διαθέσιμο">Εγγραφή</button>
+          </span>}
+  </div>;
+}
+
+// The Ειδοποιήσεις page itself stays open to anyone - only the TEAM's own
+// shared picks (CPV/region watchlist, tracked tenders, email recipients) are
+// gated. Without the code, AlertsPanelContent runs in "free" mode: CPV/region
+// search and results work exactly the same, but nothing is written to the
+// shared Supabase tables OR persisted anywhere on this device - it's plain
+// component state, gone on refresh, with no email option (that needs the
+// shared, code-gated recipient list). Entering the passcode switches to
+// "team" mode, which reads/writes the real shared tables, persists across
+// visits, and unlocks email alerts.
+function AlertsPanel() {
+  const team = useTeamCode();
+  if (team.code === undefined) return null; // brief flash while reading localStorage
 
   return <>
-    <div className="teamCodeBar">
-      {code
-        ? <span className="teamCodeStatus">✓ Σύνδεση ενεργή<button type="button" onClick={logout}>Αποσύνδεση</button></span>
-        : showCodeBox
-          ? <span className="teamCodeStatus">
-              <input type="password" value={inputCode} onChange={(event) => { setInputCode(event.target.value); setLockError(""); }} onKeyDown={(event) => { if (event.key === "Enter") unlock(); }} placeholder="Κωδικός πρόσβασης" autoFocus />
-              <button type="button" onClick={unlock} disabled={checking}>{checking ? "…" : "Είσοδος"}</button>
-              {lockError && <span className="recipientError">{lockError}</span>}
-            </span>
-          : <span className="teamCodeStatus">
-              <button type="button" className="teamCodeToggle" onClick={() => setShowCodeBox(true)}>Σύνδεση</button>
-              {/* Not wired up yet - individual self-service registration is a
-                  separate, bigger feature to build later (own login +
-                  persistent profile per person, distinct from this shared
-                  passcode). Shown now, disabled, so the entry point is
-                  already in place. */}
-              <button type="button" className="teamCodeSignup" disabled title="Σύντομα διαθέσιμο">Εγγραφή</button>
-            </span>}
-    </div>
+    <TeamCodeBar team={team} />
     {/* key forces a full remount on login/logout - otherwise React keeps
         reusing the same component instance and every piece of state
         (watchlist, alerts, submitted/interested, recipients) from the
         previous mode stays on screen instead of being cleared. */}
-    <AlertsPanelContent key={code ?? "free"} code={code ?? null} onUnauthorized={onUnauthorized} />
+    <AlertsPanelContent key={team.code ?? "free"} code={team.code ?? null} onUnauthorized={team.onUnauthorized} />
   </>;
 }
 
