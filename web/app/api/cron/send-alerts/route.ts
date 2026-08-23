@@ -125,6 +125,61 @@ function buildEmailHtml(items: CandidateRow[]) {
 // `Authorization: Bearer $CRON_SECRET` automatically once CRON_SECRET is
 // set as an env var - until then this stays open (fine for the ?dryRun=true
 // manual testing phase, not for real sending).
+// TEMP diagnostic branch to visually verify the 3-section split with
+// realistic data, without touching procurements_compact/alert_submissions/
+// alert_interests. Remove once confirmed looking right.
+async function sendPreview(apiKey: string, from: string, to: string) {
+  const sample: CandidateRow[] = [
+    {
+      adam: "26PROC019660487",
+      title: "Υποστηρικτικές υπηρεσίες για την υπαγωγή σε Π.Π.Δ. αθλητικών εγκαταστάσεων Δ. Μαρωνείας-Σαπών",
+      authority: "ΔΗΜΟΣ ΜΑΡΩΝΕΙΑΣ - ΣΑΠΩΝ",
+      documentType: "declaration",
+      publicationDate: "2026-08-21",
+      openingDate: "2026-08-28T10:00:00+00:00",
+      budget: 4960,
+      description: "Υπηρεσίες τεχνικής υποστήριξης",
+      isSubmitted: false,
+      isInterested: false,
+    },
+    {
+      adam: "26PROC019561699-EXT",
+      title: 'ΠΑΡΑΤΑΣΗ - ΔΙΑΚΗΡΥΞΗ ΓΙΑ ΤΗΝ ΠΡΟΜΗΘΕΙΑ ΜΕ ΤΙΤΛΟ "ΔΡΑΣΕΙΣ ΨΗΦΙΑΚΟΥ ΜΕΤΑΣΧΗΜΑΤΙΣΜΟΥ ΔΗΜΟΥ ΗΛΙΟΥΠΟΛΗΣ"',
+      authority: "ΔΗΜΟΣ ΗΛΙΟΥΠΟΛΗΣ",
+      documentType: "extension",
+      publicationDate: "2026-08-22",
+      openingDate: "2026-09-14T11:00:00+00:00",
+      budget: 1635310.71,
+      description: "Υπηρεσίες τεχνικής υποστήριξης",
+      isSubmitted: true,
+      isInterested: false,
+    },
+    {
+      adam: "26PROC019525300-EXT",
+      title: "ΠΑΡΑΤΑΣΗ - ΔΙΑΚΗΡΥΞΗ 18/2026 ΔΙΑΓ. ΓΙΑ ΣΥΜΒΟΥΛ. ΥΠΗΡ. ΓΙΑ ΜΕΤΑΒΑΣΗ ΣΕ ΟΛΟΚΛ. ΚΕΝΤΡΟ ΚΑΡΚΙΝΟΥ",
+      authority: "ΠΕΡ.ΓΕΝ. ΝΟΣΟΚΟΜΕΙΟ ΑΝΤΙΚΑΡΚΙΝΙΚΟ 'ΜΕΤΑΞΑ'",
+      documentType: "extension",
+      publicationDate: "2026-08-22",
+      openingDate: "2026-09-20T23:59:00+00:00",
+      budget: 2250000,
+      description: "Υπηρεσίες παροχής επιχειρηματικών συμβουλών και συμβουλών σε θέματα διαχείρισης",
+      isSubmitted: false,
+      isInterested: true,
+    },
+  ];
+  const response = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      from,
+      to: [to],
+      subject: "[TEST] Προεπισκόπηση 3 ενοτήτων - TenderScope",
+      html: buildEmailHtml(sample),
+    }),
+  });
+  return response.ok;
+}
+
 export async function GET(request: Request) {
   const auth = request.headers.get("authorization");
   if (process.env.CRON_SECRET && auth !== `Bearer ${process.env.CRON_SECRET}`) {
@@ -132,7 +187,16 @@ export async function GET(request: Request) {
   }
 
   try {
-    const dryRun = new URL(request.url).searchParams.get("dryRun") === "true";
+    const url = new URL(request.url);
+    if (url.searchParams.get("previewSections") === "true") {
+      const apiKey = process.env.RESEND_API_KEY;
+      if (!apiKey) return NextResponse.json({ error: "RESEND_API_KEY missing" }, { status: 500 });
+      const to = url.searchParams.get("to") ?? "eliannachr.98@gmail.com";
+      const ok = await sendPreview(apiKey, process.env.ALERT_EMAIL_FROM ?? "TenderScope <onboarding@resend.dev>", to);
+      return NextResponse.json({ preview: true, sent: ok });
+    }
+
+    const dryRun = url.searchParams.get("dryRun") === "true";
 
     const [watchlist, nutsFilter, recipients] = await Promise.all([
       supabaseGet<WatchlistRow[]>("cpv_watchlist?select=cpv_code"),
