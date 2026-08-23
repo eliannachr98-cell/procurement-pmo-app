@@ -1520,7 +1520,7 @@ function AlertsPanelContent({ code, onUnauthorized }: { code: string | null; onU
       </div>
     </article>
     </div>
-    {!watchlist.length && <article className="panel empty"><span>♢</span><h2>Δεν παρακολουθείς κανένα CPV</h2><p>Πρόσθεσε έναν ή περισσότερους κωδικούς CPV παραπάνω για να ξεκινήσεις να βλέπεις εδώ τους νέους διαγωνισμούς που ταιριάζουν.</p></article>}
+    {!loading && !watchlist.length && <article className="panel empty"><span>♢</span><h2>Δεν παρακολουθείς κανένα CPV</h2><p>Πρόσθεσε έναν ή περισσότερους κωδικούς CPV παραπάνω για να ξεκινήσεις να βλέπεις εδώ τους νέους διαγωνισμούς που ταιριάζουν.</p></article>}
     {error && <div className="dataBanner error">{error}</div>}
     {watchlist.length > 0 && (() => {
       const isWithinDays = (item: AlertItem, days: number) => item.publicationDate ? (Date.now() - new Date(item.publicationDate).getTime()) < days * 86400000 : false;
