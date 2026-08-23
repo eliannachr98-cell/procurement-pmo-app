@@ -16,6 +16,8 @@ type CandidateRow = {
   openingDate: string | null;
   budget: number;
   description: string | null;
+  isSubmitted: boolean;
+  isInterested: boolean;
 };
 
 const documentTypeLabels: Record<string, string> = {
@@ -39,11 +41,9 @@ function formatDate(value: string | null) {
   return Number.isNaN(date.getTime()) ? "—" : new Intl.DateTimeFormat("el-GR").format(date);
 }
 
-function buildEmailHtml(items: CandidateRow[]) {
+function renderCards(items: CandidateRow[]) {
   const euro = new Intl.NumberFormat("el-GR", { style: "currency", currency: "EUR", maximumFractionDigits: 0 });
-  const appUrl = "https://procurement-pmo-app.vercel.app";
-
-  const cards = items.map((item) => {
+  return items.map((item) => {
     const accent = documentTypeAccent[item.documentType] ?? "#5f6f7d";
     return `
     <tr><td style="padding:0 0 14px;">
@@ -72,6 +72,31 @@ function buildEmailHtml(items: CandidateRow[]) {
       </table>
     </td></tr>`;
   }).join("");
+}
+
+function renderSection(heading: string, subheading: string, items: CandidateRow[]) {
+  if (!items.length) return "";
+  return `
+    <tr><td style="padding:20px 24px 4px;">
+      <div style="color:#16222c;font-size:14px;font-weight:700;margin-bottom:2px;">${heading}</div>
+      <div style="color:#6a7e8b;font-size:11px;margin-bottom:14px;">${subheading}</div>
+    </td></tr>
+    <tr><td style="padding:0 24px;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0">${renderCards(items)}</table>
+    </td></tr>`;
+}
+
+// Three separate sections rather than one flat chronological list: brand-new
+// tenders that match the CPV watchlist, vs. updates (i.e. Παρατάσεις) on
+// tenders already marked Υποβλήθηκε or Ενδιαφέρον - explicitly requested so
+// each reads as its own group instead of being mixed together. A tender can
+// be in both the submitted and interested section at once since the two
+// toggles in the app aren't mutually exclusive.
+function buildEmailHtml(items: CandidateRow[]) {
+  const appUrl = "https://procurement-pmo-app.vercel.app";
+  const newItems = items.filter((item) => item.documentType !== "extension");
+  const submittedUpdates = items.filter((item) => item.documentType === "extension" && item.isSubmitted);
+  const interestedUpdates = items.filter((item) => item.documentType === "extension" && item.isInterested);
 
   return `
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#eef3f6;padding:32px 12px;font-family:Arial,Helvetica,sans-serif;">
@@ -82,14 +107,14 @@ function buildEmailHtml(items: CandidateRow[]) {
           <div style="color:#cfe3ea;font-size:12px;margin-top:3px;">Ελληνικό Παρατηρητήριο Δημοσίων Συμβάσεων</div>
         </td></tr>
         <tr><td style="padding:24px 24px 4px;">
-          <div style="color:#16222c;font-size:15px;font-weight:700;margin-bottom:2px;">${items.length} ενεργά στοιχεία στα CPV που παρακολουθείς</div>
-          <div style="color:#6a7e8b;font-size:12px;margin-bottom:18px;">Ταξινομημένα κατά ημερομηνία δημοσίευσης, πιο πρόσφατα πρώτα.</div>
+          <div style="color:#16222c;font-size:15px;font-weight:700;margin-bottom:2px;">${items.length} ενημερώσεις</div>
+          <div style="color:#6a7e8b;font-size:12px;margin-bottom:4px;">Ταξινομημένα κατά ημερομηνία δημοσίευσης, πιο πρόσφατα πρώτα.</div>
         </td></tr>
-        <tr><td style="padding:0 24px;">
-          <table role="presentation" width="100%" cellpadding="0" cellspacing="0">${cards}</table>
-        </td></tr>
-        <tr><td style="padding:6px 24px 26px;border-top:1px solid #eef3f5;">
-          <div style="color:#9aa7ae;font-size:11px;padding-top:16px;">Αναζήτησε τον κωδικό ΑΔΑΜ μέσα στο <a href="${appUrl}" style="color:#168c8c;text-decoration:none;font-weight:600;">TenderScope</a> για τα πλήρη στοιχεία. Για να σταματήσεις αυτές τις ειδοποιήσεις, αφαίρεσε το email σου από τη σελίδα Ειδοποιήσεις της εφαρμογής.</div>
+        ${renderSection("Νέοι διαγωνισμοί", "Ταιριάζουν στα CPV που παρακολουθείς.", newItems)}
+        ${renderSection("Ενημερώσεις σε προσφορές που έχουμε υποβάλει", "Παράταση/μετάθεση σε διαγωνισμό που έχει σημανθεί ως Υποβληθείσα.", submittedUpdates)}
+        ${renderSection("Ενημερώσεις σε διαγωνισμούς που μας ενδιαφέρουν", "Παράταση/μετάθεση σε διαγωνισμό που έχει σημανθεί ως Ενδιαφέρον.", interestedUpdates)}
+        <tr><td style="padding:22px 24px 26px;border-top:1px solid #eef3f5;">
+          <div style="color:#9aa7ae;font-size:11px;">Αναζήτησε τον κωδικό ΑΔΑΜ μέσα στο <a href="${appUrl}" style="color:#168c8c;text-decoration:none;font-weight:600;">TenderScope</a> για τα πλήρη στοιχεία. Για να σταματήσεις αυτές τις ειδοποιήσεις, αφαίρεσε το email σου από τη σελίδα Ειδοποιήσεις της εφαρμογής.</div>
         </td></tr>
       </table>
     </td></tr>
