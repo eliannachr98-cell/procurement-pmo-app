@@ -44,6 +44,7 @@ export async function POST(request: Request) {
     // them up as a catch-up next time since nothing gets marked sent unless
     // the send actually succeeds.
     let welcomeEmailSent = false;
+    let welcomeEmailDebug: string | undefined;
     try {
       const apiKey = process.env.RESEND_API_KEY;
       if (apiKey) {
@@ -57,15 +58,29 @@ export async function POST(request: Request) {
             p_cpv_codes: watchlist.map((item) => item.cpv_code),
             p_nuts_prefixes: nutsFilter.length ? nutsFilter.map((item) => item.nuts_code) : null,
           });
+          welcomeEmailDebug = `candidates=${candidates.length}`;
           const from = process.env.ALERT_EMAIL_FROM ?? "TenderScope <onboarding@resend.dev>";
+          if (candidates.length) {
+            const resendResponse = await fetch("https://api.resend.com/emails", {
+              method: "POST",
+              headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+              body: JSON.stringify({ from, to: [email], subject: "debug", html: "<p>debug</p>" }),
+            });
+            const resendBody = await resendResponse.text();
+            welcomeEmailDebug = `candidates=${candidates.length} resendStatus=${resendResponse.status} resendBody=${resendBody.slice(0, 300)}`;
+          }
           welcomeEmailSent = await sendAlertEmailToRecipient(email, candidates, apiKey, from);
+        } else {
+          welcomeEmailDebug = "no watchlist";
         }
+      } else {
+        welcomeEmailDebug = "no RESEND_API_KEY";
       }
-    } catch {
-      // Swallow - the recipient is added either way, see comment above.
+    } catch (error) {
+      welcomeEmailDebug = "threw: " + (error instanceof Error ? error.message : String(error));
     }
 
-    return NextResponse.json({ items, welcomeEmailSent });
+    return NextResponse.json({ items, welcomeEmailSent, welcomeEmailDebug });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown alert-recipients error";
     return NextResponse.json({ error: message }, { status: 500 });
