@@ -18,21 +18,25 @@ type CandidateRow = {
   description: string | null;
   isSubmitted: boolean;
   isInterested: boolean;
+  contractors: string | null;
 };
 
 const documentTypeLabels: Record<string, string> = {
   declaration: "Διακήρυξη",
   announcement: "Προκήρυξη",
   extension: "Παράταση / μετάθεση",
+  award: "Ανάδοχος",
 };
 
 // Same tone mapping as .status badges in the app (page.tsx statusTone) -
 // keeps the email visually consistent with TenderScope rather than picking
-// new colors.
+// new colors. "award" has no equivalent status badge (Ανατεθειμένος uses
+// "purple" there) so it gets the closest matching hex here.
 const documentTypeAccent: Record<string, string> = {
   declaration: "#168c8c",
   announcement: "#367ca1",
   extension: "#2e8b57",
+  award: "#7c5cbf",
 };
 
 function formatDate(value: string | null) {
@@ -45,23 +49,30 @@ function renderCards(items: CandidateRow[]) {
   const euro = new Intl.NumberFormat("el-GR", { style: "currency", currency: "EUR", maximumFractionDigits: 0 });
   return items.map((item) => {
     const accent = documentTypeAccent[item.documentType] ?? "#5f6f7d";
+    const isAward = item.documentType === "award";
+    // An award notice has no submission deadline (opening_at) - the
+    // publication_date row instead reflects the award date - and its most
+    // useful piece of info is who won, not the (already known) CPV
+    // description, so contractors takes the description slot here.
+    const infoLine = isAward ? item.contractors : item.description;
     return `
     <tr><td style="padding:0 0 14px;">
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:separate;background:#ffffff;border:1px solid #e1edf0;border-left:4px solid ${accent};border-radius:10px;">
         <tr><td style="padding:16px 18px;">
           <div style="display:inline-block;background:${accent};color:#ffffff;font-size:10px;font-weight:700;letter-spacing:.3px;text-transform:uppercase;padding:3px 9px;border-radius:20px;margin-bottom:10px;">${documentTypeLabels[item.documentType] ?? item.documentType}</div>
           <div style="color:#6a7e8b;font-size:11px;margin-bottom:2px;">${item.authority}</div>
-          <div style="font-weight:700;font-size:15px;line-height:1.35;color:#16222c;margin-bottom:${item.description ? "8px" : "12px"};">${item.title}</div>
-          ${item.description ? `<div style="color:#3d5666;font-size:13px;line-height:1.4;margin-bottom:12px;">${item.description}</div>` : ""}
+          <div style="font-weight:700;font-size:15px;line-height:1.35;color:#16222c;margin-bottom:${infoLine ? "8px" : "12px"};">${item.title}</div>
+          ${infoLine ? `<div style="color:#3d5666;font-size:13px;line-height:1.4;margin-bottom:12px;">${isAward ? `Ανάδοχος: ${infoLine}` : infoLine}</div>` : ""}
           <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-top:1px solid #eef3f5;padding-top:10px;">
             <tr>
-              <td style="padding-top:10px;color:#6a7e8b;font-size:12px;width:60%;">Ημερομηνία δημοσίευσης</td>
+              <td style="padding-top:10px;color:#6a7e8b;font-size:12px;width:60%;">${isAward ? "Ημερομηνία κατακύρωσης" : "Ημερομηνία δημοσίευσης"}</td>
               <td style="padding-top:10px;color:#16222c;font-size:13px;font-weight:700;text-align:right;">${formatDate(item.publicationDate)}</td>
             </tr>
+            ${isAward ? "" : `
             <tr>
               <td style="padding-top:4px;color:#6a7e8b;font-size:12px;">Καταληκτική υποβολής προσφορών</td>
               <td style="padding-top:4px;color:#16222c;font-size:13px;font-weight:700;text-align:right;">${formatDate(item.openingDate)}</td>
-            </tr>
+            </tr>`}
             <tr>
               <td style="padding-top:4px;color:#6a7e8b;font-size:12px;">Ποσό</td>
               <td style="padding-top:4px;color:#16222c;font-size:13px;font-weight:700;text-align:right;">${euro.format(item.budget)}</td>
@@ -87,16 +98,17 @@ function renderSection(heading: string, subheading: string, items: CandidateRow[
 }
 
 // Three separate sections rather than one flat chronological list: brand-new
-// tenders that match the CPV watchlist, vs. updates (i.e. Παρατάσεις) on
-// tenders already marked Υποβλήθηκε or Ενδιαφέρον - explicitly requested so
-// each reads as its own group instead of being mixed together. A tender can
-// be in both the submitted and interested section at once since the two
-// toggles in the app aren't mutually exclusive.
+// tenders that match the CPV watchlist, vs. updates (Παρατάσεις AND award/
+// Ανάδοχος notices) on tenders already marked Υποβλήθηκε or Ενδιαφέρον -
+// explicitly requested so each reads as its own group instead of being mixed
+// together. A tender can be in both the submitted and interested section at
+// once since the two toggles in the app aren't mutually exclusive.
 function buildEmailHtml(items: CandidateRow[]) {
   const appUrl = "https://procurement-pmo-app.vercel.app";
-  const newItems = items.filter((item) => item.documentType !== "extension");
-  const submittedUpdates = items.filter((item) => item.documentType === "extension" && item.isSubmitted);
-  const interestedUpdates = items.filter((item) => item.documentType === "extension" && item.isInterested);
+  const isUpdate = (item: CandidateRow) => item.documentType === "extension" || item.documentType === "award";
+  const newItems = items.filter((item) => !isUpdate(item));
+  const submittedUpdates = items.filter((item) => isUpdate(item) && item.isSubmitted);
+  const interestedUpdates = items.filter((item) => isUpdate(item) && item.isInterested);
 
   return `
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#eef3f6;padding:32px 12px;font-family:Arial,Helvetica,sans-serif;">
@@ -111,8 +123,8 @@ function buildEmailHtml(items: CandidateRow[]) {
           <div style="color:#6a7e8b;font-size:12px;margin-bottom:4px;">Ταξινομημένα κατά ημερομηνία δημοσίευσης, πιο πρόσφατα πρώτα.</div>
         </td></tr>
         ${renderSection("Νέοι διαγωνισμοί", "Ταιριάζουν στα CPV που παρακολουθείς.", newItems)}
-        ${renderSection("Ενημερώσεις σε προσφορές που έχουμε υποβάλει", "Παράταση/μετάθεση σε διαγωνισμό που έχει σημανθεί ως Υποβληθείσα.", submittedUpdates)}
-        ${renderSection("Ενημερώσεις σε διαγωνισμούς που μας ενδιαφέρουν", "Παράταση/μετάθεση σε διαγωνισμό που έχει σημανθεί ως Ενδιαφέρον.", interestedUpdates)}
+        ${renderSection("Ενημερώσεις σε προσφορές που έχουμε υποβάλει", "Παράταση/μετάθεση ή ανακοίνωση αναδόχου σε διαγωνισμό που έχει σημανθεί ως Υποβληθείσα.", submittedUpdates)}
+        ${renderSection("Ενημερώσεις σε διαγωνισμούς που μας ενδιαφέρουν", "Παράταση/μετάθεση ή ανακοίνωση αναδόχου σε διαγωνισμό που έχει σημανθεί ως Ενδιαφέρον.", interestedUpdates)}
         <tr><td style="padding:22px 24px 26px;border-top:1px solid #eef3f5;">
           <div style="color:#9aa7ae;font-size:11px;">Αναζήτησε τον κωδικό ΑΔΑΜ μέσα στο <a href="${appUrl}" style="color:#168c8c;text-decoration:none;font-weight:600;">TenderScope</a> για τα πλήρη στοιχεία. Για να σταματήσεις αυτές τις ειδοποιήσεις, αφαίρεσε το email σου από τη σελίδα Ειδοποιήσεις της εφαρμογής.</div>
         </td></tr>
