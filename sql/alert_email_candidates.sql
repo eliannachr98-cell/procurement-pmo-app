@@ -83,26 +83,42 @@ language sql stable as $$
         or (p.document_category = 'extension' and p.adam in (select adam from tracked))
       )
   ),
+  -- A Προκήρυξη is suppressed whenever a matching Διακήρυξη exists AT ALL in
+  -- procurements_compact - not just among this run's still-unsent
+  -- candidates. Scoping the check to `candidates` was the original bug: once
+  -- the paired Διακήρυξη got emailed and recorded in
+  -- alert_notifications_sent, it dropped out of `candidates` on the very
+  -- next run, so this check stopped seeing the pair and the previously (and
+  -- correctly) suppressed Προκήρυξη resurfaced as if it were new - confirmed
+  -- live 2026-08-23 (ΔΗΜΟΣ ΗΛΙΟΥΠΟΛΗΣ, ΕΕΣΥΠ, ΜΕΤΑΞΑ notices). Checking the
+  -- full table instead makes the suppression permanent regardless of what's
+  -- already been sent.
   declarations as (
     select c.*,
-      case when exists (
+      case when c.document_category = 'announcement' and exists (
+        select 1 from public.procurements_compact d
+        where d.adam <> c.adam
+          and d.document_category = 'declaration'
+          and d.authority_name is not distinct from c.authority_name
+          and coalesce(d.budget_inc_vat, d.budget_ex_vat, d.budget_unknown_vat, 0) = c.budget
+          and similarity(d.title, c.title) > 0.4
+      ) then 0
+      -- Among same-category candidates only (e.g. two re-issued
+      -- declarations, or two announcements with no declaration at all), the
+      -- earlier one - by publication_date then adam as a stable tiebreak -
+      -- wins. This still only compares against `candidates` since both
+      -- sides of a same-category tie are equally eligible to be "the one
+      -- that gets sent", unlike the cross-category case above.
+      when exists (
         select 1 from candidates c2
         where c2.adam <> c.adam
-          and c2.document_category in ('declaration', 'announcement')
+          and c2.document_category = c.document_category
           and c2.authority_name is not distinct from c.authority_name
           and c2.budget = c.budget
           and similarity(c2.title, c.title) > 0.4
-          and (
-            -- Διακήρυξη always outranks a Προκήρυξη in the same pair,
-            -- regardless of which was published first - per explicit
-            -- request, whichever one exists preferred is the Διακήρυξη.
-            (c2.document_category = 'declaration' and c.document_category = 'announcement')
-            -- Within the same type (e.g. two re-issued declarations, or no
-            -- declaration at all so two announcements), the earlier one -
-            -- by publication_date then adam as a stable tiebreak - wins.
-            or (c2.document_category = c.document_category and (c2.publication_date, c2.adam) < (c.publication_date, c.adam))
-          )
-      ) then 0 else 1 end as rn
+          and (c2.publication_date, c2.adam) < (c.publication_date, c.adam)
+      ) then 0
+      else 1 end as rn
     from candidates c
     where c.document_category in ('declaration', 'announcement')
   ),
