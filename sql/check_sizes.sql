@@ -1,5 +1,3 @@
-select column_name, data_type
-from information_schema.columns
-where table_name = 'procurements_compact'
-  and column_name ilike '%at%'
-order by column_name;
+select adam, publication_date, source_updated_at, synced_at, document_category
+from public.procurements_compact
+where adam in ('26PROC019625263','26PROC019561564','26PROC019518191');
