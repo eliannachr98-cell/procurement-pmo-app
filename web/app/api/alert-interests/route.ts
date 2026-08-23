@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
-import { supabaseGet, supabaseWrite } from "@/lib/matching";
+import { supabaseGet, supabaseWrite, requireAlertCode } from "@/lib/matching";
 
 export const dynamic = "force-dynamic";
 
 type InterestRow = { adam: string; marked_at: string };
 
-export async function GET() {
+export async function GET(request: Request) {
+  if (!requireAlertCode(request)) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   try {
     const items = await supabaseGet<InterestRow[]>("alert_interests?select=adam,marked_at");
     return NextResponse.json({ items });
@@ -16,6 +17,7 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  if (!requireAlertCode(request)) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   try {
     const body = await request.json().catch(() => ({}));
     const adam = typeof body.adam === "string" ? body.adam.trim() : "";
@@ -34,6 +36,7 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE(request: Request) {
+  if (!requireAlertCode(request)) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   try {
     const adam = new URL(request.url).searchParams.get("adam")?.trim() ?? "";
     if (!adam) return NextResponse.json({ error: "adam απαιτείται" }, { status: 400 });

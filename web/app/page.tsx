@@ -1106,7 +1106,79 @@ function alertUrgency(openingDate: string | null): "open" | "urgent" | "passed" 
   return "open";
 }
 
+// The Ειδοποιήσεις tab holds the team's own CPV/region picks and tracked
+// tenders, not public ΚΗΜΔΗΣ data - the app has no login otherwise, so
+// anyone with the link could otherwise see (and edit) exactly what the team
+// is watching/bidding on. This wrapper is the only thing standing in the
+// way: it withholds AlertsPanelContent (and therefore every fetch it would
+// make) until a passcode matching the server's ALERT_ACCESS_CODE is
+// supplied, then remembers it in localStorage so it's only typed once per
+// browser.
 function AlertsPanel() {
+  // undefined = localStorage not checked yet (initial render), null = checked
+  // and no code stored (show the lock screen), string = unlocked.
+  const [code, setCode] = useState<string | null | undefined>(undefined);
+  const [inputCode, setInputCode] = useState("");
+  const [checking, setChecking] = useState(false);
+  const [lockError, setLockError] = useState("");
+
+  useEffect(() => {
+    setCode(window.localStorage.getItem("alertAccessCode"));
+  }, []);
+
+  const unlock = () => {
+    if (!inputCode.trim()) return;
+    setChecking(true);
+    setLockError("");
+    fetch("/api/alert-recipients", { headers: { "x-alert-code": inputCode } })
+      .then((response) => {
+        if (response.ok) {
+          window.localStorage.setItem("alertAccessCode", inputCode);
+          setCode(inputCode);
+        } else {
+          setLockError("Λάθος κωδικός.");
+        }
+      })
+      .catch(() => setLockError("Σφάλμα σύνδεσης - δοκίμασε ξανά."))
+      .finally(() => setChecking(false));
+  };
+
+  const onUnauthorized = useCallback(() => {
+    window.localStorage.removeItem("alertAccessCode");
+    setCode(null);
+    setLockError("Ο κωδικός δεν ισχύει πια.");
+  }, []);
+
+  if (code === undefined) return null; // brief flash while reading localStorage
+  if (!code) return <div className="alertsTopGrid"><article className="panel alertsLockPanel">
+    <p className="eyebrow">ΕΙΔΟΠΟΙΗΣΕΙΣ</p>
+    <h2>Προστατευμένη ενότητα</h2>
+    <p className="watchlistCaption">Ορατή μόνο στην ομάδα - βάλε τον κωδικό πρόσβασης.</p>
+    <div className="recipientInput">
+      <input
+        type="password"
+        value={inputCode}
+        onChange={(event) => { setInputCode(event.target.value); setLockError(""); }}
+        onKeyDown={(event) => { if (event.key === "Enter") unlock(); }}
+        placeholder="Κωδικός πρόσβασης"
+      />
+      <button type="button" onClick={unlock} disabled={checking}>{checking ? "…" : "Είσοδος"}</button>
+    </div>
+    {lockError && <p className="recipientError">{lockError}</p>}
+  </article></div>;
+
+  return <AlertsPanelContent code={code} onUnauthorized={onUnauthorized} />;
+}
+
+function AlertsPanelContent({ code, onUnauthorized }: { code: string; onUnauthorized: () => void }) {
+  const authFetch = useCallback((url: string, init: RequestInit = {}) => {
+    return fetch(url, { ...init, headers: { ...(init.headers as Record<string, string> ?? {}), "x-alert-code": code } })
+      .then((response) => {
+        if (response.status === 401) onUnauthorized();
+        return response;
+      });
+  }, [code, onUnauthorized]);
+
   const [watchlist, setWatchlist] = useState<WatchlistItem[]>([]);
   const [nutsFilter, setNutsFilter] = useState<NutsFilterItem[]>([]);
   const [alerts, setAlerts] = useState<AlertItem[]>([]);
@@ -1149,11 +1221,11 @@ function AlertsPanel() {
   }, []);
 
   const loadSubmissions = useCallback(() => {
-    fetch("/api/alert-submissions")
+    authFetch("/api/alert-submissions")
       .then((response) => response.ok ? response.json() : { items: [] })
       .then((payload) => setSubmittedAdams(new Set((payload.items ?? []).map((item: { adam: string }) => item.adam))))
       .catch(() => setSubmittedAdams(new Set()));
-  }, []);
+  }, [authFetch]);
 
   useEffect(() => { loadSubmissions(); }, [loadSubmissions]);
 
@@ -1165,18 +1237,18 @@ function AlertsPanel() {
       return next;
     });
     if (isMarked) {
-      fetch(`/api/alert-submissions?adam=${encodeURIComponent(adam)}`, { method: "DELETE" }).then(loadSubmissions);
+      authFetch(`/api/alert-submissions?adam=${encodeURIComponent(adam)}`, { method: "DELETE" }).then(loadSubmissions);
     } else {
-      fetch("/api/alert-submissions", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ adam }) }).then(loadSubmissions);
+      authFetch("/api/alert-submissions", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ adam }) }).then(loadSubmissions);
     }
   };
 
   const loadInterests = useCallback(() => {
-    fetch("/api/alert-interests")
+    authFetch("/api/alert-interests")
       .then((response) => response.ok ? response.json() : { items: [] })
       .then((payload) => setInterestedAdams(new Set((payload.items ?? []).map((item: { adam: string }) => item.adam))))
       .catch(() => setInterestedAdams(new Set()));
-  }, []);
+  }, [authFetch]);
 
   useEffect(() => { loadInterests(); }, [loadInterests]);
 
@@ -1188,9 +1260,9 @@ function AlertsPanel() {
       return next;
     });
     if (isMarked) {
-      fetch(`/api/alert-interests?adam=${encodeURIComponent(adam)}`, { method: "DELETE" }).then(loadInterests);
+      authFetch(`/api/alert-interests?adam=${encodeURIComponent(adam)}`, { method: "DELETE" }).then(loadInterests);
     } else {
-      fetch("/api/alert-interests", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ adam }) }).then(loadInterests);
+      authFetch("/api/alert-interests", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ adam }) }).then(loadInterests);
     }
   };
 
@@ -1204,25 +1276,25 @@ function AlertsPanel() {
     if (!adams.length) { setTrackedItems([]); return; }
     const params = new URLSearchParams();
     adams.forEach((adam) => params.append("adam", adam));
-    fetch(`/api/alert-tenders?${params.toString()}`)
+    authFetch(`/api/alert-tenders?${params.toString()}`)
       .then((response) => response.ok ? response.json() : { items: [] })
       .then((payload) => setTrackedItems(payload.items ?? []))
       .catch(() => setTrackedItems([]));
-  }, [submittedAdams, interestedAdams]);
+  }, [submittedAdams, interestedAdams, authFetch]);
 
   const loadRecipients = useCallback(() => {
-    fetch("/api/alert-recipients")
+    authFetch("/api/alert-recipients")
       .then((response) => response.ok ? response.json() : { items: [] })
       .then((payload) => setRecipients(payload.items ?? []))
       .catch(() => setRecipients([]));
-  }, []);
+  }, [authFetch]);
 
   useEffect(() => { loadRecipients(); }, [loadRecipients]);
 
   const addRecipient = () => {
     const email = newEmail.trim();
     if (!email) return;
-    fetch("/api/alert-recipients", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email }) })
+    authFetch("/api/alert-recipients", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email }) })
       .then((response) => response.json())
       .then((payload) => {
         if (payload.error) { setRecipientError(payload.error); return; }
@@ -1234,7 +1306,7 @@ function AlertsPanel() {
 
   const removeRecipient = (email: string) => {
     setRecipients((current) => current.filter((item) => item.email !== email));
-    fetch(`/api/alert-recipients?email=${encodeURIComponent(email)}`, { method: "DELETE" }).then(loadRecipients);
+    authFetch(`/api/alert-recipients?email=${encodeURIComponent(email)}`, { method: "DELETE" }).then(loadRecipients);
   };
 
   const load = useCallback(() => {
@@ -1242,7 +1314,7 @@ function AlertsPanel() {
     // right after a page load; one silent retry clears most of those.
     const attemptFetch = (attempt: number) => {
       setLoading(true);
-      fetch("/api/alerts")
+      authFetch("/api/alerts")
         .then((response) => response.ok ? response.json() : Promise.reject(new Error("alerts request failed")))
         .then((payload) => { setWatchlist(payload.watchlist ?? []); setNutsFilter(payload.nutsFilter ?? []); setAlerts(payload.alerts ?? []); setError(""); setLoading(false); })
         .catch(() => {
@@ -1252,18 +1324,18 @@ function AlertsPanel() {
         });
     };
     attemptFetch(0);
-  }, []);
+  }, [authFetch]);
 
   useEffect(() => { load(); }, [load]);
 
   const removeCpv = (code: string) => {
     setWatchlist((current) => current.filter((item) => item.cpv_code !== code));
-    fetch(`/api/watchlist?cpv_code=${encodeURIComponent(code)}`, { method: "DELETE" }).then(load);
+    authFetch(`/api/watchlist?cpv_code=${encodeURIComponent(code)}`, { method: "DELETE" }).then(load);
   };
 
   const removeNutsFilter = (code: string) => {
     setNutsFilter((current) => current.filter((item) => item.nuts_code !== code));
-    fetch(`/api/alert-nuts-filter?nuts_code=${encodeURIComponent(code)}`, { method: "DELETE" }).then(load);
+    authFetch(`/api/alert-nuts-filter?nuts_code=${encodeURIComponent(code)}`, { method: "DELETE" }).then(load);
   };
 
   const openTender = (adam: string) => {
@@ -1297,7 +1369,7 @@ function AlertsPanel() {
               if (removed) removeCpv(removed);
             }}
             onSelectOption={(option) => {
-              fetch("/api/watchlist", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ cpv_code: option.value, cpv_label: option.label }) })
+              authFetch("/api/watchlist", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ cpv_code: option.value, cpv_label: option.label }) })
                 .then(load);
             }}
             placeholder="Αναζήτησε κωδικό ή περιγραφή CPV"
@@ -1312,7 +1384,7 @@ function AlertsPanel() {
               if (removed) removeNutsFilter(removed);
             }}
             onSelectOption={(option) => {
-              fetch("/api/alert-nuts-filter", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ nuts_code: option.value, nuts_name: option.label }) })
+              authFetch("/api/alert-nuts-filter", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ nuts_code: option.value, nuts_name: option.label }) })
                 .then(load);
             }}
             placeholder="π.χ. Αττική - αφήστε κενό για όλη τη χώρα"

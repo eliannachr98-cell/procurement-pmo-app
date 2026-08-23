@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
-import { supabaseGet, supabaseWrite } from "@/lib/matching";
+import { supabaseGet, supabaseWrite, requireAlertCode } from "@/lib/matching";
 
 export const dynamic = "force-dynamic";
 
 type WatchlistRow = { cpv_code: string; cpv_label: string | null; created_at: string };
 
-export async function GET() {
+export async function GET(request: Request) {
+  if (!requireAlertCode(request)) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   try {
     const items = await supabaseGet<WatchlistRow[]>("cpv_watchlist?select=cpv_code,cpv_label,created_at&order=created_at.desc");
     return NextResponse.json({ items });
@@ -16,6 +17,7 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  if (!requireAlertCode(request)) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   try {
     const body = await request.json().catch(() => ({}));
     const cpvCode = typeof body.cpv_code === "string" ? body.cpv_code.trim() : "";
@@ -37,6 +39,7 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE(request: Request) {
+  if (!requireAlertCode(request)) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   try {
     const cpvCode = new URL(request.url).searchParams.get("cpv_code")?.trim() ?? "";
     if (!cpvCode) return NextResponse.json({ error: "cpv_code απαιτείται" }, { status: 400 });

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { supabaseRpc } from "@/lib/matching";
+import { supabaseRpc, requireAlertCode } from "@/lib/matching";
 
 export const dynamic = "force-dynamic";
 
@@ -24,6 +24,7 @@ type AlertRow = {
 // window (removing a watched CPV would otherwise make an already-tracked
 // tender disappear from these lists).
 export async function GET(request: Request) {
+  if (!requireAlertCode(request)) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   try {
     const adams = new URL(request.url).searchParams.getAll("adam").flatMap((value) => value.split(",")).map((value) => value.trim()).filter(Boolean);
     if (!adams.length) return NextResponse.json({ items: [] });

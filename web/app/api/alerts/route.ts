@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { supabaseGet, supabaseRpc } from "@/lib/matching";
+import { supabaseGet, supabaseRpc, requireAlertCode } from "@/lib/matching";
 
 export const dynamic = "force-dynamic";
 
@@ -25,7 +25,8 @@ type AlertRow = {
   cpvs: { code: string; description: string | null }[];
 };
 
-export async function GET() {
+export async function GET(request: Request) {
+  if (!requireAlertCode(request)) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   try {
     const [watchlist, nutsFilter] = await Promise.all([
       supabaseGet<WatchlistRow[]>("cpv_watchlist?select=cpv_code,cpv_label&order=created_at.desc"),

@@ -27,6 +27,19 @@ type ContractorRow = {
   record_adam: string;
 };
 
+// The Ειδοποιήσεις tab (watchlist CPVs/region, submitted/interested tenders,
+// email recipients) holds the team's own competitive picks, not public
+// ΚΗΜΔΗΣ data - the app itself has no login, so this is the only thing
+// standing between a link shared with an outside viewer and them seeing
+// exactly what the team is watching/bidding on. ALERT_ACCESS_CODE unset
+// means the gate is off (fails open) so local/preview environments without
+// the var configured aren't accidentally locked out.
+export function requireAlertCode(request: Request): boolean {
+  const expected = process.env.ALERT_ACCESS_CODE;
+  if (!expected) return true;
+  return request.headers.get("x-alert-code") === expected;
+}
+
 export async function supabaseGet<T>(path: string): Promise<T> {
   const url = process.env.SUPABASE_URL;
   const key = process.env.SUPABASE_PUBLISHABLE_KEY;
