@@ -138,6 +138,12 @@ export default function Home() {
   // else) exactly like a page refresh, just triggered by a tab click instead.
   const [alertsWatchlist, setAlertsWatchlist] = useState<WatchlistItem[]>([]);
   const [alertsNutsFilter, setAlertsNutsFilter] = useState<NutsFilterItem[]>([]);
+  // Same reasoning for Αγορά & Ανταγωνισμός's own local state (drill-down
+  // selection, contractor search box, "load more" count) - MarketPanel
+  // unmounts on every tab switch too.
+  const [marketSelectedContractor, setMarketSelectedContractor] = useState("");
+  const [marketContractorSearch, setMarketContractorSearch] = useState("");
+  const [marketVisibleCount, setMarketVisibleCount] = useState(10);
   const [lastSync, setLastSync] = useState<string | null>(null);
   const latestRequest = useRef(0);
   const latestDashboardRequest = useRef(0);
@@ -374,7 +380,7 @@ export default function Home() {
               {loading ? "Φόρτωση…" : `Φόρτωση περισσότερων (${number.format(tenders.length)} από ${number.format(totalTenders)})`}
             </button>}
           </>}
-          {page === "market" && <MarketGate>{(code) => <MarketPanel awards={awards} contracts={contracts} cpv={cpv} setCpv={setCpv} contractor={contractor} authority={authority} year={year} contractType={contractType} documentType={documentType} loadedCount={tenders.length} totalCount={totalTenders} stillLoading={hasMore && loading} locked={!code} />}</MarketGate>}
+          {page === "market" && <MarketGate onLogout={() => { setMarketSelectedContractor(""); setMarketContractorSearch(""); setMarketVisibleCount(10); }}>{(code) => <MarketPanel awards={awards} contracts={contracts} cpv={cpv} setCpv={setCpv} contractor={contractor} authority={authority} year={year} contractType={contractType} documentType={documentType} loadedCount={tenders.length} totalCount={totalTenders} stillLoading={hasMore && loading} locked={!code} selectedContractor={marketSelectedContractor} setSelectedContractor={setMarketSelectedContractor} contractorSearch={marketContractorSearch} setContractorSearch={setMarketContractorSearch} visibleCount={marketVisibleCount} setVisibleCount={setMarketVisibleCount} />}</MarketGate>}
           {page === "alerts" && <AlertsPanel watchlist={alertsWatchlist} setWatchlist={setAlertsWatchlist} nutsFilter={alertsNutsFilter} setNutsFilter={setAlertsNutsFilter} />}
         </section>
 
@@ -837,8 +843,13 @@ function SingleSearchInput({ label, type, value, onChange, placeholder }: {
 // just a nicer view of already-public ΚΗΜΔΗΣ records - explicitly chosen as
 // the paid-tier gate, reusing the exact same team passcode as Ειδοποιήσεις
 // (one login unlocks both).
-function MarketGate({ children }: { children: (code: string | null) => ReactNode }) {
+function MarketGate({ onLogout, children }: { onLogout: () => void; children: (code: string | null) => ReactNode }) {
   const team = useTeamCode();
+  const previousCode = useRef(team.code);
+  useEffect(() => {
+    if (previousCode.current && !team.code) onLogout(); // clear leftover team-session UI state (drill-down, search, "load more")
+    previousCode.current = team.code;
+  }, [team.code, onLogout]);
   if (team.code === undefined) return null; // brief flash while reading localStorage
 
   return <>
@@ -851,14 +862,14 @@ type ContractorSummary = { key: string; name: string; awards: number; contracts:
 
 const CONTRACTOR_ALIASES: Record<string, string> = { PWC: "PRICEWATERHOUSECOOPERS", EY: "ERNST" };
 
-function MarketPanel({ awards, contracts, cpv, setCpv, contractor, authority, year, contractType, documentType, loadedCount, totalCount, stillLoading, locked }: {
+function MarketPanel({ awards, contracts, cpv, setCpv, contractor, authority, year, contractType, documentType, loadedCount, totalCount, stillLoading, locked, selectedContractor, setSelectedContractor, contractorSearch, setContractorSearch, visibleCount, setVisibleCount }: {
   awards: Award[]; contracts: Contract[]; cpv: string[]; setCpv: (value: string[]) => void; contractor: string[]; authority: string;
   year: string; contractType: string[]; documentType: string; loadedCount: number; totalCount: number; stillLoading: boolean; locked: boolean;
+  selectedContractor: string; setSelectedContractor: (value: string) => void;
+  contractorSearch: string; setContractorSearch: (value: string) => void;
+  visibleCount: number; setVisibleCount: (value: number | ((current: number) => number)) => void;
 }) {
-  const [selectedContractor, setSelectedContractor] = useState("");
-  const [contractorSearch, setContractorSearch] = useState("");
-  const [visibleCount, setVisibleCount] = useState(10);
-  useEffect(() => { setVisibleCount(10); }, [contractor, cpv, authority, year, contractType, documentType, contractorSearch]);
+  useEffect(() => { setVisibleCount(10); }, [contractor, cpv, authority, year, contractType, documentType, contractorSearch, setVisibleCount]);
   // This grouping (dedupe-by-VAT, Union-Find merge, per-contractor totals)
   // is the expensive part of this panel - re-running it on every render was
   // fine while awards/contracts stayed small, but once the Αγορά page
