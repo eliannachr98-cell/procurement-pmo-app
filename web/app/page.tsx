@@ -1539,31 +1539,6 @@ function AlertsPanelContent({ code, onUnauthorized }: { code: string | null; onU
       </div>
       <p className="watchlistCaption">Οι νέοι διαγωνισμοί που δημοσιεύονται σε αυτά τα CPV εμφανίζονται παρακάτω, με αποδελτίωση των βασικών στοιχείων{nutsFilter.length > 0 && ", περιορισμένοι στην περιοχή που επέλεξες"}.</p>
     </article>
-    {code ? <article className="panel emailPanel">
-      <p className="eyebrow">EMAIL</p>
-      <h2><span className="emailIcon" aria-hidden="true">✉</span>Ειδοποιήσεις μέσω email</h2>
-      <p className="emailCaption">Στείλε νέους διαγωνισμούς απευθείας στα εισερχόμενα.</p>
-      <div className="recipientInput">
-        <input
-          type="email"
-          value={newEmail}
-          onChange={(event) => { setNewEmail(event.target.value); setRecipientError(""); }}
-          onKeyDown={(event) => { if (event.key === "Enter") addRecipient(); }}
-          placeholder="email@example.com"
-        />
-        <button type="button" onClick={addRecipient}>Προσθήκη</button>
-      </div>
-      {recipientError && <p className="recipientError">{recipientError}</p>}
-      {recipientNote && <p className="recipientNote">{recipientNote}</p>}
-      {recipients.length > 0 && <div className="recipientChips">
-        {recipients.map((item) => <span className="recipientChip" key={item.email}>{item.email}<button type="button" onClick={() => removeRecipient(item.email)} aria-label={`Αφαίρεση ${item.email}`}>×</button></span>)}
-      </div>}
-    </article> : <article className="panel emailPanel emailPanelLocked">
-      <p className="eyebrow">EMAIL</p>
-      <h2><span className="emailIcon" aria-hidden="true">✉</span>Ειδοποιήσεις μέσω email</h2>
-      <p className="emailCaption">Για να ενημερώνεσαι με νέες ειδοποιήσεις για CPV/διαγωνισμούς που σε ενδιαφέρουν, συνδέσου ή εγγράψου.</p>
-    </article>}
-    </div>
     <article className="panel submittedPanel">
       <p className="eyebrow">ΚΑΤΑΤΕΘΕΙΜΕΝΕΣ</p>
       <h2>Υποβεβλημένες προσφορές</h2>
@@ -1599,7 +1574,32 @@ function AlertsPanelContent({ code, onUnauthorized }: { code: string | null; onU
       </div>
     </article>
     </div>
-    {code ? <article className="panel apodeltiosiPanel">
+    <div className="alertsRightCol">
+    {code ? <article className="panel emailPanel">
+      <p className="eyebrow">EMAIL</p>
+      <h2><span className="emailIcon" aria-hidden="true">✉</span>Ειδοποιήσεις μέσω email</h2>
+      <p className="emailCaption">Στείλε νέους διαγωνισμούς απευθείας στα εισερχόμενα.</p>
+      <div className="recipientInput">
+        <input
+          type="email"
+          value={newEmail}
+          onChange={(event) => { setNewEmail(event.target.value); setRecipientError(""); }}
+          onKeyDown={(event) => { if (event.key === "Enter") addRecipient(); }}
+          placeholder="email@example.com"
+        />
+        <button type="button" onClick={addRecipient}>Προσθήκη</button>
+      </div>
+      {recipientError && <p className="recipientError">{recipientError}</p>}
+      {recipientNote && <p className="recipientNote">{recipientNote}</p>}
+      {recipients.length > 0 && <div className="recipientChips">
+        {recipients.map((item) => <span className="recipientChip" key={item.email}>{item.email}<button type="button" onClick={() => removeRecipient(item.email)} aria-label={`Αφαίρεση ${item.email}`}>×</button></span>)}
+      </div>}
+    </article> : <article className="panel emailPanel emailPanelLocked">
+      <p className="eyebrow">EMAIL</p>
+      <h2><span className="emailIcon" aria-hidden="true">✉</span>Ειδοποιήσεις μέσω email</h2>
+      <p className="emailCaption">Για να ενημερώνεσαι με νέες ειδοποιήσεις για CPV/διαγωνισμούς που σε ενδιαφέρουν, συνδέσου ή εγγράψου.</p>
+    </article>}
+    {code ? <article className="panel apodeltiosiPanel apodeltiosiTrigger">
       <p className="eyebrow">ΑΠΟΔΕΛΤΙΩΣΗ</p>
       <h2>Ανάλυση Διακήρυξης</h2>
       <p className="watchlistCaption">Ανέβασε το PDF μιας Διακήρυξης για αυτόματη αποδελτίωση σε δομημένη μορφή.</p>
@@ -1608,90 +1608,93 @@ function AlertsPanelContent({ code, onUnauthorized }: { code: string | null; onU
         <button type="button" onClick={runApodeltiosi} disabled={!apodeltiosiFile || apodeltiosiLoading}>{apodeltiosiLoading ? "Ανάλυση…" : "Ανάλυση"}</button>
       </div>
       {apodeltiosiError && <p className="recipientError">{apodeltiosiError}</p>}
-      {apodeltiosiResult && <div className="apodeltiosiResult">
-        <div className="apodeltiosiResultHeader">
-          <div>
-            <h3>«{apodeltiosiResult.titlos}»</h3>
-            {apodeltiosiResult.arithmosDiakiryxis && <p className="apodeltiosiSub">Αρ. Διακ.: {apodeltiosiResult.arithmosDiakiryxis}</p>}
-          </div>
-          <button type="button" onClick={downloadApodeltiosiDocx}>Λήψη .docx</button>
-        </div>
-
-        <h4>1. Βασικά Στοιχεία Διαγωνισμού</h4>
-        <table className="apodeltiosiTable"><tbody>
-          {apodeltiosiResult.basikaStoixeia.map((item, i) => <tr key={i}><td>{item.stoixeio}</td><td>{item.plirofpria}</td></tr>)}
-        </tbody></table>
-
-        <h4>2. Κρίσιμες Προθεσμίες</h4>
-        <table className="apodeltiosiTable"><tbody>
-          {apodeltiosiResult.prothesmies.map((item, i) => <tr key={i}><td>{item.energeia}</td><td>{item.imerominia}</td></tr>)}
-        </tbody></table>
-
-        {apodeltiosiResult.enosiEtaireion && <>
-          <h4>3. Συμμετοχή ως Ένωση Εταιρειών</h4>
-          {apodeltiosiResult.enosiEtaireion.genikesArxes.length > 0 && <>
-            <h5>3.1 Γενικές Αρχές</h5>
-            <ul className="apodeltiosiList">{apodeltiosiResult.enosiEtaireion.genikesArxes.map((item, i) => <li key={i}>{item}</li>)}</ul>
-          </>}
-          {apodeltiosiResult.enosiEtaireion.ypoxreotikaStoixeia.length > 0 && <>
-            <h5>3.2 Υποχρεωτικά Στοιχεία Προσφοράς Ένωσης</h5>
-            <ul className="apodeltiosiList">{apodeltiosiResult.enosiEtaireion.ypoxreotikaStoixeia.map((item, i) => <li key={i}>{item}</li>)}</ul>
-          </>}
-        </>}
-
-        <h4>4. Κριτήρια Ποιοτικής Επιλογής</h4>
-        {apodeltiosiResult.kritiriaPoiotikisEpilogis.katallilotita.length > 0 && <>
-          <h5>4.1 Καταλληλότητα</h5>
-          <ul className="apodeltiosiList">{apodeltiosiResult.kritiriaPoiotikisEpilogis.katallilotita.map((item, i) => <li key={i}>{item}</li>)}</ul>
-        </>}
-        {apodeltiosiResult.kritiriaPoiotikisEpilogis.oikonomikiEparkeia.length > 0 && <>
-          <h5>4.2 Οικονομική Επάρκεια</h5>
-          <ul className="apodeltiosiList">{apodeltiosiResult.kritiriaPoiotikisEpilogis.oikonomikiEparkeia.map((item, i) => <li key={i}>{item}</li>)}</ul>
-        </>}
-        {apodeltiosiResult.kritiriaPoiotikisEpilogis.texnikiIkanotita.length > 0 && <>
-          <h5>4.3 Τεχνική Ικανότητα</h5>
-          <ul className="apodeltiosiList">{apodeltiosiResult.kritiriaPoiotikisEpilogis.texnikiIkanotita.map((item, i) => <li key={i}>{item}</li>)}</ul>
-        </>}
-        {apodeltiosiResult.kritiriaPoiotikisEpilogis.omadaErgou.length > 0 && <>
-          <h5>4.4 Ομάδα Έργου</h5>
-          <table className="apodeltiosiTable"><tbody>
-            {apodeltiosiResult.kritiriaPoiotikisEpilogis.omadaErgou.map((item, i) => <tr key={i}><td>{item.rolos}</td><td>{item.prosonta}</td></tr>)}
-          </tbody></table>
-        </>}
-        {apodeltiosiResult.kritiriaPoiotikisEpilogis.pistopoiitikaISO.length > 0 && <>
-          <h5>4.5 Πιστοποιητικά ISO</h5>
-          <table className="apodeltiosiTable"><tbody>
-            {apodeltiosiResult.kritiriaPoiotikisEpilogis.pistopoiitikaISO.map((item, i) => <tr key={i}><td>{item.pistopoiitiko}</td><td>{item.pedio}</td></tr>)}
-          </tbody></table>
-        </>}
-
-        <h4>5. Τι Υποβάλλουμε</h4>
-        {apodeltiosiResult.tiYpovalloume.dikaiologitikaSymmetoxis.length > 0 && <>
-          <h5>5.1 Δικαιολογητικά Συμμετοχής</h5>
-          <ul className="apodeltiosiList">{apodeltiosiResult.tiYpovalloume.dikaiologitikaSymmetoxis.map((item, i) => <li key={i}>{item}</li>)}</ul>
-        </>}
-        {apodeltiosiResult.tiYpovalloume.oikonomikiProsfora.length > 0 && <>
-          <h5>5.2 Οικονομική Προσφορά</h5>
-          <ul className="apodeltiosiList">{apodeltiosiResult.tiYpovalloume.oikonomikiProsfora.map((item, i) => <li key={i}>{item}</li>)}</ul>
-        </>}
-        {apodeltiosiResult.tiYpovalloume.isxysProsforas.length > 0 && <>
-          <h5>5.3 Ισχύς Προσφοράς</h5>
-          <ul className="apodeltiosiList">{apodeltiosiResult.tiYpovalloume.isxysProsforas.map((item, i) => <li key={i}>{item}</li>)}</ul>
-        </>}
-        {apodeltiosiResult.tiYpovalloume.dikaiologitikaProsorinouAnadoxou.length > 0 && <>
-          <h5>5.4 Δικαιολογητικά Προσωρινού Αναδόχου</h5>
-          <ul className="apodeltiosiList">{apodeltiosiResult.tiYpovalloume.dikaiologitikaProsorinouAnadoxou.map((item, i) => <li key={i}>{item}</li>)}</ul>
-        </>}
-
-        {apodeltiosiResult.epishmanseis.length > 0 && <>
-          <h4>6. Σημαντικές Επισημάνσεις</h4>
-          <ul className="apodeltiosiList">{apodeltiosiResult.epishmanseis.map((item, i) => <li key={i}>{item}</li>)}</ul>
-        </>}
-      </div>}
-    </article> : <article className="panel apodeltiosiPanel apodeltiosiPanelLocked">
+    </article> : <article className="panel apodeltiosiPanel apodeltiosiTrigger apodeltiosiPanelLocked">
       <p className="eyebrow">ΑΠΟΔΕΛΤΙΩΣΗ</p>
       <h2>Ανάλυση Διακήρυξης</h2>
       <p className="watchlistCaption">Για να ανεβάζεις Διακηρύξεις και να παίρνεις αυτόματη αποδελτίωση, συνδέσου ή εγγράψου.</p>
+    </article>}
+    </div>
+    </div>
+    {apodeltiosiResult && <article className="panel apodeltiosiPanel apodeltiosiResultPanel">
+      <div className="apodeltiosiResultHeader">
+        <div>
+          <p className="eyebrow">ΑΠΟΔΕΛΤΙΩΣΗ</p>
+          <h3>«{apodeltiosiResult.titlos}»</h3>
+          {apodeltiosiResult.arithmosDiakiryxis && <p className="apodeltiosiSub">Αρ. Διακ.: {apodeltiosiResult.arithmosDiakiryxis}</p>}
+        </div>
+        <button type="button" onClick={downloadApodeltiosiDocx}>Λήψη .docx</button>
+      </div>
+
+      <h4>1. Βασικά Στοιχεία Διαγωνισμού</h4>
+      <table className="apodeltiosiTable"><tbody>
+        {apodeltiosiResult.basikaStoixeia.map((item, i) => <tr key={i}><td>{item.stoixeio}</td><td>{item.plirofpria}</td></tr>)}
+      </tbody></table>
+
+      <h4>2. Κρίσιμες Προθεσμίες</h4>
+      <table className="apodeltiosiTable"><tbody>
+        {apodeltiosiResult.prothesmies.map((item, i) => <tr key={i}><td>{item.energeia}</td><td>{item.imerominia}</td></tr>)}
+      </tbody></table>
+
+      {apodeltiosiResult.enosiEtaireion && <>
+        <h4>3. Συμμετοχή ως Ένωση Εταιρειών</h4>
+        {apodeltiosiResult.enosiEtaireion.genikesArxes.length > 0 && <>
+          <h5>3.1 Γενικές Αρχές</h5>
+          <ul className="apodeltiosiList">{apodeltiosiResult.enosiEtaireion.genikesArxes.map((item, i) => <li key={i}>{item}</li>)}</ul>
+        </>}
+        {apodeltiosiResult.enosiEtaireion.ypoxreotikaStoixeia.length > 0 && <>
+          <h5>3.2 Υποχρεωτικά Στοιχεία Προσφοράς Ένωσης</h5>
+          <ul className="apodeltiosiList">{apodeltiosiResult.enosiEtaireion.ypoxreotikaStoixeia.map((item, i) => <li key={i}>{item}</li>)}</ul>
+        </>}
+      </>}
+
+      <h4>4. Κριτήρια Ποιοτικής Επιλογής</h4>
+      {apodeltiosiResult.kritiriaPoiotikisEpilogis.katallilotita.length > 0 && <>
+        <h5>4.1 Καταλληλότητα</h5>
+        <ul className="apodeltiosiList">{apodeltiosiResult.kritiriaPoiotikisEpilogis.katallilotita.map((item, i) => <li key={i}>{item}</li>)}</ul>
+      </>}
+      {apodeltiosiResult.kritiriaPoiotikisEpilogis.oikonomikiEparkeia.length > 0 && <>
+        <h5>4.2 Οικονομική Επάρκεια</h5>
+        <ul className="apodeltiosiList">{apodeltiosiResult.kritiriaPoiotikisEpilogis.oikonomikiEparkeia.map((item, i) => <li key={i}>{item}</li>)}</ul>
+      </>}
+      {apodeltiosiResult.kritiriaPoiotikisEpilogis.texnikiIkanotita.length > 0 && <>
+        <h5>4.3 Τεχνική Ικανότητα</h5>
+        <ul className="apodeltiosiList">{apodeltiosiResult.kritiriaPoiotikisEpilogis.texnikiIkanotita.map((item, i) => <li key={i}>{item}</li>)}</ul>
+      </>}
+      {apodeltiosiResult.kritiriaPoiotikisEpilogis.omadaErgou.length > 0 && <>
+        <h5>4.4 Ομάδα Έργου</h5>
+        <table className="apodeltiosiTable"><tbody>
+          {apodeltiosiResult.kritiriaPoiotikisEpilogis.omadaErgou.map((item, i) => <tr key={i}><td>{item.rolos}</td><td>{item.prosonta}</td></tr>)}
+        </tbody></table>
+      </>}
+      {apodeltiosiResult.kritiriaPoiotikisEpilogis.pistopoiitikaISO.length > 0 && <>
+        <h5>4.5 Πιστοποιητικά ISO</h5>
+        <table className="apodeltiosiTable"><tbody>
+          {apodeltiosiResult.kritiriaPoiotikisEpilogis.pistopoiitikaISO.map((item, i) => <tr key={i}><td>{item.pistopoiitiko}</td><td>{item.pedio}</td></tr>)}
+        </tbody></table>
+      </>}
+
+      <h4>5. Τι Υποβάλλουμε</h4>
+      {apodeltiosiResult.tiYpovalloume.dikaiologitikaSymmetoxis.length > 0 && <>
+        <h5>5.1 Δικαιολογητικά Συμμετοχής</h5>
+        <ul className="apodeltiosiList">{apodeltiosiResult.tiYpovalloume.dikaiologitikaSymmetoxis.map((item, i) => <li key={i}>{item}</li>)}</ul>
+      </>}
+      {apodeltiosiResult.tiYpovalloume.oikonomikiProsfora.length > 0 && <>
+        <h5>5.2 Οικονομική Προσφορά</h5>
+        <ul className="apodeltiosiList">{apodeltiosiResult.tiYpovalloume.oikonomikiProsfora.map((item, i) => <li key={i}>{item}</li>)}</ul>
+      </>}
+      {apodeltiosiResult.tiYpovalloume.isxysProsforas.length > 0 && <>
+        <h5>5.3 Ισχύς Προσφοράς</h5>
+        <ul className="apodeltiosiList">{apodeltiosiResult.tiYpovalloume.isxysProsforas.map((item, i) => <li key={i}>{item}</li>)}</ul>
+      </>}
+      {apodeltiosiResult.tiYpovalloume.dikaiologitikaProsorinouAnadoxou.length > 0 && <>
+        <h5>5.4 Δικαιολογητικά Προσωρινού Αναδόχου</h5>
+        <ul className="apodeltiosiList">{apodeltiosiResult.tiYpovalloume.dikaiologitikaProsorinouAnadoxou.map((item, i) => <li key={i}>{item}</li>)}</ul>
+      </>}
+
+      {apodeltiosiResult.epishmanseis.length > 0 && <>
+        <h4>6. Σημαντικές Επισημάνσεις</h4>
+        <ul className="apodeltiosiList">{apodeltiosiResult.epishmanseis.map((item, i) => <li key={i}>{item}</li>)}</ul>
+      </>}
     </article>}
     {!loading && !watchlist.length && <article className="panel empty"><span>♢</span><h2>Δεν παρακολουθείς κανένα CPV</h2><p>Πρόσθεσε έναν ή περισσότερους κωδικούς CPV παραπάνω για να ξεκινήσεις να βλέπεις εδώ τους νέους διαγωνισμούς που ταιριάζουν.</p></article>}
     {error && <div className="dataBanner error">{error}</div>}
