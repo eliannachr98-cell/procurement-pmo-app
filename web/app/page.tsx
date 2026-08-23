@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject, type SyntheticEvent } from "react";
 import "leaflet/dist/leaflet.css";
 import { captureChartImage, downloadExcel, downloadPdf, type ExportPayload } from "@/lib/exports";
+import type { Apodeltiosi } from "@/lib/apodeltiosi";
 
 type Status = "Ενεργός" | "Αξιολόγηση" | "Ανατεθειμένος" | "Ολοκληρωμένος" | "Ακυρωμένος";
 type Tender = {
@@ -1241,6 +1242,10 @@ function AlertsPanelContent({ code, onUnauthorized }: { code: string | null; onU
   const [newEmail, setNewEmail] = useState("");
   const [recipientError, setRecipientError] = useState("");
   const [recipientNote, setRecipientNote] = useState("");
+  const [apodeltiosiFile, setApodeltiosiFile] = useState<File | null>(null);
+  const [apodeltiosiLoading, setApodeltiosiLoading] = useState(false);
+  const [apodeltiosiError, setApodeltiosiError] = useState("");
+  const [apodeltiosiResult, setApodeltiosiResult] = useState<Apodeltiosi | null>(null);
   const [submittedAdams, setSubmittedAdams] = useState<Set<string>>(new Set());
   const [interestedAdams, setInterestedAdams] = useState<Set<string>>(new Set());
   const [trackedItems, setTrackedItems] = useState<AlertItem[]>([]);
@@ -1435,6 +1440,42 @@ function AlertsPanelContent({ code, onUnauthorized }: { code: string | null; onU
       .finally(() => setLoadingTender(false));
   };
 
+  // Team-only (paid-tier candidate): sends the raw PDF to Claude to read and
+  // extract into the same 6-section structure as the sample doc she supplied.
+  const runApodeltiosi = () => {
+    if (!apodeltiosiFile) return;
+    setApodeltiosiLoading(true);
+    setApodeltiosiError("");
+    setApodeltiosiResult(null);
+    const formData = new FormData();
+    formData.append("file", apodeltiosiFile);
+    authFetch("/api/apodeltiosi", { method: "POST", body: formData })
+      .then((response) => response.json())
+      .then((payload) => {
+        if (payload.error) { setApodeltiosiError(payload.error); return; }
+        setApodeltiosiResult(payload.result);
+      })
+      .catch(() => setApodeltiosiError("Σφάλμα κατά την ανάλυση - δοκίμασε ξανά."))
+      .finally(() => setApodeltiosiLoading(false));
+  };
+
+  const downloadApodeltiosiDocx = () => {
+    if (!apodeltiosiResult) return;
+    authFetch("/api/apodeltiosi/docx", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(apodeltiosiResult) })
+      .then((response) => response.ok ? response.blob() : Promise.reject())
+      .then((blob) => {
+        const url = URL.createObjectURL(blob);
+        const anchor = document.createElement("a");
+        anchor.href = url;
+        anchor.download = `Αποδελτίωση_${apodeltiosiResult.titlos.slice(0, 40)}.docx`;
+        document.body.appendChild(anchor);
+        anchor.click();
+        anchor.remove();
+        URL.revokeObjectURL(url);
+      })
+      .catch(() => setApodeltiosiError("Η λήψη απέτυχε - δοκίμασε ξανά."));
+  };
+
   if (selectedTender) return <TenderDetail tender={selectedTender} onBack={() => setSelectedTender(null)} />;
 
   const submittedItems = trackedItems.filter((item) => submittedAdams.has(item.adam));
@@ -1553,6 +1594,96 @@ function AlertsPanelContent({ code, onUnauthorized }: { code: string | null; onU
       </div>
     </article>
     </div>
+    {code && <article className="panel apodeltiosiPanel">
+      <p className="eyebrow">ΑΠΟΔΕΛΤΙΩΣΗ</p>
+      <h2>Ανάλυση Διακήρυξης</h2>
+      <p className="watchlistCaption">Ανέβασε το PDF μιας Διακήρυξης για αυτόματη αποδελτίωση σε δομημένη μορφή.</p>
+      <div className="recipientInput">
+        <input type="file" accept="application/pdf" onChange={(event) => { setApodeltiosiFile(event.target.files?.[0] ?? null); setApodeltiosiError(""); }} />
+        <button type="button" onClick={runApodeltiosi} disabled={!apodeltiosiFile || apodeltiosiLoading}>{apodeltiosiLoading ? "Ανάλυση…" : "Ανάλυση"}</button>
+      </div>
+      {apodeltiosiError && <p className="recipientError">{apodeltiosiError}</p>}
+      {apodeltiosiResult && <div className="apodeltiosiResult">
+        <div className="apodeltiosiResultHeader">
+          <div>
+            <h3>«{apodeltiosiResult.titlos}»</h3>
+            {apodeltiosiResult.arithmosDiakiryxis && <p className="apodeltiosiSub">Αρ. Διακ.: {apodeltiosiResult.arithmosDiakiryxis}</p>}
+          </div>
+          <button type="button" onClick={downloadApodeltiosiDocx}>Λήψη .docx</button>
+        </div>
+
+        <h4>1. Βασικά Στοιχεία Διαγωνισμού</h4>
+        <table className="apodeltiosiTable"><tbody>
+          {apodeltiosiResult.basikaStoixeia.map((item, i) => <tr key={i}><td>{item.stoixeio}</td><td>{item.plirofpria}</td></tr>)}
+        </tbody></table>
+
+        <h4>2. Κρίσιμες Προθεσμίες</h4>
+        <table className="apodeltiosiTable"><tbody>
+          {apodeltiosiResult.prothesmies.map((item, i) => <tr key={i}><td>{item.energeia}</td><td>{item.imerominia}</td></tr>)}
+        </tbody></table>
+
+        {apodeltiosiResult.enosiEtaireion && <>
+          <h4>3. Συμμετοχή ως Ένωση Εταιρειών</h4>
+          {apodeltiosiResult.enosiEtaireion.genikesArxes.length > 0 && <>
+            <h5>3.1 Γενικές Αρχές</h5>
+            <ul className="apodeltiosiList">{apodeltiosiResult.enosiEtaireion.genikesArxes.map((item, i) => <li key={i}>{item}</li>)}</ul>
+          </>}
+          {apodeltiosiResult.enosiEtaireion.ypoxreotikaStoixeia.length > 0 && <>
+            <h5>3.2 Υποχρεωτικά Στοιχεία Προσφοράς Ένωσης</h5>
+            <ul className="apodeltiosiList">{apodeltiosiResult.enosiEtaireion.ypoxreotikaStoixeia.map((item, i) => <li key={i}>{item}</li>)}</ul>
+          </>}
+        </>}
+
+        <h4>4. Κριτήρια Ποιοτικής Επιλογής</h4>
+        {apodeltiosiResult.kritiriaPoiotikisEpilogis.katallilotita.length > 0 && <>
+          <h5>4.1 Καταλληλότητα</h5>
+          <ul className="apodeltiosiList">{apodeltiosiResult.kritiriaPoiotikisEpilogis.katallilotita.map((item, i) => <li key={i}>{item}</li>)}</ul>
+        </>}
+        {apodeltiosiResult.kritiriaPoiotikisEpilogis.oikonomikiEparkeia.length > 0 && <>
+          <h5>4.2 Οικονομική Επάρκεια</h5>
+          <ul className="apodeltiosiList">{apodeltiosiResult.kritiriaPoiotikisEpilogis.oikonomikiEparkeia.map((item, i) => <li key={i}>{item}</li>)}</ul>
+        </>}
+        {apodeltiosiResult.kritiriaPoiotikisEpilogis.texnikiIkanotita.length > 0 && <>
+          <h5>4.3 Τεχνική Ικανότητα</h5>
+          <ul className="apodeltiosiList">{apodeltiosiResult.kritiriaPoiotikisEpilogis.texnikiIkanotita.map((item, i) => <li key={i}>{item}</li>)}</ul>
+        </>}
+        {apodeltiosiResult.kritiriaPoiotikisEpilogis.omadaErgou.length > 0 && <>
+          <h5>4.4 Ομάδα Έργου</h5>
+          <table className="apodeltiosiTable"><tbody>
+            {apodeltiosiResult.kritiriaPoiotikisEpilogis.omadaErgou.map((item, i) => <tr key={i}><td>{item.rolos}</td><td>{item.prosonta}</td></tr>)}
+          </tbody></table>
+        </>}
+        {apodeltiosiResult.kritiriaPoiotikisEpilogis.pistopoiitikaISO.length > 0 && <>
+          <h5>4.5 Πιστοποιητικά ISO</h5>
+          <table className="apodeltiosiTable"><tbody>
+            {apodeltiosiResult.kritiriaPoiotikisEpilogis.pistopoiitikaISO.map((item, i) => <tr key={i}><td>{item.pistopoiitiko}</td><td>{item.pedio}</td></tr>)}
+          </tbody></table>
+        </>}
+
+        <h4>5. Τι Υποβάλλουμε</h4>
+        {apodeltiosiResult.tiYpovalloume.dikaiologitikaSymmetoxis.length > 0 && <>
+          <h5>5.1 Δικαιολογητικά Συμμετοχής</h5>
+          <ul className="apodeltiosiList">{apodeltiosiResult.tiYpovalloume.dikaiologitikaSymmetoxis.map((item, i) => <li key={i}>{item}</li>)}</ul>
+        </>}
+        {apodeltiosiResult.tiYpovalloume.oikonomikiProsfora.length > 0 && <>
+          <h5>5.2 Οικονομική Προσφορά</h5>
+          <ul className="apodeltiosiList">{apodeltiosiResult.tiYpovalloume.oikonomikiProsfora.map((item, i) => <li key={i}>{item}</li>)}</ul>
+        </>}
+        {apodeltiosiResult.tiYpovalloume.isxysProsforas.length > 0 && <>
+          <h5>5.3 Ισχύς Προσφοράς</h5>
+          <ul className="apodeltiosiList">{apodeltiosiResult.tiYpovalloume.isxysProsforas.map((item, i) => <li key={i}>{item}</li>)}</ul>
+        </>}
+        {apodeltiosiResult.tiYpovalloume.dikaiologitikaProsorinouAnadoxou.length > 0 && <>
+          <h5>5.4 Δικαιολογητικά Προσωρινού Αναδόχου</h5>
+          <ul className="apodeltiosiList">{apodeltiosiResult.tiYpovalloume.dikaiologitikaProsorinouAnadoxou.map((item, i) => <li key={i}>{item}</li>)}</ul>
+        </>}
+
+        {apodeltiosiResult.epishmanseis.length > 0 && <>
+          <h4>6. Σημαντικές Επισημάνσεις</h4>
+          <ul className="apodeltiosiList">{apodeltiosiResult.epishmanseis.map((item, i) => <li key={i}>{item}</li>)}</ul>
+        </>}
+      </div>}
+    </article>}
     {!loading && !watchlist.length && <article className="panel empty"><span>♢</span><h2>Δεν παρακολουθείς κανένα CPV</h2><p>Πρόσθεσε έναν ή περισσότερους κωδικούς CPV παραπάνω για να ξεκινήσεις να βλέπεις εδώ τους νέους διαγωνισμούς που ταιριάζουν.</p></article>}
     {error && <div className="dataBanner error">{error}</div>}
     {watchlist.length > 0 && (() => {
