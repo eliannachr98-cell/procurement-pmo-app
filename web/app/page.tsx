@@ -1161,14 +1161,14 @@ function AlertsPanel() {
   return <>
     <div className="teamCodeBar">
       {code
-        ? <span className="teamCodeStatus">✓ Πλήρης πρόσβαση<button type="button" onClick={logout}>Αποσύνδεση</button></span>
+        ? <span className="teamCodeStatus">✓ Συνδεδεμένος/η<button type="button" onClick={logout}>Αποσύνδεση</button></span>
         : showCodeBox
           ? <span className="teamCodeStatus">
               <input type="password" value={inputCode} onChange={(event) => { setInputCode(event.target.value); setLockError(""); }} onKeyDown={(event) => { if (event.key === "Enter") unlock(); }} placeholder="Κωδικός πρόσβασης" autoFocus />
               <button type="button" onClick={unlock} disabled={checking}>{checking ? "…" : "Είσοδος"}</button>
               {lockError && <span className="recipientError">{lockError}</span>}
             </span>
-          : <button type="button" className="teamCodeToggle" onClick={() => setShowCodeBox(true)}>Έχεις κωδικό πρόσβασης;</button>}
+          : <button type="button" className="teamCodeToggle" onClick={() => setShowCodeBox(true)}>Είσαι εγγεγραμμένος/η χρήστης;</button>}
     </div>
     {/* key forces a full remount on login/logout - otherwise React keeps
         reusing the same component instance and every piece of state
@@ -1470,7 +1470,7 @@ function AlertsPanelContent({ code, onUnauthorized }: { code: string | null; onU
     </article> : <article className="panel emailPanel emailPanelLocked">
       <p className="eyebrow">EMAIL</p>
       <h2><span className="emailIcon" aria-hidden="true">✉</span>Ειδοποιήσεις μέσω email</h2>
-      <p className="emailCaption">Διαθέσιμο με κωδικό πρόσβασης - μπες παραπάνω για να διαχειριστείς παραλήπτες.</p>
+      <p className="emailCaption">Διαθέσιμο μόνο για εγγεγραμμένους χρήστες - πάτησε πάνω δεξιά «Είσαι εγγεγραμμένος/η χρήστης;» για να συνδεθείς.</p>
     </article>}
     </div>
     <article className="panel submittedPanel">
