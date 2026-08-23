@@ -1161,7 +1161,7 @@ function AlertsPanel() {
   return <>
     <div className="teamCodeBar">
       {code
-        ? <span className="teamCodeStatus">✓ Συνδεδεμένος/η<button type="button" onClick={logout}>Αποσύνδεση</button></span>
+        ? <span className="teamCodeStatus">✓ Σύνδεση ενεργή<button type="button" onClick={logout}>Αποσύνδεση</button></span>
         : showCodeBox
           ? <span className="teamCodeStatus">
               <input type="password" value={inputCode} onChange={(event) => { setInputCode(event.target.value); setLockError(""); }} onKeyDown={(event) => { if (event.key === "Enter") unlock(); }} placeholder="Κωδικός πρόσβασης" autoFocus />
@@ -1170,7 +1170,7 @@ function AlertsPanel() {
             </span>
           : <span className="teamCodeStatus">
               <span className="teamCodeHint">Η εγγραφή αποθηκεύει το προφίλ σου (CPV, διαγωνισμοί) και ενεργοποιεί email ειδοποιήσεις.</span>
-              <button type="button" className="teamCodeToggle" onClick={() => setShowCodeBox(true)}>Είσαι εγγεγραμμένος/η χρήστης;</button>
+              <button type="button" className="teamCodeToggle" onClick={() => setShowCodeBox(true)}>Σύνδεση</button>
             </span>}
     </div>
     {/* key forces a full remount on login/logout - otherwise React keeps
@@ -1473,7 +1473,7 @@ function AlertsPanelContent({ code, onUnauthorized }: { code: string | null; onU
     </article> : <article className="panel emailPanel emailPanelLocked">
       <p className="eyebrow">EMAIL</p>
       <h2><span className="emailIcon" aria-hidden="true">✉</span>Ειδοποιήσεις μέσω email</h2>
-      <p className="emailCaption">Χρειάζεται εγγεγραμμένο προφίλ - πάτησε πάνω δεξιά «Είσαι εγγεγραμμένος/η χρήστης;» για να συνδεθείς και να αποκτήσεις μόνιμο προφίλ με email ειδοποιήσεις.</p>
+      <p className="emailCaption">Χρειάζεται εγγεγραμμένο προφίλ - πάτησε πάνω δεξιά «Σύνδεση» για να αποκτήσεις μόνιμο προφίλ με email ειδοποιήσεις.</p>
     </article>}
     </div>
     <article className="panel submittedPanel">
