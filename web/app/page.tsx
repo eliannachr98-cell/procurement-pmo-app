@@ -1199,6 +1199,7 @@ function AlertsPanelContent({ code, onUnauthorized }: { code: string | null; onU
   const [recipients, setRecipients] = useState<{ email: string }[]>([]);
   const [newEmail, setNewEmail] = useState("");
   const [recipientError, setRecipientError] = useState("");
+  const [recipientNote, setRecipientNote] = useState("");
   const [submittedAdams, setSubmittedAdams] = useState<Set<string>>(new Set());
   const [interestedAdams, setInterestedAdams] = useState<Set<string>>(new Set());
   const [trackedItems, setTrackedItems] = useState<AlertItem[]>([]);
@@ -1310,12 +1311,14 @@ function AlertsPanelContent({ code, onUnauthorized }: { code: string | null; onU
   const addRecipient = () => {
     const email = newEmail.trim();
     if (!email) return;
+    setRecipientNote("");
     authFetch("/api/alert-recipients", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email }) })
       .then((response) => response.json())
       .then((payload) => {
         if (payload.error) { setRecipientError(payload.error); return; }
         setRecipientError("");
         setNewEmail("");
+        setRecipientNote(payload.welcomeEmailSent ? `Το πρώτο email στάλθηκε στο ${email}.` : "");
         loadRecipients();
       });
   };
@@ -1464,6 +1467,7 @@ function AlertsPanelContent({ code, onUnauthorized }: { code: string | null; onU
         <button type="button" onClick={addRecipient}>Προσθήκη</button>
       </div>
       {recipientError && <p className="recipientError">{recipientError}</p>}
+      {recipientNote && <p className="recipientNote">{recipientNote}</p>}
       {recipients.length > 0 && <div className="recipientChips">
         {recipients.map((item) => <span className="recipientChip" key={item.email}>{item.email}<button type="button" onClick={() => removeRecipient(item.email)} aria-label={`Αφαίρεση ${item.email}`}>×</button></span>)}
       </div>}
