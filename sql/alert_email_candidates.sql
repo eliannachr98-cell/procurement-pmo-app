@@ -57,10 +57,16 @@ language sql stable as $$
     from public.record_cpvs_compact
     where record_type = 'procurement' and cpv_code = any(p_cpv_codes)
   ),
-  tracked as (
+  submitted_adams as (
     select adam from public.alert_submissions
-    union
+  ),
+  interested_adams as (
     select adam from public.alert_interests
+  ),
+  tracked as (
+    select adam from submitted_adams
+    union
+    select adam from interested_adams
   ),
   candidates as (
     select p.adam, p.title, p.authority_name, p.document_category, p.publication_date, p.opening_at,
@@ -138,6 +144,14 @@ language sql stable as $$
     'publicationDate', publication_date,
     'openingDate', opening_at,
     'budget', budget,
+    -- Only meaningful for a 'extension' row (a new declaration/announcement
+    -- is by definition not yet tracked by anyone) - lets the email put
+    -- updates on tenders we've submitted or are considering into their own
+    -- sections instead of one flat list. Both can be true at once (the two
+    -- toggles in the app aren't mutually exclusive), so a row can land in
+    -- both sections.
+    'isSubmitted', (adam in (select adam from submitted_adams)),
+    'isInterested', (adam in (select adam from interested_adams)),
     -- No free-text "description" field exists anywhere in the source data -
     -- the matched CPV description(s) are the closest available stand-in for
     -- "what is this actually for", limited to the CPVs that matched the
