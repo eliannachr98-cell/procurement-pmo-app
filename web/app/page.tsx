@@ -1168,7 +1168,15 @@ function AlertsPanel() {
               <button type="button" onClick={unlock} disabled={checking}>{checking ? "…" : "Είσοδος"}</button>
               {lockError && <span className="recipientError">{lockError}</span>}
             </span>
-          : <button type="button" className="teamCodeToggle" onClick={() => setShowCodeBox(true)}>Σύνδεση</button>}
+          : <span className="teamCodeStatus">
+              <button type="button" className="teamCodeToggle" onClick={() => setShowCodeBox(true)}>Σύνδεση</button>
+              {/* Not wired up yet - individual self-service registration is a
+                  separate, bigger feature to build later (own login +
+                  persistent profile per person, distinct from this shared
+                  passcode). Shown now, disabled, so the entry point is
+                  already in place. */}
+              <button type="button" className="teamCodeSignup" disabled title="Σύντομα διαθέσιμο">Εγγραφή</button>
+            </span>}
     </div>
     {/* key forces a full remount on login/logout - otherwise React keeps
         reusing the same component instance and every piece of state
