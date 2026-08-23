@@ -132,6 +132,12 @@ export default function Home() {
   const [year, setYear] = useState("Όλα");
   const [contractType, setContractType] = useState<string[]>([]);
   const [documentType, setDocumentType] = useState("Όλοι");
+  // Lifted out of AlertsPanelContent so it survives switching to another tab
+  // and back - that page unmounts/remounts on every tab change, which would
+  // otherwise wipe free-mode watchlist picks (they're not persisted anywhere
+  // else) exactly like a page refresh, just triggered by a tab click instead.
+  const [alertsWatchlist, setAlertsWatchlist] = useState<WatchlistItem[]>([]);
+  const [alertsNutsFilter, setAlertsNutsFilter] = useState<NutsFilterItem[]>([]);
   const [lastSync, setLastSync] = useState<string | null>(null);
   const latestRequest = useRef(0);
   const latestDashboardRequest = useRef(0);
@@ -369,7 +375,7 @@ export default function Home() {
             </button>}
           </>}
           {page === "market" && <MarketGate>{(code) => <MarketPanel awards={awards} contracts={contracts} cpv={cpv} setCpv={setCpv} contractor={contractor} authority={authority} year={year} contractType={contractType} documentType={documentType} loadedCount={tenders.length} totalCount={totalTenders} stillLoading={hasMore && loading} locked={!code} />}</MarketGate>}
-          {page === "alerts" && <AlertsPanel />}
+          {page === "alerts" && <AlertsPanel watchlist={alertsWatchlist} setWatchlist={setAlertsWatchlist} nutsFilter={alertsNutsFilter} setNutsFilter={setAlertsNutsFilter} />}
         </section>
 
         {/* Ειδοποιήσεις is a CPV watch-list/alert feed, not a filtered view of the
@@ -1211,21 +1217,46 @@ function TeamCodeBar({ team }: { team: ReturnType<typeof useTeamCode> }) {
 // shared, code-gated recipient list). Entering the passcode switches to
 // "team" mode, which reads/writes the real shared tables, persists across
 // visits, and unlocks email alerts.
-function AlertsPanel() {
+function AlertsPanel({ watchlist, setWatchlist, nutsFilter, setNutsFilter }: {
+  watchlist: WatchlistItem[]; setWatchlist: (value: WatchlistItem[] | ((current: WatchlistItem[]) => WatchlistItem[])) => void;
+  nutsFilter: NutsFilterItem[]; setNutsFilter: (value: NutsFilterItem[] | ((current: NutsFilterItem[]) => NutsFilterItem[])) => void;
+}) {
   const team = useTeamCode();
+  const previousCode = useRef(team.code);
+  useEffect(() => {
+    // Logging out: the shared watchlist/nutsFilter state was mirroring the
+    // team's real, persisted picks - clear it so it doesn't linger and get
+    // shown as if it were free-mode state once code is gone.
+    if (previousCode.current && !team.code) { setWatchlist([]); setNutsFilter([]); }
+    previousCode.current = team.code;
+  }, [team.code, setWatchlist, setNutsFilter]);
   if (team.code === undefined) return null; // brief flash while reading localStorage
 
   return <>
     <TeamCodeBar team={team} />
     {/* key forces a full remount on login/logout - otherwise React keeps
         reusing the same component instance and every piece of state
-        (watchlist, alerts, submitted/interested, recipients) from the
-        previous mode stays on screen instead of being cleared. */}
-    <AlertsPanelContent key={team.code ?? "free"} code={team.code ?? null} onUnauthorized={team.onUnauthorized} />
+        (alerts, submitted/interested, recipients) from the previous mode
+        stays on screen instead of being cleared. watchlist/nutsFilter are
+        passed in from the parent instead, so they're unaffected by this
+        remount and by switching tabs away and back. */}
+    <AlertsPanelContent
+      key={team.code ?? "free"}
+      code={team.code ?? null}
+      onUnauthorized={team.onUnauthorized}
+      watchlist={watchlist}
+      setWatchlist={setWatchlist}
+      nutsFilter={nutsFilter}
+      setNutsFilter={setNutsFilter}
+    />
   </>;
 }
 
-function AlertsPanelContent({ code, onUnauthorized }: { code: string | null; onUnauthorized: () => void }) {
+function AlertsPanelContent({ code, onUnauthorized, watchlist, setWatchlist, nutsFilter, setNutsFilter }: {
+  code: string | null; onUnauthorized: () => void;
+  watchlist: WatchlistItem[]; setWatchlist: (value: WatchlistItem[] | ((current: WatchlistItem[]) => WatchlistItem[])) => void;
+  nutsFilter: NutsFilterItem[]; setNutsFilter: (value: NutsFilterItem[] | ((current: NutsFilterItem[]) => NutsFilterItem[])) => void;
+}) {
   const authFetch = useCallback((url: string, init: RequestInit = {}) => {
     return fetch(url, { ...init, headers: { ...(init.headers as Record<string, string> ?? {}), "x-alert-code": code ?? "" } })
       .then((response) => {
@@ -1234,8 +1265,6 @@ function AlertsPanelContent({ code, onUnauthorized }: { code: string | null; onU
       });
   }, [code, onUnauthorized]);
 
-  const [watchlist, setWatchlist] = useState<WatchlistItem[]>([]);
-  const [nutsFilter, setNutsFilter] = useState<NutsFilterItem[]>([]);
   const [alerts, setAlerts] = useState<AlertItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [alertTab, setAlertTab] = useState<"recent" | "active" | "inactive">("active");
