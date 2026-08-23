@@ -1599,7 +1599,7 @@ function AlertsPanelContent({ code, onUnauthorized }: { code: string | null; onU
       </div>
     </article>
     </div>
-    {code && <article className="panel apodeltiosiPanel">
+    {code ? <article className="panel apodeltiosiPanel">
       <p className="eyebrow">ΑΠΟΔΕΛΤΙΩΣΗ</p>
       <h2>Ανάλυση Διακήρυξης</h2>
       <p className="watchlistCaption">Ανέβασε το PDF μιας Διακήρυξης για αυτόματη αποδελτίωση σε δομημένη μορφή.</p>
@@ -1688,6 +1688,10 @@ function AlertsPanelContent({ code, onUnauthorized }: { code: string | null; onU
           <ul className="apodeltiosiList">{apodeltiosiResult.epishmanseis.map((item, i) => <li key={i}>{item}</li>)}</ul>
         </>}
       </div>}
+    </article> : <article className="panel apodeltiosiPanel apodeltiosiPanelLocked">
+      <p className="eyebrow">ΑΠΟΔΕΛΤΙΩΣΗ</p>
+      <h2>Ανάλυση Διακήρυξης</h2>
+      <p className="watchlistCaption">Για να ανεβάζεις Διακηρύξεις και να παίρνεις αυτόματη αποδελτίωση, συνδέσου ή εγγράψου.</p>
     </article>}
     {!loading && !watchlist.length && <article className="panel empty"><span>♢</span><h2>Δεν παρακολουθείς κανένα CPV</h2><p>Πρόσθεσε έναν ή περισσότερους κωδικούς CPV παραπάνω για να ξεκινήσεις να βλέπεις εδώ τους νέους διαγωνισμούς που ταιριάζουν.</p></article>}
     {error && <div className="dataBanner error">{error}</div>}
