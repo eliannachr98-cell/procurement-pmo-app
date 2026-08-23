@@ -1,6 +1,4 @@
-select public.alert_email_candidates(
-  'test-diagnostic@example.com',
-  (select array_agg(cpv_code) from public.cpv_watchlist),
-  null,
-  365
-);
+select column_name, data_type
+from information_schema.columns
+where table_name = 'awards_compact'
+order by column_name;
