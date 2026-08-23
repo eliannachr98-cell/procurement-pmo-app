@@ -1,3 +1,4 @@
-select recipient_email, count(*) as sent_rows, min(notified_at) as first_sent, max(notified_at) as last_sent
+select adam, notified_at
 from public.alert_notifications_sent
-group by recipient_email;
+where recipient_email = 'eliannachr.98@gmail.com'
+order by notified_at;
