@@ -1170,7 +1170,11 @@ function AlertsPanel() {
             </span>
           : <button type="button" className="teamCodeToggle" onClick={() => setShowCodeBox(true)}>Έχεις κωδικό πρόσβασης;</button>}
     </div>
-    <AlertsPanelContent code={code ?? null} onUnauthorized={onUnauthorized} />
+    {/* key forces a full remount on login/logout - otherwise React keeps
+        reusing the same component instance and every piece of state
+        (watchlist, alerts, submitted/interested, recipients) from the
+        previous mode stays on screen instead of being cleared. */}
+    <AlertsPanelContent key={code ?? "free"} code={code ?? null} onUnauthorized={onUnauthorized} />
   </>;
 }
 
