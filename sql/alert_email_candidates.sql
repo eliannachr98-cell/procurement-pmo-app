@@ -69,7 +69,12 @@ language sql stable as $$
     select adam from interested_adams
   ),
   candidates as (
-    select p.adam, p.title, p.authority_name, p.document_category, p.publication_date, p.opening_at,
+    -- tracked_adam is which adam counts for the isSubmitted/isInterested
+    -- check below: for a normal notice that's itself (ΚΗΜΔΗΣ keeps a
+    -- tender's extension/amendment notices under the same ADAM as the
+    -- original), but award_candidates below overrides this to the award's
+    -- procurement_adam since an award record has its own, different ADAM.
+    select p.adam, p.adam as tracked_adam, p.title, p.authority_name, p.document_category, p.publication_date, p.opening_at,
            coalesce(p.budget_inc_vat, p.budget_ex_vat, p.budget_unknown_vat, 0) as budget
     from public.procurements_compact p
     join watched_notice_adams w on w.adam = p.adam
@@ -131,10 +136,34 @@ language sql stable as $$
   extensions as (
     select c.*, 1 as rn from candidates c where c.document_category = 'extension'
   ),
+  -- Ανάδοχος notifications: not scoped to the CPV/region watchlist at all
+  -- (unlike declarations/announcements/extensions above) - a tender the team
+  -- already submitted on or is considering stays worth an award update
+  -- regardless of whether it's still on the current watchlist. Cancelled
+  -- awards (cancelled_at is not null) don't count as "a contractor came
+  -- out".
+  award_candidates as (
+    select a.adam, a.procurement_adam as tracked_adam, coalesce(p.title, a.title) as title,
+           coalesce(p.authority_name, a.authority_name) as authority_name,
+           'award'::text as document_category, a.award_date as publication_date,
+           null::timestamptz as opening_at,
+           coalesce(a.amount_inc_vat, a.amount_ex_vat, a.amount_unknown_vat, 0) as budget,
+           1 as rn
+    from public.awards_compact a
+    left join public.procurements_compact p on p.adam = a.procurement_adam
+    where a.procurement_adam in (select adam from tracked)
+      and a.cancelled_at is null
+      and not exists (
+        select 1 from public.alert_notifications_sent s
+        where s.adam = a.adam and s.recipient_email = p_recipient_email
+      )
+  ),
   final as (
     select * from declarations where rn = 1
     union all
     select * from extensions
+    union all
+    select * from award_candidates
   )
   select coalesce(json_agg(json_build_object(
     'adam', adam,
@@ -150,17 +179,28 @@ language sql stable as $$
     -- sections instead of one flat list. Both can be true at once (the two
     -- toggles in the app aren't mutually exclusive), so a row can land in
     -- both sections.
-    'isSubmitted', (adam in (select adam from submitted_adams)),
-    'isInterested', (adam in (select adam from interested_adams)),
+    'isSubmitted', (tracked_adam in (select adam from submitted_adams)),
+    'isInterested', (tracked_adam in (select adam from interested_adams)),
     -- No free-text "description" field exists anywhere in the source data -
     -- the matched CPV description(s) are the closest available stand-in for
     -- "what is this actually for", limited to the CPVs that matched the
-    -- watchlist (a notice can carry several unrelated CPVs otherwise).
+    -- watchlist (a notice can carry several unrelated CPVs otherwise). Not
+    -- meaningful for an award row (CPVs are attached to the original
+    -- procurement's adam, not the award's own adam) - contractors below
+    -- fills that role instead.
     'description', (
       select string_agg(distinct rc.cpv_description, '; ')
       from public.record_cpvs_compact rc
       where rc.record_adam = final.adam and rc.record_type = 'procurement'
         and rc.cpv_code = any(p_cpv_codes) and rc.cpv_description is not null
+    ),
+    -- Only populated for an 'award' row.
+    'contractors', (
+      case when document_category = 'award' then (
+        select string_agg(rc.contractor_name, ', ' order by rc.position)
+        from public.record_contractors_compact rc
+        where rc.record_adam = final.adam and rc.record_type = 'award'
+      ) else null end
     )
   ) order by publication_date desc nulls last), '[]'::json)
   from final;
