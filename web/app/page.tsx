@@ -1106,32 +1106,15 @@ function alertUrgency(openingDate: string | null): "open" | "urgent" | "passed" 
   return "open";
 }
 
-// Without the team passcode, watchlist/region/tracked picks live only in
-// this browser's localStorage instead of the shared Supabase tables - a
-// private sandbox nobody else can see, with no server round trip and (per
-// explicit choice) no email alerts, since those require the shared,
-// code-gated recipient list.
-const LOCAL_KEYS = { watchlist: "localCpvWatchlist", nuts: "localNutsFilter", submitted: "localSubmittedAdams", interested: "localInterestedAdams" };
-function readLocalList<T>(key: string): T[] {
-  try {
-    const raw = window.localStorage.getItem(key);
-    return raw ? JSON.parse(raw) : [];
-  } catch {
-    return [];
-  }
-}
-function writeLocalList(key: string, items: unknown[]) {
-  window.localStorage.setItem(key, JSON.stringify(items));
-}
-
 // The Ειδοποιήσεις page itself stays open to anyone - only the TEAM's own
 // shared picks (CPV/region watchlist, tracked tenders, email recipients) are
-// gated. Without the code, AlertsPanelContent runs in "local" mode: every
-// selection lives in this browser's localStorage instead of the shared
-// Supabase tables (see LOCAL_KEYS above), so a casual visitor can use the
-// page and build their own list without ever seeing - or touching - what
-// the team has picked. Entering the passcode switches to "team" mode, which
-// reads/writes the real shared tables and unlocks email alerts.
+// gated. Without the code, AlertsPanelContent runs in "free" mode: CPV/region
+// search and results work exactly the same, but nothing is written to the
+// shared Supabase tables OR persisted anywhere on this device - it's plain
+// component state, gone on refresh, with no email option (that needs the
+// shared, code-gated recipient list). Entering the passcode switches to
+// "team" mode, which reads/writes the real shared tables, persists across
+// visits, and unlocks email alerts.
 function AlertsPanel() {
   const [code, setCode] = useState<string | null | undefined>(undefined);
   const [inputCode, setInputCode] = useState("");
@@ -1242,7 +1225,7 @@ function AlertsPanelContent({ code, onUnauthorized }: { code: string | null; onU
   }, []);
 
   const loadSubmissions = useCallback(() => {
-    if (!code) { setSubmittedAdams(new Set(readLocalList<string>(LOCAL_KEYS.submitted))); return; }
+    if (!code) return; // free mode: nothing to load, state starts empty every visit
     authFetch("/api/alert-submissions")
       .then((response) => response.ok ? response.json() : { items: [] })
       .then((payload) => setSubmittedAdams(new Set((payload.items ?? []).map((item: { adam: string }) => item.adam))))
@@ -1258,11 +1241,7 @@ function AlertsPanelContent({ code, onUnauthorized }: { code: string | null; onU
       if (isMarked) next.delete(adam); else next.add(adam);
       return next;
     });
-    if (!code) {
-      const current = readLocalList<string>(LOCAL_KEYS.submitted);
-      writeLocalList(LOCAL_KEYS.submitted, isMarked ? current.filter((item) => item !== adam) : [...current, adam]);
-      return;
-    }
+    if (!code) return; // free mode: state above is the only record, nothing persisted
     if (isMarked) {
       authFetch(`/api/alert-submissions?adam=${encodeURIComponent(adam)}`, { method: "DELETE" }).then(loadSubmissions);
     } else {
@@ -1271,7 +1250,7 @@ function AlertsPanelContent({ code, onUnauthorized }: { code: string | null; onU
   };
 
   const loadInterests = useCallback(() => {
-    if (!code) { setInterestedAdams(new Set(readLocalList<string>(LOCAL_KEYS.interested))); return; }
+    if (!code) return;
     authFetch("/api/alert-interests")
       .then((response) => response.ok ? response.json() : { items: [] })
       .then((payload) => setInterestedAdams(new Set((payload.items ?? []).map((item: { adam: string }) => item.adam))))
@@ -1287,11 +1266,7 @@ function AlertsPanelContent({ code, onUnauthorized }: { code: string | null; onU
       if (isMarked) next.delete(adam); else next.add(adam);
       return next;
     });
-    if (!code) {
-      const current = readLocalList<string>(LOCAL_KEYS.interested);
-      writeLocalList(LOCAL_KEYS.interested, isMarked ? current.filter((item) => item !== adam) : [...current, adam]);
-      return;
-    }
+    if (!code) return;
     if (isMarked) {
       authFetch(`/api/alert-interests?adam=${encodeURIComponent(adam)}`, { method: "DELETE" }).then(loadInterests);
     } else {
@@ -1346,37 +1321,18 @@ function AlertsPanelContent({ code, onUnauthorized }: { code: string | null; onU
     authFetch(`/api/alert-recipients?email=${encodeURIComponent(email)}`, { method: "DELETE" }).then(loadRecipients);
   };
 
+  // Team mode: single source of truth is the server (/api/alerts with no
+  // params reads the shared watchlist/region tables and returns them
+  // alongside the matching feed) - watchlist/nutsFilter state here just
+  // mirrors whatever it last returned.
   const load = useCallback(() => {
     // A cold Vercel/Supabase connection occasionally 500s the first request
     // right after a page load; one silent retry clears most of those.
     const attemptFetch = (attempt: number) => {
       setLoading(true);
-      if (code) {
-        authFetch("/api/alerts")
-          .then((response) => response.ok ? response.json() : Promise.reject(new Error("alerts request failed")))
-          .then((payload) => { setWatchlist(payload.watchlist ?? []); setNutsFilter(payload.nutsFilter ?? []); setAlerts(payload.alerts ?? []); setError(""); setLoading(false); })
-          .catch(() => {
-            if (attempt < 2) { window.setTimeout(() => attemptFetch(attempt + 1), 900); return; }
-            setError("Δεν ήταν δυνατή η φόρτωση των ειδοποιήσεων.");
-            setLoading(false);
-          });
-        return;
-      }
-      // Local mode: the CPV/region picks already live in this browser, so
-      // they're just read back instead of fetched - only the matching-notice
-      // feed itself needs the server, computed straight from those codes
-      // rather than from the shared (team-only) watchlist tables.
-      const localWatchlist = readLocalList<WatchlistItem>(LOCAL_KEYS.watchlist);
-      const localNuts = readLocalList<NutsFilterItem>(LOCAL_KEYS.nuts);
-      setWatchlist(localWatchlist);
-      setNutsFilter(localNuts);
-      if (!localWatchlist.length) { setAlerts([]); setError(""); setLoading(false); return; }
-      const params = new URLSearchParams();
-      localWatchlist.forEach((item) => params.append("cpv", item.cpv_code));
-      localNuts.forEach((item) => params.append("nuts", item.nuts_code));
-      fetch(`/api/alerts?${params.toString()}`)
+      authFetch("/api/alerts")
         .then((response) => response.ok ? response.json() : Promise.reject(new Error("alerts request failed")))
-        .then((payload) => { setAlerts(payload.alerts ?? []); setError(""); setLoading(false); })
+        .then((payload) => { setWatchlist(payload.watchlist ?? []); setNutsFilter(payload.nutsFilter ?? []); setAlerts(payload.alerts ?? []); setError(""); setLoading(false); })
         .catch(() => {
           if (attempt < 2) { window.setTimeout(() => attemptFetch(attempt + 1), 900); return; }
           setError("Δεν ήταν δυνατή η φόρτωση των ειδοποιήσεων.");
@@ -1384,27 +1340,41 @@ function AlertsPanelContent({ code, onUnauthorized }: { code: string | null; onU
         });
     };
     attemptFetch(0);
-  }, [authFetch, code]);
+  }, [authFetch]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { if (code) load(); }, [code, load]);
+
+  // Free mode: watchlist/nutsFilter state IS the source of truth (nothing
+  // persisted, nothing to read back) - only the matching-notice feed itself
+  // needs the server, computed straight from whatever's currently in state.
+  // Runs automatically whenever that state changes, so adding/removing a CPV
+  // or region refreshes the results without a separate reload call.
+  const loadLocalAlerts = useCallback(() => {
+    if (!watchlist.length) { setAlerts([]); setError(""); setLoading(false); return; }
+    setLoading(true);
+    const params = new URLSearchParams();
+    watchlist.forEach((item) => params.append("cpv", item.cpv_code));
+    nutsFilter.forEach((item) => params.append("nuts", item.nuts_code));
+    fetch(`/api/alerts?${params.toString()}`)
+      .then((response) => response.ok ? response.json() : Promise.reject(new Error("alerts request failed")))
+      .then((payload) => { setAlerts(payload.alerts ?? []); setError(""); setLoading(false); })
+      .catch(() => { setError("Δεν ήταν δυνατή η φόρτωση των ειδοποιήσεων."); setLoading(false); });
+  }, [watchlist, nutsFilter]);
+
+  useEffect(() => { if (!code) loadLocalAlerts(); }, [code, watchlist, nutsFilter, loadLocalAlerts]);
+
+  // The refresh (↻) button needs one function regardless of mode.
+  const refresh = code ? load : loadLocalAlerts;
 
   const removeCpv = (cpvCode: string) => {
     setWatchlist((current) => current.filter((item) => item.cpv_code !== cpvCode));
-    if (!code) {
-      writeLocalList(LOCAL_KEYS.watchlist, readLocalList<WatchlistItem>(LOCAL_KEYS.watchlist).filter((item) => item.cpv_code !== cpvCode));
-      load();
-      return;
-    }
+    if (!code) return; // free mode: the state update above is the whole story
     authFetch(`/api/watchlist?cpv_code=${encodeURIComponent(cpvCode)}`, { method: "DELETE" }).then(load);
   };
 
   const removeNutsFilter = (nutsCode: string) => {
     setNutsFilter((current) => current.filter((item) => item.nuts_code !== nutsCode));
-    if (!code) {
-      writeLocalList(LOCAL_KEYS.nuts, readLocalList<NutsFilterItem>(LOCAL_KEYS.nuts).filter((item) => item.nuts_code !== nutsCode));
-      load();
-      return;
-    }
+    if (!code) return;
     authFetch(`/api/alert-nuts-filter?nuts_code=${encodeURIComponent(nutsCode)}`, { method: "DELETE" }).then(load);
   };
 
@@ -1427,7 +1397,7 @@ function AlertsPanelContent({ code, onUnauthorized }: { code: string | null; onU
     <div className="alertsLeftCol">
     <article className="panel watchlistPanel">
       <div className="watchlistRow cpvWatchRow">
-        <div className="filterHeading"><div><p className="eyebrow">CPV ALERTS</p><h2>Παρακολούθηση CPV</h2></div><button type="button" title={loading ? "Φόρτωση…" : "Ανανέωση ειδοποιήσεων"} onClick={load}><span className={loading ? "spinIcon" : ""}>↻</span></button></div>
+        <div className="filterHeading"><div><p className="eyebrow">CPV ALERTS</p><h2>Παρακολούθηση CPV</h2></div><button type="button" title={loading ? "Φόρτωση…" : "Ανανέωση ειδοποιήσεων"} onClick={refresh}><span className={loading ? "spinIcon" : ""}>↻</span></button></div>
         <div className="cpvNutsRow">
           <MultiSearchInput
             label="CPV"
@@ -1440,11 +1410,9 @@ function AlertsPanelContent({ code, onUnauthorized }: { code: string | null; onU
             }}
             onSelectOption={(option) => {
               if (!code) {
-                const current = readLocalList<WatchlistItem>(LOCAL_KEYS.watchlist);
-                if (!current.some((item) => item.cpv_code === option.value)) {
-                  writeLocalList(LOCAL_KEYS.watchlist, [...current, { cpv_code: option.value, cpv_label: option.label }]);
-                }
-                load();
+                setWatchlist((current) => current.some((item) => item.cpv_code === option.value)
+                  ? current
+                  : [...current, { cpv_code: option.value, cpv_label: option.label }]);
                 return;
               }
               authFetch("/api/watchlist", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ cpv_code: option.value, cpv_label: option.label }) })
@@ -1463,11 +1431,9 @@ function AlertsPanelContent({ code, onUnauthorized }: { code: string | null; onU
             }}
             onSelectOption={(option) => {
               if (!code) {
-                const current = readLocalList<NutsFilterItem>(LOCAL_KEYS.nuts);
-                if (!current.some((item) => item.nuts_code === option.value)) {
-                  writeLocalList(LOCAL_KEYS.nuts, [...current, { nuts_code: option.value, nuts_name: option.label }]);
-                }
-                load();
+                setNutsFilter((current) => current.some((item) => item.nuts_code === option.value)
+                  ? current
+                  : [...current, { nuts_code: option.value, nuts_name: option.label }]);
                 return;
               }
               authFetch("/api/alert-nuts-filter", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ nuts_code: option.value, nuts_name: option.label }) })
