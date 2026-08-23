@@ -1106,21 +1106,38 @@ function alertUrgency(openingDate: string | null): "open" | "urgent" | "passed" 
   return "open";
 }
 
-// The Ειδοποιήσεις tab holds the team's own CPV/region picks and tracked
-// tenders, not public ΚΗΜΔΗΣ data - the app has no login otherwise, so
-// anyone with the link could otherwise see (and edit) exactly what the team
-// is watching/bidding on. This wrapper is the only thing standing in the
-// way: it withholds AlertsPanelContent (and therefore every fetch it would
-// make) until a passcode matching the server's ALERT_ACCESS_CODE is
-// supplied, then remembers it in localStorage so it's only typed once per
-// browser.
+// Without the team passcode, watchlist/region/tracked picks live only in
+// this browser's localStorage instead of the shared Supabase tables - a
+// private sandbox nobody else can see, with no server round trip and (per
+// explicit choice) no email alerts, since those require the shared,
+// code-gated recipient list.
+const LOCAL_KEYS = { watchlist: "localCpvWatchlist", nuts: "localNutsFilter", submitted: "localSubmittedAdams", interested: "localInterestedAdams" };
+function readLocalList<T>(key: string): T[] {
+  try {
+    const raw = window.localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+function writeLocalList(key: string, items: unknown[]) {
+  window.localStorage.setItem(key, JSON.stringify(items));
+}
+
+// The Ειδοποιήσεις page itself stays open to anyone - only the TEAM's own
+// shared picks (CPV/region watchlist, tracked tenders, email recipients) are
+// gated. Without the code, AlertsPanelContent runs in "local" mode: every
+// selection lives in this browser's localStorage instead of the shared
+// Supabase tables (see LOCAL_KEYS above), so a casual visitor can use the
+// page and build their own list without ever seeing - or touching - what
+// the team has picked. Entering the passcode switches to "team" mode, which
+// reads/writes the real shared tables and unlocks email alerts.
 function AlertsPanel() {
-  // undefined = localStorage not checked yet (initial render), null = checked
-  // and no code stored (show the lock screen), string = unlocked.
   const [code, setCode] = useState<string | null | undefined>(undefined);
   const [inputCode, setInputCode] = useState("");
   const [checking, setChecking] = useState(false);
   const [lockError, setLockError] = useState("");
+  const [showCodeBox, setShowCodeBox] = useState(false);
 
   useEffect(() => {
     setCode(window.localStorage.getItem("alertAccessCode"));
@@ -1135,12 +1152,19 @@ function AlertsPanel() {
         if (response.ok) {
           window.localStorage.setItem("alertAccessCode", inputCode);
           setCode(inputCode);
+          setShowCodeBox(false);
         } else {
           setLockError("Λάθος κωδικός.");
         }
       })
       .catch(() => setLockError("Σφάλμα σύνδεσης - δοκίμασε ξανά."))
       .finally(() => setChecking(false));
+  };
+
+  const logout = () => {
+    window.localStorage.removeItem("alertAccessCode");
+    setCode(null);
+    setInputCode("");
   };
 
   const onUnauthorized = useCallback(() => {
@@ -1150,29 +1174,26 @@ function AlertsPanel() {
   }, []);
 
   if (code === undefined) return null; // brief flash while reading localStorage
-  if (!code) return <div className="alertsTopGrid"><article className="panel alertsLockPanel">
-    <p className="eyebrow">ΕΙΔΟΠΟΙΗΣΕΙΣ</p>
-    <h2>Προστατευμένη ενότητα</h2>
-    <p className="watchlistCaption">Ορατή μόνο στην ομάδα - βάλε τον κωδικό πρόσβασης.</p>
-    <div className="recipientInput">
-      <input
-        type="password"
-        value={inputCode}
-        onChange={(event) => { setInputCode(event.target.value); setLockError(""); }}
-        onKeyDown={(event) => { if (event.key === "Enter") unlock(); }}
-        placeholder="Κωδικός πρόσβασης"
-      />
-      <button type="button" onClick={unlock} disabled={checking}>{checking ? "…" : "Είσοδος"}</button>
-    </div>
-    {lockError && <p className="recipientError">{lockError}</p>}
-  </article></div>;
 
-  return <AlertsPanelContent code={code} onUnauthorized={onUnauthorized} />;
+  return <>
+    <div className="teamCodeBar">
+      {code
+        ? <span className="teamCodeStatus">✓ Στοιχεία ομάδας<button type="button" onClick={logout}>Αποσύνδεση</button></span>
+        : showCodeBox
+          ? <span className="teamCodeStatus">
+              <input type="password" value={inputCode} onChange={(event) => { setInputCode(event.target.value); setLockError(""); }} onKeyDown={(event) => { if (event.key === "Enter") unlock(); }} placeholder="Κωδικός ομάδας" autoFocus />
+              <button type="button" onClick={unlock} disabled={checking}>{checking ? "…" : "Είσοδος"}</button>
+              {lockError && <span className="recipientError">{lockError}</span>}
+            </span>
+          : <button type="button" className="teamCodeToggle" onClick={() => setShowCodeBox(true)}>Έχεις τον κωδικό της ομάδας;</button>}
+    </div>
+    <AlertsPanelContent code={code ?? null} onUnauthorized={onUnauthorized} />
+  </>;
 }
 
-function AlertsPanelContent({ code, onUnauthorized }: { code: string; onUnauthorized: () => void }) {
+function AlertsPanelContent({ code, onUnauthorized }: { code: string | null; onUnauthorized: () => void }) {
   const authFetch = useCallback((url: string, init: RequestInit = {}) => {
-    return fetch(url, { ...init, headers: { ...(init.headers as Record<string, string> ?? {}), "x-alert-code": code } })
+    return fetch(url, { ...init, headers: { ...(init.headers as Record<string, string> ?? {}), "x-alert-code": code ?? "" } })
       .then((response) => {
         if (response.status === 401) onUnauthorized();
         return response;
@@ -1221,11 +1242,12 @@ function AlertsPanelContent({ code, onUnauthorized }: { code: string; onUnauthor
   }, []);
 
   const loadSubmissions = useCallback(() => {
+    if (!code) { setSubmittedAdams(new Set(readLocalList<string>(LOCAL_KEYS.submitted))); return; }
     authFetch("/api/alert-submissions")
       .then((response) => response.ok ? response.json() : { items: [] })
       .then((payload) => setSubmittedAdams(new Set((payload.items ?? []).map((item: { adam: string }) => item.adam))))
       .catch(() => setSubmittedAdams(new Set()));
-  }, [authFetch]);
+  }, [authFetch, code]);
 
   useEffect(() => { loadSubmissions(); }, [loadSubmissions]);
 
@@ -1236,6 +1258,11 @@ function AlertsPanelContent({ code, onUnauthorized }: { code: string; onUnauthor
       if (isMarked) next.delete(adam); else next.add(adam);
       return next;
     });
+    if (!code) {
+      const current = readLocalList<string>(LOCAL_KEYS.submitted);
+      writeLocalList(LOCAL_KEYS.submitted, isMarked ? current.filter((item) => item !== adam) : [...current, adam]);
+      return;
+    }
     if (isMarked) {
       authFetch(`/api/alert-submissions?adam=${encodeURIComponent(adam)}`, { method: "DELETE" }).then(loadSubmissions);
     } else {
@@ -1244,11 +1271,12 @@ function AlertsPanelContent({ code, onUnauthorized }: { code: string; onUnauthor
   };
 
   const loadInterests = useCallback(() => {
+    if (!code) { setInterestedAdams(new Set(readLocalList<string>(LOCAL_KEYS.interested))); return; }
     authFetch("/api/alert-interests")
       .then((response) => response.ok ? response.json() : { items: [] })
       .then((payload) => setInterestedAdams(new Set((payload.items ?? []).map((item: { adam: string }) => item.adam))))
       .catch(() => setInterestedAdams(new Set()));
-  }, [authFetch]);
+  }, [authFetch, code]);
 
   useEffect(() => { loadInterests(); }, [loadInterests]);
 
@@ -1259,6 +1287,11 @@ function AlertsPanelContent({ code, onUnauthorized }: { code: string; onUnauthor
       if (isMarked) next.delete(adam); else next.add(adam);
       return next;
     });
+    if (!code) {
+      const current = readLocalList<string>(LOCAL_KEYS.interested);
+      writeLocalList(LOCAL_KEYS.interested, isMarked ? current.filter((item) => item !== adam) : [...current, adam]);
+      return;
+    }
     if (isMarked) {
       authFetch(`/api/alert-interests?adam=${encodeURIComponent(adam)}`, { method: "DELETE" }).then(loadInterests);
     } else {
@@ -1276,18 +1309,22 @@ function AlertsPanelContent({ code, onUnauthorized }: { code: string; onUnauthor
     if (!adams.length) { setTrackedItems([]); return; }
     const params = new URLSearchParams();
     adams.forEach((adam) => params.append("adam", adam));
-    authFetch(`/api/alert-tenders?${params.toString()}`)
+    // Not team-gated: resolving already-known ADAMs to their public ΚΗΜΔΗΣ
+    // details reveals nothing about who's tracking what, so this works the
+    // same in local mode as it does for the team.
+    fetch(`/api/alert-tenders?${params.toString()}`)
       .then((response) => response.ok ? response.json() : { items: [] })
       .then((payload) => setTrackedItems(payload.items ?? []))
       .catch(() => setTrackedItems([]));
-  }, [submittedAdams, interestedAdams, authFetch]);
+  }, [submittedAdams, interestedAdams]);
 
   const loadRecipients = useCallback(() => {
+    if (!code) { setRecipients([]); return; }
     authFetch("/api/alert-recipients")
       .then((response) => response.ok ? response.json() : { items: [] })
       .then((payload) => setRecipients(payload.items ?? []))
       .catch(() => setRecipients([]));
-  }, [authFetch]);
+  }, [authFetch, code]);
 
   useEffect(() => { loadRecipients(); }, [loadRecipients]);
 
@@ -1314,9 +1351,32 @@ function AlertsPanelContent({ code, onUnauthorized }: { code: string; onUnauthor
     // right after a page load; one silent retry clears most of those.
     const attemptFetch = (attempt: number) => {
       setLoading(true);
-      authFetch("/api/alerts")
+      if (code) {
+        authFetch("/api/alerts")
+          .then((response) => response.ok ? response.json() : Promise.reject(new Error("alerts request failed")))
+          .then((payload) => { setWatchlist(payload.watchlist ?? []); setNutsFilter(payload.nutsFilter ?? []); setAlerts(payload.alerts ?? []); setError(""); setLoading(false); })
+          .catch(() => {
+            if (attempt < 2) { window.setTimeout(() => attemptFetch(attempt + 1), 900); return; }
+            setError("Δεν ήταν δυνατή η φόρτωση των ειδοποιήσεων.");
+            setLoading(false);
+          });
+        return;
+      }
+      // Local mode: the CPV/region picks already live in this browser, so
+      // they're just read back instead of fetched - only the matching-notice
+      // feed itself needs the server, computed straight from those codes
+      // rather than from the shared (team-only) watchlist tables.
+      const localWatchlist = readLocalList<WatchlistItem>(LOCAL_KEYS.watchlist);
+      const localNuts = readLocalList<NutsFilterItem>(LOCAL_KEYS.nuts);
+      setWatchlist(localWatchlist);
+      setNutsFilter(localNuts);
+      if (!localWatchlist.length) { setAlerts([]); setError(""); setLoading(false); return; }
+      const params = new URLSearchParams();
+      localWatchlist.forEach((item) => params.append("cpv", item.cpv_code));
+      localNuts.forEach((item) => params.append("nuts", item.nuts_code));
+      fetch(`/api/alerts?${params.toString()}`)
         .then((response) => response.ok ? response.json() : Promise.reject(new Error("alerts request failed")))
-        .then((payload) => { setWatchlist(payload.watchlist ?? []); setNutsFilter(payload.nutsFilter ?? []); setAlerts(payload.alerts ?? []); setError(""); setLoading(false); })
+        .then((payload) => { setAlerts(payload.alerts ?? []); setError(""); setLoading(false); })
         .catch(() => {
           if (attempt < 2) { window.setTimeout(() => attemptFetch(attempt + 1), 900); return; }
           setError("Δεν ήταν δυνατή η φόρτωση των ειδοποιήσεων.");
@@ -1324,18 +1384,28 @@ function AlertsPanelContent({ code, onUnauthorized }: { code: string; onUnauthor
         });
     };
     attemptFetch(0);
-  }, [authFetch]);
+  }, [authFetch, code]);
 
   useEffect(() => { load(); }, [load]);
 
-  const removeCpv = (code: string) => {
-    setWatchlist((current) => current.filter((item) => item.cpv_code !== code));
-    authFetch(`/api/watchlist?cpv_code=${encodeURIComponent(code)}`, { method: "DELETE" }).then(load);
+  const removeCpv = (cpvCode: string) => {
+    setWatchlist((current) => current.filter((item) => item.cpv_code !== cpvCode));
+    if (!code) {
+      writeLocalList(LOCAL_KEYS.watchlist, readLocalList<WatchlistItem>(LOCAL_KEYS.watchlist).filter((item) => item.cpv_code !== cpvCode));
+      load();
+      return;
+    }
+    authFetch(`/api/watchlist?cpv_code=${encodeURIComponent(cpvCode)}`, { method: "DELETE" }).then(load);
   };
 
-  const removeNutsFilter = (code: string) => {
-    setNutsFilter((current) => current.filter((item) => item.nuts_code !== code));
-    authFetch(`/api/alert-nuts-filter?nuts_code=${encodeURIComponent(code)}`, { method: "DELETE" }).then(load);
+  const removeNutsFilter = (nutsCode: string) => {
+    setNutsFilter((current) => current.filter((item) => item.nuts_code !== nutsCode));
+    if (!code) {
+      writeLocalList(LOCAL_KEYS.nuts, readLocalList<NutsFilterItem>(LOCAL_KEYS.nuts).filter((item) => item.nuts_code !== nutsCode));
+      load();
+      return;
+    }
+    authFetch(`/api/alert-nuts-filter?nuts_code=${encodeURIComponent(nutsCode)}`, { method: "DELETE" }).then(load);
   };
 
   const openTender = (adam: string) => {
@@ -1369,6 +1439,14 @@ function AlertsPanelContent({ code, onUnauthorized }: { code: string; onUnauthor
               if (removed) removeCpv(removed);
             }}
             onSelectOption={(option) => {
+              if (!code) {
+                const current = readLocalList<WatchlistItem>(LOCAL_KEYS.watchlist);
+                if (!current.some((item) => item.cpv_code === option.value)) {
+                  writeLocalList(LOCAL_KEYS.watchlist, [...current, { cpv_code: option.value, cpv_label: option.label }]);
+                }
+                load();
+                return;
+              }
               authFetch("/api/watchlist", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ cpv_code: option.value, cpv_label: option.label }) })
                 .then(load);
             }}
@@ -1384,6 +1462,14 @@ function AlertsPanelContent({ code, onUnauthorized }: { code: string; onUnauthor
               if (removed) removeNutsFilter(removed);
             }}
             onSelectOption={(option) => {
+              if (!code) {
+                const current = readLocalList<NutsFilterItem>(LOCAL_KEYS.nuts);
+                if (!current.some((item) => item.nuts_code === option.value)) {
+                  writeLocalList(LOCAL_KEYS.nuts, [...current, { nuts_code: option.value, nuts_name: option.label }]);
+                }
+                load();
+                return;
+              }
               authFetch("/api/alert-nuts-filter", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ nuts_code: option.value, nuts_name: option.label }) })
                 .then(load);
             }}
@@ -1393,7 +1479,7 @@ function AlertsPanelContent({ code, onUnauthorized }: { code: string; onUnauthor
       </div>
       <p className="watchlistCaption">Οι νέοι διαγωνισμοί που δημοσιεύονται σε αυτά τα CPV εμφανίζονται παρακάτω, με αποδελτίωση των βασικών στοιχείων{nutsFilter.length > 0 && ", περιορισμένοι στην περιοχή που επέλεξες"}.</p>
     </article>
-    <article className="panel emailPanel">
+    {code ? <article className="panel emailPanel">
       <p className="eyebrow">EMAIL</p>
       <h2><span className="emailIcon" aria-hidden="true">✉</span>Ειδοποιήσεις μέσω email</h2>
       <p className="emailCaption">Στείλε νέους διαγωνισμούς απευθείας στα εισερχόμενα.</p>
@@ -1411,7 +1497,11 @@ function AlertsPanelContent({ code, onUnauthorized }: { code: string; onUnauthor
       {recipients.length > 0 && <div className="recipientChips">
         {recipients.map((item) => <span className="recipientChip" key={item.email}>{item.email}<button type="button" onClick={() => removeRecipient(item.email)} aria-label={`Αφαίρεση ${item.email}`}>×</button></span>)}
       </div>}
-    </article>
+    </article> : <article className="panel emailPanel emailPanelLocked">
+      <p className="eyebrow">EMAIL</p>
+      <h2><span className="emailIcon" aria-hidden="true">✉</span>Ειδοποιήσεις μέσω email</h2>
+      <p className="emailCaption">Διαθέσιμο μόνο για την ομάδα - μπες με τον κωδικό ομάδας για να διαχειριστείς παραλήπτες.</p>
+    </article>}
     </div>
     <article className="panel submittedPanel">
       <p className="eyebrow">ΚΑΤΑΤΕΘΕΙΜΕΝΕΣ</p>

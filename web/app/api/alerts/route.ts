@@ -26,7 +26,33 @@ type AlertRow = {
 };
 
 export async function GET(request: Request) {
-  if (!requireAlertCode(request)) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const url = new URL(request.url);
+  const authorized = requireAlertCode(request);
+
+  // Without the team code, this only runs for a visitor's own local
+  // (localStorage) watchlist, passed in explicitly as ?cpv=...&nuts=... -
+  // the shared cpv_watchlist/alert_nuts_filter tables (the team's actual
+  // picks) are never read in this branch, so nothing about them leaks.
+  // Computing the feed still needs the server (it's a DB query), but the
+  // codes driving it came from the caller, not from anything stored here.
+  if (!authorized) {
+    const localCpvCodes = url.searchParams.getAll("cpv");
+    if (!localCpvCodes.length) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+    try {
+      const localNuts = url.searchParams.getAll("nuts");
+      const alerts = await supabaseRpc<AlertRow[]>("alerts_feed", {
+        p_cpv_codes: localCpvCodes,
+        p_days: ALERT_WINDOW_DAYS,
+        p_nuts_prefixes: localNuts.length ? localNuts : null,
+      });
+      const sorted = [...(alerts ?? [])].sort((a, b) => (b.openingDate ?? "").localeCompare(a.openingDate ?? ""));
+      return NextResponse.json({ alerts: sorted });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown alerts error";
+      return NextResponse.json({ error: message }, { status: 500 });
+    }
+  }
+
   try {
     const [watchlist, nutsFilter] = await Promise.all([
       supabaseGet<WatchlistRow[]>("cpv_watchlist?select=cpv_code,cpv_label&order=created_at.desc"),

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { supabaseRpc, requireAlertCode } from "@/lib/matching";
+import { supabaseRpc } from "@/lib/matching";
 
 export const dynamic = "force-dynamic";
 
@@ -23,8 +23,11 @@ type AlertRow = {
 // returns notices matching the *current* CPV watchlist within a recent
 // window (removing a watched CPV would otherwise make an already-tracked
 // tender disappear from these lists).
+// Not team-gated: resolving already-known ADAMs to their public ΚΗΜΔΗΣ
+// details doesn't reveal *whose* tracked list they came from - that's
+// exactly what makes it safe to reuse for a local (non-team) visitor's own
+// tracked tenders too.
 export async function GET(request: Request) {
-  if (!requireAlertCode(request)) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   try {
     const adams = new URL(request.url).searchParams.getAll("adam").flatMap((value) => value.split(",")).map((value) => value.trim()).filter(Boolean);
     if (!adams.length) return NextResponse.json({ items: [] });
