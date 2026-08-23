@@ -380,8 +380,8 @@ export default function Home() {
               {loading ? "Φόρτωση…" : `Φόρτωση περισσότερων (${number.format(tenders.length)} από ${number.format(totalTenders)})`}
             </button>}
           </>}
-          {page === "market" && <MarketGate onLogout={() => { setMarketSelectedContractor(""); setMarketContractorSearch(""); setMarketVisibleCount(10); }}>{(code) => <MarketPanel awards={awards} contracts={contracts} cpv={cpv} setCpv={setCpv} contractor={contractor} authority={authority} year={year} contractType={contractType} documentType={documentType} loadedCount={tenders.length} totalCount={totalTenders} stillLoading={hasMore && loading} locked={!code} selectedContractor={marketSelectedContractor} setSelectedContractor={setMarketSelectedContractor} contractorSearch={marketContractorSearch} setContractorSearch={setMarketContractorSearch} visibleCount={marketVisibleCount} setVisibleCount={setMarketVisibleCount} />}</MarketGate>}
-          {page === "alerts" && <AlertsPanel watchlist={alertsWatchlist} setWatchlist={setAlertsWatchlist} nutsFilter={alertsNutsFilter} setNutsFilter={setAlertsNutsFilter} />}
+          {page === "market" && <MarketGate onLogout={() => { setMarketSelectedContractor(""); setMarketContractorSearch(""); setMarketVisibleCount(10); setContractor([]); }}>{(code) => <MarketPanel awards={awards} contracts={contracts} cpv={cpv} setCpv={setCpv} contractor={contractor} authority={authority} year={year} contractType={contractType} documentType={documentType} loadedCount={tenders.length} totalCount={totalTenders} stillLoading={hasMore && loading} locked={!code} selectedContractor={marketSelectedContractor} setSelectedContractor={setMarketSelectedContractor} contractorSearch={marketContractorSearch} setContractorSearch={setMarketContractorSearch} visibleCount={marketVisibleCount} setVisibleCount={setMarketVisibleCount} />}</MarketGate>}
+          {page === "alerts" && <AlertsPanel watchlist={alertsWatchlist} setWatchlist={setAlertsWatchlist} nutsFilter={alertsNutsFilter} setNutsFilter={setAlertsNutsFilter} setContractor={setContractor} />}
         </section>
 
         {/* Ειδοποιήσεις is a CPV watch-list/alert feed, not a filtered view of the
@@ -1228,19 +1228,22 @@ function TeamCodeBar({ team }: { team: ReturnType<typeof useTeamCode> }) {
 // shared, code-gated recipient list). Entering the passcode switches to
 // "team" mode, which reads/writes the real shared tables, persists across
 // visits, and unlocks email alerts.
-function AlertsPanel({ watchlist, setWatchlist, nutsFilter, setNutsFilter }: {
+function AlertsPanel({ watchlist, setWatchlist, nutsFilter, setNutsFilter, setContractor }: {
   watchlist: WatchlistItem[]; setWatchlist: (value: WatchlistItem[] | ((current: WatchlistItem[]) => WatchlistItem[])) => void;
   nutsFilter: NutsFilterItem[]; setNutsFilter: (value: NutsFilterItem[] | ((current: NutsFilterItem[]) => NutsFilterItem[])) => void;
+  setContractor: (value: string[]) => void;
 }) {
   const team = useTeamCode();
   const previousCode = useRef(team.code);
   useEffect(() => {
     // Logging out: the shared watchlist/nutsFilter state was mirroring the
     // team's real, persisted picks - clear it so it doesn't linger and get
-    // shown as if it were free-mode state once code is gone.
-    if (previousCode.current && !team.code) { setWatchlist([]); setNutsFilter([]); }
+    // shown as if it were free-mode state once code is gone. Ανάδοχος is a
+    // sidebar filter, not team data, but she wants the same "gone on
+    // logout" behavior for it too.
+    if (previousCode.current && !team.code) { setWatchlist([]); setNutsFilter([]); setContractor([]); }
     previousCode.current = team.code;
-  }, [team.code, setWatchlist, setNutsFilter]);
+  }, [team.code, setWatchlist, setNutsFilter, setContractor]);
   if (team.code === undefined) return null; // brief flash while reading localStorage
 
   return <>
