@@ -1,1 +1,1 @@
-select count(*) from public.alert_submissions where adam = '24PROC015754368';
+select email, created_at from public.alert_recipients order by created_at desc;
