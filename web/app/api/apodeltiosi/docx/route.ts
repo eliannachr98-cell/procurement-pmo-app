@@ -141,7 +141,7 @@ export async function POST(request: Request) {
     const buffer = await Packer.toBuffer(doc);
 
     const safeTitle = parsed.data.titlos.slice(0, 60).replace(/[^\p{L}\p{N} ]/gu, "").trim() || "apodeltiosi";
-    return new NextResponse(buffer, {
+    return new NextResponse(new Uint8Array(buffer), {
       status: 200,
       headers: {
         "Content-Type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
