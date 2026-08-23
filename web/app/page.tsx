@@ -1168,10 +1168,7 @@ function AlertsPanel() {
               <button type="button" onClick={unlock} disabled={checking}>{checking ? "…" : "Είσοδος"}</button>
               {lockError && <span className="recipientError">{lockError}</span>}
             </span>
-          : <span className="teamCodeStatus">
-              <span className="teamCodeHint">Η εγγραφή αποθηκεύει το προφίλ σου (CPV, διαγωνισμοί) και ενεργοποιεί email ειδοποιήσεις.</span>
-              <button type="button" className="teamCodeToggle" onClick={() => setShowCodeBox(true)}>Σύνδεση</button>
-            </span>}
+          : <button type="button" className="teamCodeToggle" onClick={() => setShowCodeBox(true)}>Σύνδεση</button>}
     </div>
     {/* key forces a full remount on login/logout - otherwise React keeps
         reusing the same component instance and every piece of state
@@ -1450,7 +1447,7 @@ function AlertsPanelContent({ code, onUnauthorized }: { code: string | null; onU
           />
         </div>
       </div>
-      <p className="watchlistCaption">Οι νέοι διαγωνισμοί που δημοσιεύονται σε αυτά τα CPV εμφανίζονται παρακάτω, με αποδελτίωση των βασικών στοιχείων{nutsFilter.length > 0 && ", περιορισμένοι στην περιοχή που επέλεξες"}.{!code && " Χωρίς εγγεγραμμένο προφίλ, η επιλογή σου δεν αποθηκεύεται - χάνεται όταν φύγεις από τη σελίδα."}</p>
+      <p className="watchlistCaption">Οι νέοι διαγωνισμοί που δημοσιεύονται σε αυτά τα CPV εμφανίζονται παρακάτω, με αποδελτίωση των βασικών στοιχείων{nutsFilter.length > 0 && ", περιορισμένοι στην περιοχή που επέλεξες"}.</p>
     </article>
     {code ? <article className="panel emailPanel">
       <p className="eyebrow">EMAIL</p>
@@ -1473,7 +1470,7 @@ function AlertsPanelContent({ code, onUnauthorized }: { code: string | null; onU
     </article> : <article className="panel emailPanel emailPanelLocked">
       <p className="eyebrow">EMAIL</p>
       <h2><span className="emailIcon" aria-hidden="true">✉</span>Ειδοποιήσεις μέσω email</h2>
-      <p className="emailCaption">Χρειάζεται εγγεγραμμένο προφίλ - πάτησε πάνω δεξιά «Σύνδεση» για να αποκτήσεις μόνιμο προφίλ με email ειδοποιήσεις.</p>
+      <p className="emailCaption">Για να ενημερώνεσαι με νέες ειδοποιήσεις για CPV/διαγωνισμούς που σε ενδιαφέρουν, συνδέσου ή εγγράψου.</p>
     </article>}
     </div>
     <article className="panel submittedPanel">
