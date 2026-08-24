@@ -386,17 +386,17 @@ export default function Home() {
         </nav>
       </header>
 
+      {/* One shared login control for the whole app instead of a separate
+          copy on Ειδοποιήσεις and Αγορά - always visible so its state can
+          never be out of sync with itself. Sits below the tab row, same
+          spot regardless of which tab is active. */}
+      <div className="teamCodeRow">{team.code !== undefined && <TeamCodeBar team={team} />}</div>
+
       <div className={`workspace${page === "alerts" ? " workspaceFull" : ""}`}>
         <section className="content">
           <div className="pageTitle">
             <div><p className="eyebrow">PROCUREMENT INTELLIGENCE</p><h1>{page === "overview" ? "Επισκόπηση" : page === "tenders" ? "Διαγωνισμοί" : page === "market" ? "Αγορά & Ανταγωνισμός" : "Ειδοποιήσεις"}</h1></div>
-            <div className="pageTitleActions">
-              {(page === "overview" || page === "tenders") && <label className="search"><span>⌕</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Αναζήτηση με ΑΔΑΜ ή τίτλο…" /></label>}
-              {/* One shared login control for the whole app instead of a
-                  separate copy on Ειδοποιήσεις and Αγορά - always visible so
-                  its state can never be out of sync with itself. */}
-              {team.code !== undefined && <TeamCodeBar team={team} />}
-            </div>
+            {(page === "overview" || page === "tenders") && <label className="search"><span>⌕</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Αναζήτηση με ΑΔΑΜ ή τίτλο…" /></label>}
           </div>
           {loading && tenders.length === 0 && <div className="dataBanner">Φόρτωση πραγματικών δεδομένων από Supabase…</div>}
           {dataError && <div className="dataBanner error">{dataError} · εμφανίζεται προσωρινό δείγμα.</div>}
