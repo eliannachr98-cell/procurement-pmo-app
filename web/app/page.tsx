@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject, type SyntheticEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type RefObject, type SyntheticEvent } from "react";
 import "leaflet/dist/leaflet.css";
 import { captureChartImage, downloadExcel, downloadPdf, type ExportPayload } from "@/lib/exports";
 import type { Apodeltiosi } from "@/lib/apodeltiosi";
@@ -144,13 +144,24 @@ export default function Home() {
   const [marketSelectedContractor, setMarketSelectedContractor] = useState("");
   const [marketContractorSearch, setMarketContractorSearch] = useState("");
   const [marketVisibleCount, setMarketVisibleCount] = useState(10);
-  // Home has no useTeamCode() instance of its own (only AlertsPanel/MarketGate
-  // do, each for their own TeamCodeBar) - they report their code up via
-  // onCodeChange instead, just so the Ανάδοχος filter can be restored from
-  // (and saved to) contractor_watchlist on login, the same way cpv_watchlist
-  // already persists the Ειδοποιήσεις CPV picks - not just kept in memory
-  // for the current tab, which is all the earlier fix did.
-  const [homeTeamCode, setHomeTeamCode] = useState<string | null>(null);
+  // One shared login instance for the whole app - previously AlertsPanel and
+  // MarketGate each had their own useTeamCode() call, so logging out on one
+  // tab didn't reactively update the other (each only re-read localStorage
+  // on its own next mount, i.e. the next tab switch) and Home had no direct
+  // way to know the code at all (worked around with an onCodeChange relay).
+  // A single instance here, rendered once, fixes both.
+  const team = useTeamCode();
+  const previousTeamCode = useRef(team.code);
+  useEffect(() => {
+    if (previousTeamCode.current && !team.code) {
+      // Logging out: clear everything that mirrored persisted/team-session
+      // state so it doesn't linger and get shown as if it were free-mode
+      // state once the code is gone.
+      setAlertsWatchlist([]); setAlertsNutsFilter([]); setContractor([]);
+      setMarketSelectedContractor(""); setMarketContractorSearch(""); setMarketVisibleCount(10);
+    }
+    previousTeamCode.current = team.code;
+  }, [team.code]);
   // Guards against the initial load-on-login request resolving AFTER the
   // user has already made a change (add/remove) - without this, a slow
   // response landing late would silently wipe out whatever she'd just
@@ -158,33 +169,35 @@ export default function Home() {
   // recognized and ignored instead of applied.
   const contractorLoadGeneration = useRef(0);
   useEffect(() => {
-    if (!homeTeamCode) return;
+    if (!team.code) return;
+    const code = team.code;
     const generation = ++contractorLoadGeneration.current;
-    fetch("/api/contractor-watchlist", { headers: { "x-alert-code": homeTeamCode } })
+    fetch("/api/contractor-watchlist", { headers: { "x-alert-code": code } })
       .then((response) => response.ok ? response.json() : { items: [] })
       .then((payload) => {
         if (generation !== contractorLoadGeneration.current) return;
         setContractor((payload.items ?? []).map((item: { contractor_value: string }) => item.contractor_value));
       })
       .catch(() => {});
-  }, [homeTeamCode]);
+  }, [team.code]);
   // Single entry point for changing the Ανάδοχος filter so add/remove stay
   // mirrored to contractor_watchlist while logged in - diffs against the
   // current value rather than needing separate add/remove callers.
   const applyContractor = useCallback((next: string[]) => {
     contractorLoadGeneration.current += 1; // a manual change invalidates any pending initial load
     setContractor((current) => {
-      if (homeTeamCode) {
+      if (team.code) {
+        const code = team.code;
         current.filter((item) => !next.includes(item)).forEach((item) => {
-          fetch(`/api/contractor-watchlist?contractor_value=${encodeURIComponent(item)}`, { method: "DELETE", headers: { "x-alert-code": homeTeamCode } }).catch(() => {});
+          fetch(`/api/contractor-watchlist?contractor_value=${encodeURIComponent(item)}`, { method: "DELETE", headers: { "x-alert-code": code } }).catch(() => {});
         });
         next.filter((item) => !current.includes(item)).forEach((item) => {
-          fetch("/api/contractor-watchlist", { method: "POST", headers: { "Content-Type": "application/json", "x-alert-code": homeTeamCode }, body: JSON.stringify({ contractor_value: item }) }).catch(() => {});
+          fetch("/api/contractor-watchlist", { method: "POST", headers: { "Content-Type": "application/json", "x-alert-code": code }, body: JSON.stringify({ contractor_value: item }) }).catch(() => {});
         });
       }
       return next;
     });
-  }, [homeTeamCode]);
+  }, [team.code]);
   const [lastSync, setLastSync] = useState<string | null>(null);
   const latestRequest = useRef(0);
   const latestDashboardRequest = useRef(0);
@@ -377,7 +390,13 @@ export default function Home() {
         <section className="content">
           <div className="pageTitle">
             <div><p className="eyebrow">PROCUREMENT INTELLIGENCE</p><h1>{page === "overview" ? "Επισκόπηση" : page === "tenders" ? "Διαγωνισμοί" : page === "market" ? "Αγορά & Ανταγωνισμός" : "Ειδοποιήσεις"}</h1></div>
-            {(page === "overview" || page === "tenders") && <label className="search"><span>⌕</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Αναζήτηση με ΑΔΑΜ ή τίτλο…" /></label>}
+            <div className="pageTitleActions">
+              {(page === "overview" || page === "tenders") && <label className="search"><span>⌕</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Αναζήτηση με ΑΔΑΜ ή τίτλο…" /></label>}
+              {/* One shared login control for the whole app instead of a
+                  separate copy on Ειδοποιήσεις and Αγορά - always visible so
+                  its state can never be out of sync with itself. */}
+              {team.code !== undefined && <TeamCodeBar team={team} />}
+            </div>
           </div>
           {loading && tenders.length === 0 && <div className="dataBanner">Φόρτωση πραγματικών δεδομένων από Supabase…</div>}
           {dataError && <div className="dataBanner error">{dataError} · εμφανίζεται προσωρινό δείγμα.</div>}
@@ -421,8 +440,8 @@ export default function Home() {
               {loading ? "Φόρτωση…" : `Φόρτωση περισσότερων (${number.format(tenders.length)} από ${number.format(totalTenders)})`}
             </button>}
           </>}
-          {page === "market" && <MarketGate onLogout={() => { setMarketSelectedContractor(""); setMarketContractorSearch(""); setMarketVisibleCount(10); setContractor([]); }} onCodeChange={setHomeTeamCode}>{(code) => <MarketPanel awards={awards} contracts={contracts} cpv={cpv} setCpv={setCpv} contractor={contractor} authority={authority} year={year} contractType={contractType} documentType={documentType} loadedCount={tenders.length} totalCount={totalTenders} stillLoading={hasMore && loading} locked={!code} selectedContractor={marketSelectedContractor} setSelectedContractor={setMarketSelectedContractor} contractorSearch={marketContractorSearch} setContractorSearch={setMarketContractorSearch} visibleCount={marketVisibleCount} setVisibleCount={setMarketVisibleCount} />}</MarketGate>}
-          {page === "alerts" && <AlertsPanel watchlist={alertsWatchlist} setWatchlist={setAlertsWatchlist} nutsFilter={alertsNutsFilter} setNutsFilter={setAlertsNutsFilter} setContractor={setContractor} onCodeChange={setHomeTeamCode} />}
+          {page === "market" && <MarketPanel awards={awards} contracts={contracts} cpv={cpv} setCpv={setCpv} contractor={contractor} authority={authority} year={year} contractType={contractType} documentType={documentType} loadedCount={tenders.length} totalCount={totalTenders} stillLoading={hasMore && loading} locked={!team.code} selectedContractor={marketSelectedContractor} setSelectedContractor={setMarketSelectedContractor} contractorSearch={marketContractorSearch} setContractorSearch={setMarketContractorSearch} visibleCount={marketVisibleCount} setVisibleCount={setMarketVisibleCount} />}
+          {page === "alerts" && <AlertsPanelContent key={team.code ?? "free"} code={team.code ?? null} onUnauthorized={team.onUnauthorized} watchlist={alertsWatchlist} setWatchlist={setAlertsWatchlist} nutsFilter={alertsNutsFilter} setNutsFilter={setAlertsNutsFilter} />}
         </section>
 
         {/* Ειδοποιήσεις is a CPV watch-list/alert feed, not a filtered view of the
@@ -879,26 +898,6 @@ function SingleSearchInput({ label, type, value, onChange, placeholder }: {
   </div>;
 }
 
-// Ανάλυση ανταγωνισμού (leaderboard αναδόχων, ποσοστά έκπτωσης) is the one
-// piece of TenderScope that's genuinely value-added analysis rather than
-// just a nicer view of already-public ΚΗΜΔΗΣ records - explicitly chosen as
-// the paid-tier gate, reusing the exact same team passcode as Ειδοποιήσεις
-// (one login unlocks both).
-function MarketGate({ onLogout, onCodeChange, children }: { onLogout: () => void; onCodeChange: (code: string | null) => void; children: (code: string | null) => ReactNode }) {
-  const team = useTeamCode();
-  const previousCode = useRef(team.code);
-  useEffect(() => {
-    if (previousCode.current && !team.code) onLogout(); // clear leftover team-session UI state (drill-down, search, "load more")
-    previousCode.current = team.code;
-    if (team.code !== undefined) onCodeChange(team.code ?? null); // lets Home load/persist the Ανάδοχος watchlist without its own useTeamCode instance
-  }, [team.code, onLogout, onCodeChange]);
-  if (team.code === undefined) return null; // brief flash while reading localStorage
-
-  return <>
-    <TeamCodeBar team={team} />
-    {children(team.code ?? null)}
-  </>;
-}
 
 type ContractorSummary = { key: string; name: string; awards: number; contracts: number; authorities: number; value: number };
 
@@ -1270,46 +1269,13 @@ function TeamCodeBar({ team }: { team: ReturnType<typeof useTeamCode> }) {
 // shared, code-gated recipient list). Entering the passcode switches to
 // "team" mode, which reads/writes the real shared tables, persists across
 // visits, and unlocks email alerts.
-function AlertsPanel({ watchlist, setWatchlist, nutsFilter, setNutsFilter, setContractor, onCodeChange }: {
-  watchlist: WatchlistItem[]; setWatchlist: (value: WatchlistItem[] | ((current: WatchlistItem[]) => WatchlistItem[])) => void;
-  nutsFilter: NutsFilterItem[]; setNutsFilter: (value: NutsFilterItem[] | ((current: NutsFilterItem[]) => NutsFilterItem[])) => void;
-  setContractor: (value: string[]) => void;
-  onCodeChange: (code: string | null) => void;
-}) {
-  const team = useTeamCode();
-  const previousCode = useRef(team.code);
-  useEffect(() => {
-    // Logging out: the shared watchlist/nutsFilter state was mirroring the
-    // team's real, persisted picks - clear it so it doesn't linger and get
-    // shown as if it were free-mode state once code is gone. Ανάδοχος is a
-    // sidebar filter, not team data, but she wants the same "gone on
-    // logout" behavior for it too.
-    if (previousCode.current && !team.code) { setWatchlist([]); setNutsFilter([]); setContractor([]); }
-    previousCode.current = team.code;
-    if (team.code !== undefined) onCodeChange(team.code ?? null);
-  }, [team.code, setWatchlist, setNutsFilter, setContractor, onCodeChange]);
-  if (team.code === undefined) return null; // brief flash while reading localStorage
-
-  return <>
-    <TeamCodeBar team={team} />
-    {/* key forces a full remount on login/logout - otherwise React keeps
-        reusing the same component instance and every piece of state
-        (alerts, submitted/interested, recipients) from the previous mode
-        stays on screen instead of being cleared. watchlist/nutsFilter are
-        passed in from the parent instead, so they're unaffected by this
-        remount and by switching tabs away and back. */}
-    <AlertsPanelContent
-      key={team.code ?? "free"}
-      code={team.code ?? null}
-      onUnauthorized={team.onUnauthorized}
-      watchlist={watchlist}
-      setWatchlist={setWatchlist}
-      nutsFilter={nutsFilter}
-      setNutsFilter={setNutsFilter}
-    />
-  </>;
-}
-
+//
+// key forces a full remount on login/logout - otherwise React keeps reusing
+// the same component instance and every piece of state (alerts,
+// submitted/interested, recipients) from the previous mode stays on screen
+// instead of being cleared. watchlist/nutsFilter are passed in from Home
+// instead, so they're unaffected by this remount and by switching tabs away
+// and back.
 function AlertsPanelContent({ code, onUnauthorized, watchlist, setWatchlist, nutsFilter, setNutsFilter }: {
   code: string | null; onUnauthorized: () => void;
   watchlist: WatchlistItem[]; setWatchlist: (value: WatchlistItem[] | ((current: WatchlistItem[]) => WatchlistItem[])) => void;
