@@ -565,15 +565,32 @@ function CpvDonut({ counts, total, cpvTotal }: { counts: { cpv_code: string; cpv
   // how fragmented the real distribution is across thousands of codes.
   const otherShare = Math.max(0, denominator - topSum) / denominator;
   const colors = ["#0d4565", "#168c8c", "#dca54a"];
+  // SVG stroke-dasharray rings instead of a CSS conic-gradient background -
+  // html2canvas (used to rasterize this chart into the Excel/PDF export)
+  // doesn't render conic-gradient correctly, leaving the exported version
+  // blank. Plain SVG circles capture correctly on both paths.
+  const size = 148;
+  const strokeWidth = 33;
+  const radius = (size - strokeWidth) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const segments = [
+    ...top.map((item, index) => ({ pct: (item.count / denominator) * 100, color: colors[index] })),
+    { pct: otherShare * 100, color: "#d6e2e7" },
+  ].filter((segment) => segment.pct > 0);
   let cursor = 0;
-  const stops = top.map((item, index) => {
-    const pct = (item.count / denominator) * 100;
-    const stop = `${colors[index]} ${cursor}% ${cursor + pct}%`;
-    cursor += pct;
-    return stop;
-  });
-  stops.push(`#d6e2e7 ${cursor}% 100%`);
-  return <div className="donutWrap"><div className="donut" style={{ background: `conic-gradient(${stops.join(",")})` }}><span><strong>{number.format(cpvTotal)}</strong><small>CPV</small></span></div><ul>{top.map((item, index) => <li key={item.cpv_code} title={item.cpv_description ?? undefined}><i className={["navy", "teal", "gold"][index]} /><span><b>{item.cpv_code}</b><small>{item.cpv_description || "Χωρίς περιγραφή"}</small></span><b>{Math.round(item.count / denominator * 100)}%</b></li>)}{otherShare > 0 && <li><i className="pale" />Λοιπά ({number.format(Math.max(0, cpvTotal - top.length))} κωδικοί) <b>{Math.round(otherShare * 100)}%</b></li>}</ul></div>;
+  return <div className="donutWrap"><div className="donut">
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+      <g transform={`rotate(-90 ${size / 2} ${size / 2})`}>
+        {segments.map((segment, index) => {
+          const dash = (segment.pct / 100) * circumference;
+          const offset = -((cursor / 100) * circumference);
+          cursor += segment.pct;
+          return <circle key={index} cx={size / 2} cy={size / 2} r={radius} fill="none" stroke={segment.color} strokeWidth={strokeWidth} strokeDasharray={`${dash} ${circumference - dash}`} strokeDashoffset={offset} />;
+        })}
+      </g>
+    </svg>
+    <span><strong>{number.format(cpvTotal)}</strong><small>CPV</small></span>
+  </div><ul>{top.map((item, index) => <li key={item.cpv_code} title={item.cpv_description ?? undefined}><i className={["navy", "teal", "gold"][index]} /><span><b>{item.cpv_code}</b><small>{item.cpv_description || "Χωρίς περιγραφή"}</small></span><b>{Math.round(item.count / denominator * 100)}%</b></li>)}{otherShare > 0 && <li><i className="pale" />Λοιπά ({number.format(Math.max(0, cpvTotal - top.length))} κωδικοί) <b>{Math.round(otherShare * 100)}%</b></li>}</ul></div>;
 }
 
 const MONTH_NAMES = ["Ιαν","Φεβ","Μαρ","Απρ","Μαϊ","Ιουν","Ιουλ","Αυγ","Σεπ","Οκτ","Νοε","Δεκ"];
