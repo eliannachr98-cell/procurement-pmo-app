@@ -144,6 +144,36 @@ export default function Home() {
   const [marketSelectedContractor, setMarketSelectedContractor] = useState("");
   const [marketContractorSearch, setMarketContractorSearch] = useState("");
   const [marketVisibleCount, setMarketVisibleCount] = useState(10);
+  // Home has no useTeamCode() instance of its own (only AlertsPanel/MarketGate
+  // do, each for their own TeamCodeBar) - they report their code up via
+  // onCodeChange instead, just so the Ανάδοχος filter can be restored from
+  // (and saved to) contractor_watchlist on login, the same way cpv_watchlist
+  // already persists the Ειδοποιήσεις CPV picks - not just kept in memory
+  // for the current tab, which is all the earlier fix did.
+  const [homeTeamCode, setHomeTeamCode] = useState<string | null>(null);
+  useEffect(() => {
+    if (!homeTeamCode) return;
+    fetch("/api/contractor-watchlist", { headers: { "x-alert-code": homeTeamCode } })
+      .then((response) => response.ok ? response.json() : { items: [] })
+      .then((payload) => setContractor((payload.items ?? []).map((item: { contractor_value: string }) => item.contractor_value)))
+      .catch(() => {});
+  }, [homeTeamCode]);
+  // Single entry point for changing the Ανάδοχος filter so add/remove stay
+  // mirrored to contractor_watchlist while logged in - diffs against the
+  // current value rather than needing separate add/remove callers.
+  const applyContractor = useCallback((next: string[]) => {
+    setContractor((current) => {
+      if (homeTeamCode) {
+        current.filter((item) => !next.includes(item)).forEach((item) => {
+          fetch(`/api/contractor-watchlist?contractor_value=${encodeURIComponent(item)}`, { method: "DELETE", headers: { "x-alert-code": homeTeamCode } }).catch(() => {});
+        });
+        next.filter((item) => !current.includes(item)).forEach((item) => {
+          fetch("/api/contractor-watchlist", { method: "POST", headers: { "Content-Type": "application/json", "x-alert-code": homeTeamCode }, body: JSON.stringify({ contractor_value: item }) }).catch(() => {});
+        });
+      }
+      return next;
+    });
+  }, [homeTeamCode]);
   const [lastSync, setLastSync] = useState<string | null>(null);
   const latestRequest = useRef(0);
   const latestDashboardRequest = useRef(0);
@@ -380,17 +410,17 @@ export default function Home() {
               {loading ? "Φόρτωση…" : `Φόρτωση περισσότερων (${number.format(tenders.length)} από ${number.format(totalTenders)})`}
             </button>}
           </>}
-          {page === "market" && <MarketGate onLogout={() => { setMarketSelectedContractor(""); setMarketContractorSearch(""); setMarketVisibleCount(10); setContractor([]); }}>{(code) => <MarketPanel awards={awards} contracts={contracts} cpv={cpv} setCpv={setCpv} contractor={contractor} authority={authority} year={year} contractType={contractType} documentType={documentType} loadedCount={tenders.length} totalCount={totalTenders} stillLoading={hasMore && loading} locked={!code} selectedContractor={marketSelectedContractor} setSelectedContractor={setMarketSelectedContractor} contractorSearch={marketContractorSearch} setContractorSearch={setMarketContractorSearch} visibleCount={marketVisibleCount} setVisibleCount={setMarketVisibleCount} />}</MarketGate>}
-          {page === "alerts" && <AlertsPanel watchlist={alertsWatchlist} setWatchlist={setAlertsWatchlist} nutsFilter={alertsNutsFilter} setNutsFilter={setAlertsNutsFilter} setContractor={setContractor} />}
+          {page === "market" && <MarketGate onLogout={() => { setMarketSelectedContractor(""); setMarketContractorSearch(""); setMarketVisibleCount(10); setContractor([]); }} onCodeChange={setHomeTeamCode}>{(code) => <MarketPanel awards={awards} contracts={contracts} cpv={cpv} setCpv={setCpv} contractor={contractor} authority={authority} year={year} contractType={contractType} documentType={documentType} loadedCount={tenders.length} totalCount={totalTenders} stillLoading={hasMore && loading} locked={!code} selectedContractor={marketSelectedContractor} setSelectedContractor={setMarketSelectedContractor} contractorSearch={marketContractorSearch} setContractorSearch={setMarketContractorSearch} visibleCount={marketVisibleCount} setVisibleCount={setMarketVisibleCount} />}</MarketGate>}
+          {page === "alerts" && <AlertsPanel watchlist={alertsWatchlist} setWatchlist={setAlertsWatchlist} nutsFilter={alertsNutsFilter} setNutsFilter={setAlertsNutsFilter} setContractor={setContractor} onCodeChange={setHomeTeamCode} />}
         </section>
 
         {/* Ειδοποιήσεις is a CPV watch-list/alert feed, not a filtered view of the
             database - the regular filters don't apply to it at all. */}
         {page !== "alerts" && <aside className="filters">
-          <div className="filterHeading"><div><span>Φίλτρα</span><small>{number.format(tenders.length)} φορτωμένα · {number.format(dashboard.total || totalTenders)} συνολικά</small></div><button title={loading ? "Φόρτωση…" : "Επαναφορά φίλτρων"} onClick={() => { setStatus("Όλες"); setAuthority(""); setContractor([]); setCpv([]); setQuery(""); setYear("Όλα"); setContractType([]); setDocumentType("Όλοι"); }}><span className={loading ? "spinIcon" : ""}>↻</span></button></div>
+          <div className="filterHeading"><div><span>Φίλτρα</span><small>{number.format(tenders.length)} φορτωμένα · {number.format(dashboard.total || totalTenders)} συνολικά</small></div><button title={loading ? "Φόρτωση…" : "Επαναφορά φίλτρων"} onClick={() => { setStatus("Όλες"); setAuthority(""); applyContractor([]); setCpv([]); setQuery(""); setYear("Όλα"); setContractType([]); setDocumentType("Όλοι"); }}><span className={loading ? "spinIcon" : ""}>↻</span></button></div>
           <label>Έτος<select value={year} onChange={(event) => setYear(event.target.value)}><option>Όλα</option>{years.map((item) => <option key={item}>{item}</option>)}</select></label>
           <SingleSearchInput label="Αναθέτουσα Αρχή" type="authority" value={authority === "Όλες" ? "" : authority} onChange={setAuthority} placeholder="Γράψε ή επίλεξε αρχή" />
-          <MultiSearchInput label="Ανάδοχος" type="contractor" values={contractor} onChange={setContractor} placeholder="Αναζήτησε και επίλεξε αναδόχους" />
+          <MultiSearchInput label="Ανάδοχος" type="contractor" values={contractor} onChange={applyContractor} placeholder="Αναζήτησε και επίλεξε αναδόχους" />
           {page !== "market" && <MultiSearchInput label="CPV" type="cpv" values={cpv} onChange={setCpv} placeholder="Αναζήτησε κωδικό ή περιγραφή CPV" />}
           <CheckboxDropdown label="Τύπος σύμβασης" options={contractTypeOptions} values={contractType} onChange={setContractType} />
           {/* A tender's document-type/status describe the notice's own lifecycle - awards and
@@ -843,13 +873,14 @@ function SingleSearchInput({ label, type, value, onChange, placeholder }: {
 // just a nicer view of already-public ΚΗΜΔΗΣ records - explicitly chosen as
 // the paid-tier gate, reusing the exact same team passcode as Ειδοποιήσεις
 // (one login unlocks both).
-function MarketGate({ onLogout, children }: { onLogout: () => void; children: (code: string | null) => ReactNode }) {
+function MarketGate({ onLogout, onCodeChange, children }: { onLogout: () => void; onCodeChange: (code: string | null) => void; children: (code: string | null) => ReactNode }) {
   const team = useTeamCode();
   const previousCode = useRef(team.code);
   useEffect(() => {
     if (previousCode.current && !team.code) onLogout(); // clear leftover team-session UI state (drill-down, search, "load more")
     previousCode.current = team.code;
-  }, [team.code, onLogout]);
+    if (team.code !== undefined) onCodeChange(team.code ?? null); // lets Home load/persist the Ανάδοχος watchlist without its own useTeamCode instance
+  }, [team.code, onLogout, onCodeChange]);
   if (team.code === undefined) return null; // brief flash while reading localStorage
 
   return <>
@@ -1228,10 +1259,11 @@ function TeamCodeBar({ team }: { team: ReturnType<typeof useTeamCode> }) {
 // shared, code-gated recipient list). Entering the passcode switches to
 // "team" mode, which reads/writes the real shared tables, persists across
 // visits, and unlocks email alerts.
-function AlertsPanel({ watchlist, setWatchlist, nutsFilter, setNutsFilter, setContractor }: {
+function AlertsPanel({ watchlist, setWatchlist, nutsFilter, setNutsFilter, setContractor, onCodeChange }: {
   watchlist: WatchlistItem[]; setWatchlist: (value: WatchlistItem[] | ((current: WatchlistItem[]) => WatchlistItem[])) => void;
   nutsFilter: NutsFilterItem[]; setNutsFilter: (value: NutsFilterItem[] | ((current: NutsFilterItem[]) => NutsFilterItem[])) => void;
   setContractor: (value: string[]) => void;
+  onCodeChange: (code: string | null) => void;
 }) {
   const team = useTeamCode();
   const previousCode = useRef(team.code);
@@ -1243,7 +1275,8 @@ function AlertsPanel({ watchlist, setWatchlist, nutsFilter, setNutsFilter, setCo
     // logout" behavior for it too.
     if (previousCode.current && !team.code) { setWatchlist([]); setNutsFilter([]); setContractor([]); }
     previousCode.current = team.code;
-  }, [team.code, setWatchlist, setNutsFilter, setContractor]);
+    if (team.code !== undefined) onCodeChange(team.code ?? null);
+  }, [team.code, setWatchlist, setNutsFilter, setContractor, onCodeChange]);
   if (team.code === undefined) return null; // brief flash while reading localStorage
 
   return <>
