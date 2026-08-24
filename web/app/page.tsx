@@ -73,6 +73,7 @@ const navItems = [
   ["tenders", "☷", "Διαγωνισμοί"],
   ["market", "◉", "Αγορά & Ανταγωνισμός"],
   ["alerts", "♢", "Ειδοποιήσεις"],
+  ["profile", "◐", "Προφίλ"],
 ] as const;
 
 // Matched to the same hue families as the pastel Metric cards in Επισκόπηση
@@ -165,6 +166,18 @@ export default function Home() {
       setStatus("Όλες"); setAuthority(""); setContractor([]); setCpv([]); setYear("Όλα"); setContractType([]); setDocumentType("Όλοι");
     }
     previousTeamCode.current = team.code;
+  }, [team.code]);
+  // Προφίλ needs the CPV/region watchlist counts even if the visitor never
+  // opens Ειδοποιήσεις this session (that's the only other place that loads
+  // them) - fetched independently here, on login, same endpoint
+  // AlertsPanelContent's own load() already uses.
+  useEffect(() => {
+    if (!team.code) { setAlertsWatchlist([]); setAlertsNutsFilter([]); return; }
+    const code = team.code;
+    fetch("/api/alerts", { headers: { "x-alert-code": code } })
+      .then((response) => response.ok ? response.json() : { watchlist: [], nutsFilter: [] })
+      .then((payload) => { setAlertsWatchlist(payload.watchlist ?? []); setAlertsNutsFilter(payload.nutsFilter ?? []); })
+      .catch(() => {});
   }, [team.code]);
   // Paid-tier feature: named, saved filter combinations (Επισκόπηση/
   // Διαγωνισμοί/Αγορά share the same filter state already, so one saved
@@ -408,10 +421,10 @@ export default function Home() {
           spot regardless of which tab is active. */}
       <div className="teamCodeRow">{team.code !== undefined && <TeamCodeBar team={team} />}</div>
 
-      <div className={`workspace${page === "alerts" ? " workspaceFull" : ""}`}>
+      <div className={`workspace${page === "alerts" || page === "profile" ? " workspaceFull" : ""}`}>
         <section className="content">
           <div className="pageTitle">
-            <div><p className="eyebrow">PROCUREMENT INTELLIGENCE</p><h1>{page === "overview" ? "Επισκόπηση" : page === "tenders" ? "Διαγωνισμοί" : page === "market" ? "Αγορά & Ανταγωνισμός" : "Ειδοποιήσεις"}</h1></div>
+            <div><p className="eyebrow">PROCUREMENT INTELLIGENCE</p><h1>{page === "overview" ? "Επισκόπηση" : page === "tenders" ? "Διαγωνισμοί" : page === "market" ? "Αγορά & Ανταγωνισμός" : page === "profile" ? "Προφίλ" : "Ειδοποιήσεις"}</h1></div>
             {(page === "overview" || page === "tenders") && <label className="search"><span>⌕</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Αναζήτηση με ΑΔΑΜ ή τίτλο…" /></label>}
           </div>
           {loading && tenders.length === 0 && <div className="dataBanner">Φόρτωση πραγματικών δεδομένων από Supabase…</div>}
@@ -458,11 +471,41 @@ export default function Home() {
           </>}
           {page === "market" && <MarketPanel awards={awards} contracts={contracts} cpv={cpv} setCpv={setCpv} contractor={contractor} authority={authority} year={year} contractType={contractType} documentType={documentType} loadedCount={tenders.length} totalCount={totalTenders} stillLoading={hasMore && loading} locked={!team.code} selectedContractor={marketSelectedContractor} setSelectedContractor={setMarketSelectedContractor} contractorSearch={marketContractorSearch} setContractorSearch={setMarketContractorSearch} visibleCount={marketVisibleCount} setVisibleCount={setMarketVisibleCount} />}
           {page === "alerts" && <AlertsPanelContent key={team.code ?? "free"} code={team.code ?? null} onUnauthorized={team.onUnauthorized} watchlist={alertsWatchlist} setWatchlist={setAlertsWatchlist} nutsFilter={alertsNutsFilter} setNutsFilter={setAlertsNutsFilter} />}
+          {page === "profile" && <div className="profileGrid">
+            <article className="panel profileCard">
+              <p className="eyebrow">ΛΟΓΑΡΙΑΣΜΟΣ</p>
+              <h2>Κατάσταση σύνδεσης</h2>
+              {team.code
+                ? <p className="profileStatusOn">✓ Συνδεδεμένη ομάδα</p>
+                : <p className="watchlistCaption">Δεν είσαι συνδεδεμένη — οι Προβολές και η παρακολούθηση Ειδοποιήσεων χρειάζονται σύνδεση.</p>}
+            </article>
+            <article className="panel profileCard">
+              <p className="eyebrow">ΠΡΟΒΟΛΕΣ</p>
+              <h2>Αποθηκευμένες προβολές</h2>
+              {team.code ? (savedViews.length > 0 ? <ul className="savedViewsList">
+                {savedViews.map((view) => (
+                  <li key={view.id}>
+                    <button type="button" className="savedViewApply" onClick={() => { applyView(view); setPage("overview"); }}>{view.name}</button>
+                    <button type="button" className="savedViewDelete" onClick={() => deleteView(view.id)} aria-label={`Διαγραφή ${view.name}`}>×</button>
+                  </li>
+                ))}
+              </ul> : <p className="noRows">Δεν έχεις αποθηκεύσει καμία προβολή ακόμη.</p>) : <p className="watchlistCaption">Συνδέσου για να δεις τις αποθηκευμένες προβολές σου.</p>}
+            </article>
+            <article className="panel profileCard">
+              <p className="eyebrow">ΕΙΔΟΠΟΙΗΣΕΙΣ</p>
+              <h2>Παρακολούθηση</h2>
+              {team.code ? <>
+                <p className="profileStat"><strong>{alertsWatchlist.length}</strong> CPV υπό παρακολούθηση</p>
+                <p className="profileStat"><strong>{alertsNutsFilter.length}</strong> περιοχές υπό παρακολούθηση</p>
+                <button type="button" className="profileLink" onClick={() => setPage("alerts")}>Πήγαινε στις Ειδοποιήσεις →</button>
+              </> : <p className="watchlistCaption">Συνδέσου για να δεις τι παρακολουθείς.</p>}
+            </article>
+          </div>}
         </section>
 
         {/* Ειδοποιήσεις is a CPV watch-list/alert feed, not a filtered view of the
             database - the regular filters don't apply to it at all. */}
-        {page !== "alerts" && <aside className="filters">
+        {page !== "alerts" && page !== "profile" && <aside className="filters">
           <div className="filterHeading"><div><span>Φίλτρα</span><small>{number.format(tenders.length)} φορτωμένα · {number.format(dashboard.total || totalTenders)} συνολικά</small></div><button title={loading ? "Φόρτωση…" : "Επαναφορά φίλτρων"} onClick={() => { setStatus("Όλες"); setAuthority(""); setContractor([]); setCpv([]); setQuery(""); setYear("Όλα"); setContractType([]); setDocumentType("Όλοι"); }}><span className={loading ? "spinIcon" : ""}>↻</span></button></div>
           <div className="savedViews">
             <p className="eyebrow">ΠΡΟΒΟΛΕΣ</p>
