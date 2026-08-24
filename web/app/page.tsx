@@ -73,7 +73,7 @@ const navItems = [
   ["overview", LayoutGrid, "Επισκόπηση"],
   ["tenders", ClipboardList, "Διαγωνισμοί"],
   ["market", TrendingUp, "Αγορά & Ανταγωνισμός"],
-  ["alerts", Bell, "Ειδοποιήσεις"],
+  ["alerts", Bell, "Παρακολούθηση"],
   ["profile", CircleUserRound, "Προφίλ"],
 ] as const;
 
@@ -425,7 +425,7 @@ export default function Home() {
       <div className={`workspace${page === "alerts" || page === "profile" ? " workspaceFull" : ""}`}>
         <section className="content">
           <div className="pageTitle">
-            <div><p className="eyebrow">PROCUREMENT INTELLIGENCE</p><h1>{page === "overview" ? "Επισκόπηση" : page === "tenders" ? "Διαγωνισμοί" : page === "market" ? "Αγορά & Ανταγωνισμός" : page === "profile" ? "Προφίλ" : "Ειδοποιήσεις"}</h1></div>
+            <div><p className="eyebrow">PROCUREMENT INTELLIGENCE</p><h1>{page === "overview" ? "Επισκόπηση" : page === "tenders" ? "Διαγωνισμοί" : page === "market" ? "Αγορά & Ανταγωνισμός" : page === "profile" ? "Προφίλ" : "Παρακολούθηση"}</h1></div>
             {(page === "overview" || page === "tenders") && <label className="search"><span>⌕</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Αναζήτηση με ΑΔΑΜ ή τίτλο…" /></label>}
           </div>
           {loading && tenders.length === 0 && <div className="dataBanner">Φόρτωση πραγματικών δεδομένων από Supabase…</div>}
@@ -498,7 +498,7 @@ export default function Home() {
               {team.code ? <>
                 <p className="profileStat"><strong>{alertsWatchlist.length}</strong> CPV υπό παρακολούθηση</p>
                 <p className="profileStat"><strong>{alertsNutsFilter.length}</strong> περιοχές υπό παρακολούθηση</p>
-                <button type="button" className="profileLink" onClick={() => setPage("alerts")}>Πήγαινε στις Ειδοποιήσεις →</button>
+                <button type="button" className="profileLink" onClick={() => setPage("alerts")}>Πήγαινε στην Παρακολούθηση →</button>
               </> : <p className="watchlistCaption">Συνδέσου για να δεις τι παρακολουθείς.</p>}
             </article>
           </div>}
