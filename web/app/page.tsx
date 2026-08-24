@@ -168,17 +168,26 @@ export default function Home() {
   // picked. Any manual change bumps the generation so a stale response is
   // recognized and ignored instead of applied.
   const contractorLoadGeneration = useRef(0);
+  // Surfaced on-screen next to the filter (see .filters below) instead of
+  // only in DevTools - the save/load calls were silently swallowing errors
+  // with .catch(() => {}), which made a real failure (wrong table, RLS,
+  // whatever) indistinguishable from "just works but doesn't feel like it".
+  const [contractorSyncError, setContractorSyncError] = useState("");
   useEffect(() => {
     if (!team.code) return;
     const code = team.code;
     const generation = ++contractorLoadGeneration.current;
     fetch("/api/contractor-watchlist", { headers: { "x-alert-code": code } })
-      .then((response) => response.ok ? response.json() : { items: [] })
+      .then(async (response) => {
+        if (!response.ok) throw new Error(`Φόρτωση αναδόχων: ${response.status} ${(await response.text()).slice(0, 200)}`);
+        return response.json();
+      })
       .then((payload) => {
         if (generation !== contractorLoadGeneration.current) return;
         setContractor((payload.items ?? []).map((item: { contractor_value: string }) => item.contractor_value));
+        setContractorSyncError("");
       })
-      .catch(() => {});
+      .catch((error) => setContractorSyncError(error instanceof Error ? error.message : "Άγνωστο σφάλμα φόρτωσης αναδόχων"));
   }, [team.code]);
   // Single entry point for changing the Ανάδοχος filter so add/remove stay
   // mirrored to contractor_watchlist while logged in - diffs against the
@@ -189,10 +198,14 @@ export default function Home() {
       if (team.code) {
         const code = team.code;
         current.filter((item) => !next.includes(item)).forEach((item) => {
-          fetch(`/api/contractor-watchlist?contractor_value=${encodeURIComponent(item)}`, { method: "DELETE", headers: { "x-alert-code": code } }).catch(() => {});
+          fetch(`/api/contractor-watchlist?contractor_value=${encodeURIComponent(item)}`, { method: "DELETE", headers: { "x-alert-code": code } })
+            .then(async (response) => { if (!response.ok) setContractorSyncError(`Διαγραφή αναδόχου: ${response.status} ${(await response.text()).slice(0, 200)}`); else setContractorSyncError(""); })
+            .catch((error) => setContractorSyncError(error instanceof Error ? error.message : "Άγνωστο σφάλμα διαγραφής αναδόχου"));
         });
         next.filter((item) => !current.includes(item)).forEach((item) => {
-          fetch("/api/contractor-watchlist", { method: "POST", headers: { "Content-Type": "application/json", "x-alert-code": code }, body: JSON.stringify({ contractor_value: item }) }).catch(() => {});
+          fetch("/api/contractor-watchlist", { method: "POST", headers: { "Content-Type": "application/json", "x-alert-code": code }, body: JSON.stringify({ contractor_value: item }) })
+            .then(async (response) => { if (!response.ok) setContractorSyncError(`Αποθήκευση αναδόχου: ${response.status} ${(await response.text()).slice(0, 200)}`); else setContractorSyncError(""); })
+            .catch((error) => setContractorSyncError(error instanceof Error ? error.message : "Άγνωστο σφάλμα αποθήκευσης αναδόχου"));
         });
       }
       return next;
@@ -451,6 +464,7 @@ export default function Home() {
           <label>Έτος<select value={year} onChange={(event) => setYear(event.target.value)}><option>Όλα</option>{years.map((item) => <option key={item}>{item}</option>)}</select></label>
           <SingleSearchInput label="Αναθέτουσα Αρχή" type="authority" value={authority === "Όλες" ? "" : authority} onChange={setAuthority} placeholder="Γράψε ή επίλεξε αρχή" />
           <MultiSearchInput label="Ανάδοχος" type="contractor" values={contractor} onChange={applyContractor} placeholder="Αναζήτησε και επίλεξε αναδόχους" />
+          {contractorSyncError && <p className="recipientError">{contractorSyncError}</p>}
           {page !== "market" && <MultiSearchInput label="CPV" type="cpv" values={cpv} onChange={setCpv} placeholder="Αναζήτησε κωδικό ή περιγραφή CPV" />}
           <CheckboxDropdown label="Τύπος σύμβασης" options={contractTypeOptions} values={contractType} onChange={setContractType} />
           {/* A tender's document-type/status describe the notice's own lifecycle - awards and
