@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject, type SyntheticEvent } from "react";
 import "leaflet/dist/leaflet.css";
+import { LayoutGrid, ClipboardList, TrendingUp, Bell, CircleUserRound } from "lucide-react";
 import { captureChartImage, downloadExcel, downloadPdf, type ExportPayload } from "@/lib/exports";
 import type { Apodeltiosi } from "@/lib/apodeltiosi";
 
@@ -69,11 +70,11 @@ const contractTypeOptions = ["Έργα", "Μελέτες", "Προμήθειες
 const MARKET_AUTO_LOAD_CAP = 3000;
 
 const navItems = [
-  ["overview", "▦", "Επισκόπηση"],
-  ["tenders", "☷", "Διαγωνισμοί"],
-  ["market", "◉", "Αγορά & Ανταγωνισμός"],
-  ["alerts", "♢", "Ειδοποιήσεις"],
-  ["profile", "◐", "Προφίλ"],
+  ["overview", LayoutGrid, "Επισκόπηση"],
+  ["tenders", ClipboardList, "Διαγωνισμοί"],
+  ["market", TrendingUp, "Αγορά & Ανταγωνισμός"],
+  ["alerts", Bell, "Ειδοποιήσεις"],
+  ["profile", CircleUserRound, "Προφίλ"],
 ] as const;
 
 // Matched to the same hue families as the pastel Metric cards in Επισκόπηση
@@ -407,9 +408,9 @@ export default function Home() {
         </div>
         {lastSync && <span className="lastSync" title={new Date(lastSync).toLocaleString("el-GR")}>Τελευταία ενημέρωση: {new Intl.DateTimeFormat("el-GR", { dateStyle: "short", timeStyle: "short" }).format(new Date(lastSync))}</span>}
         <nav aria-label="Κύρια πλοήγηση">
-          {navItems.map(([id, icon, label]) => (
+          {navItems.map(([id, Icon, label]) => (
             <button key={id} className={page === id ? "active" : ""} onClick={() => setPage(id)}>
-              <span>{icon}</span>{label}
+              <span><Icon size={16} strokeWidth={2.25} /></span>{label}
             </button>
           ))}
         </nav>
