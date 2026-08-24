@@ -156,60 +156,12 @@ export default function Home() {
     if (previousTeamCode.current && !team.code) {
       // Logging out: clear everything that mirrored persisted/team-session
       // state so it doesn't linger and get shown as if it were free-mode
-      // state once the code is gone.
-      setAlertsWatchlist([]); setAlertsNutsFilter([]); setContractor([]);
+      // state once the code is gone. Ανάδοχος is a plain shared filter (like
+      // year/authority), not team-session state, so it's untouched here.
+      setAlertsWatchlist([]); setAlertsNutsFilter([]);
       setMarketSelectedContractor(""); setMarketContractorSearch(""); setMarketVisibleCount(10);
     }
     previousTeamCode.current = team.code;
-  }, [team.code]);
-  // Guards against the initial load-on-login request resolving AFTER the
-  // user has already made a change (add/remove) - without this, a slow
-  // response landing late would silently wipe out whatever she'd just
-  // picked. Any manual change bumps the generation so a stale response is
-  // recognized and ignored instead of applied.
-  const contractorLoadGeneration = useRef(0);
-  // Surfaced on-screen next to the filter (see .filters below) instead of
-  // only in DevTools - the save/load calls were silently swallowing errors
-  // with .catch(() => {}), which made a real failure (wrong table, RLS,
-  // whatever) indistinguishable from "just works but doesn't feel like it".
-  const [contractorSyncError, setContractorSyncError] = useState("");
-  useEffect(() => {
-    if (!team.code) return;
-    const code = team.code;
-    const generation = ++contractorLoadGeneration.current;
-    fetch("/api/contractor-watchlist", { headers: { "x-alert-code": code } })
-      .then(async (response) => {
-        if (!response.ok) throw new Error(`Φόρτωση αναδόχων: ${response.status} ${(await response.text()).slice(0, 200)}`);
-        return response.json();
-      })
-      .then((payload) => {
-        if (generation !== contractorLoadGeneration.current) return;
-        setContractor((payload.items ?? []).map((item: { contractor_value: string }) => item.contractor_value));
-        setContractorSyncError("");
-      })
-      .catch((error) => setContractorSyncError(error instanceof Error ? error.message : "Άγνωστο σφάλμα φόρτωσης αναδόχων"));
-  }, [team.code]);
-  // Single entry point for changing the Ανάδοχος filter so add/remove stay
-  // mirrored to contractor_watchlist while logged in - diffs against the
-  // current value rather than needing separate add/remove callers.
-  const applyContractor = useCallback((next: string[]) => {
-    contractorLoadGeneration.current += 1; // a manual change invalidates any pending initial load
-    setContractor((current) => {
-      if (team.code) {
-        const code = team.code;
-        current.filter((item) => !next.includes(item)).forEach((item) => {
-          fetch(`/api/contractor-watchlist?contractor_value=${encodeURIComponent(item)}`, { method: "DELETE", headers: { "x-alert-code": code } })
-            .then(async (response) => { if (!response.ok) setContractorSyncError(`Διαγραφή αναδόχου: ${response.status} ${(await response.text()).slice(0, 200)}`); else setContractorSyncError(""); })
-            .catch((error) => setContractorSyncError(error instanceof Error ? error.message : "Άγνωστο σφάλμα διαγραφής αναδόχου"));
-        });
-        next.filter((item) => !current.includes(item)).forEach((item) => {
-          fetch("/api/contractor-watchlist", { method: "POST", headers: { "Content-Type": "application/json", "x-alert-code": code }, body: JSON.stringify({ contractor_value: item }) })
-            .then(async (response) => { if (!response.ok) setContractorSyncError(`Αποθήκευση αναδόχου: ${response.status} ${(await response.text()).slice(0, 200)}`); else setContractorSyncError(""); })
-            .catch((error) => setContractorSyncError(error instanceof Error ? error.message : "Άγνωστο σφάλμα αποθήκευσης αναδόχου"));
-        });
-      }
-      return next;
-    });
   }, [team.code]);
   const [lastSync, setLastSync] = useState<string | null>(null);
   const latestRequest = useRef(0);
@@ -460,11 +412,10 @@ export default function Home() {
         {/* Ειδοποιήσεις is a CPV watch-list/alert feed, not a filtered view of the
             database - the regular filters don't apply to it at all. */}
         {page !== "alerts" && <aside className="filters">
-          <div className="filterHeading"><div><span>Φίλτρα</span><small>{number.format(tenders.length)} φορτωμένα · {number.format(dashboard.total || totalTenders)} συνολικά</small></div><button title={loading ? "Φόρτωση…" : "Επαναφορά φίλτρων"} onClick={() => { setStatus("Όλες"); setAuthority(""); applyContractor([]); setCpv([]); setQuery(""); setYear("Όλα"); setContractType([]); setDocumentType("Όλοι"); }}><span className={loading ? "spinIcon" : ""}>↻</span></button></div>
+          <div className="filterHeading"><div><span>Φίλτρα</span><small>{number.format(tenders.length)} φορτωμένα · {number.format(dashboard.total || totalTenders)} συνολικά</small></div><button title={loading ? "Φόρτωση…" : "Επαναφορά φίλτρων"} onClick={() => { setStatus("Όλες"); setAuthority(""); setContractor([]); setCpv([]); setQuery(""); setYear("Όλα"); setContractType([]); setDocumentType("Όλοι"); }}><span className={loading ? "spinIcon" : ""}>↻</span></button></div>
           <label>Έτος<select value={year} onChange={(event) => setYear(event.target.value)}><option>Όλα</option>{years.map((item) => <option key={item}>{item}</option>)}</select></label>
           <SingleSearchInput label="Αναθέτουσα Αρχή" type="authority" value={authority === "Όλες" ? "" : authority} onChange={setAuthority} placeholder="Γράψε ή επίλεξε αρχή" />
-          <MultiSearchInput label="Ανάδοχος" type="contractor" values={contractor} onChange={applyContractor} placeholder="Αναζήτησε και επίλεξε αναδόχους" />
-          {contractorSyncError && <p className="recipientError">{contractorSyncError}</p>}
+          <MultiSearchInput label="Ανάδοχος" type="contractor" values={contractor} onChange={setContractor} placeholder="Αναζήτησε και επίλεξε αναδόχους" />
           {page !== "market" && <MultiSearchInput label="CPV" type="cpv" values={cpv} onChange={setCpv} placeholder="Αναζήτησε κωδικό ή περιγραφή CPV" />}
           <CheckboxDropdown label="Τύπος σύμβασης" options={contractTypeOptions} values={contractType} onChange={setContractType} />
           {/* A tender's document-type/status describe the notice's own lifecycle - awards and
