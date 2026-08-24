@@ -163,6 +163,54 @@ export default function Home() {
     }
     previousTeamCode.current = team.code;
   }, [team.code]);
+  // Paid-tier feature: named, saved filter combinations (Επισκόπηση/
+  // Διαγωνισμοί/Αγορά share the same filter state already, so one saved
+  // view naturally applies to all three).
+  const [savedViews, setSavedViews] = useState<{ id: string; name: string; filters: Record<string, unknown> }[]>([]);
+  const [newViewName, setNewViewName] = useState("");
+  const [savedViewsError, setSavedViewsError] = useState("");
+  useEffect(() => {
+    if (!team.code) { setSavedViews([]); return; }
+    const code = team.code;
+    fetch("/api/saved-views", { headers: { "x-alert-code": code } })
+      .then(async (response) => {
+        if (!response.ok) throw new Error(`Φόρτωση προβολών: ${response.status} ${(await response.text()).slice(0, 200)}`);
+        return response.json();
+      })
+      .then((payload) => { setSavedViews(payload.items ?? []); setSavedViewsError(""); })
+      .catch((error) => setSavedViewsError(error instanceof Error ? error.message : "Άγνωστο σφάλμα φόρτωσης προβολών"));
+  }, [team.code]);
+  const saveCurrentView = () => {
+    const name = newViewName.trim();
+    if (!name || !team.code) return;
+    const code = team.code;
+    const filters = { year, authority, contractor, cpv, contractType, documentType, status };
+    fetch("/api/saved-views", { method: "POST", headers: { "Content-Type": "application/json", "x-alert-code": code }, body: JSON.stringify({ name, filters }) })
+      .then(async (response) => {
+        if (!response.ok) throw new Error(`Αποθήκευση προβολής: ${response.status} ${(await response.text()).slice(0, 200)}`);
+        return response.json();
+      })
+      .then((payload) => { setSavedViews((current) => [...(payload.items ?? []), ...current]); setNewViewName(""); setSavedViewsError(""); })
+      .catch((error) => setSavedViewsError(error instanceof Error ? error.message : "Άγνωστο σφάλμα αποθήκευσης προβολής"));
+  };
+  const applyView = (view: { filters: Record<string, unknown> }) => {
+    const f = view.filters;
+    if (typeof f.year === "string") setYear(f.year);
+    if (typeof f.authority === "string") setAuthority(f.authority);
+    if (Array.isArray(f.contractor)) setContractor(f.contractor as string[]);
+    if (Array.isArray(f.cpv)) setCpv(f.cpv as string[]);
+    if (Array.isArray(f.contractType)) setContractType(f.contractType as string[]);
+    if (typeof f.documentType === "string") setDocumentType(f.documentType);
+    if (typeof f.status === "string") setStatus(f.status);
+  };
+  const deleteView = (id: string) => {
+    if (!team.code) return;
+    const code = team.code;
+    setSavedViews((current) => current.filter((item) => item.id !== id));
+    fetch(`/api/saved-views?id=${encodeURIComponent(id)}`, { method: "DELETE", headers: { "x-alert-code": code } })
+      .then(async (response) => { if (!response.ok) setSavedViewsError(`Διαγραφή προβολής: ${response.status} ${(await response.text()).slice(0, 200)}`); })
+      .catch((error) => setSavedViewsError(error instanceof Error ? error.message : "Άγνωστο σφάλμα διαγραφής προβολής"));
+  };
   const [lastSync, setLastSync] = useState<string | null>(null);
   const latestRequest = useRef(0);
   const latestDashboardRequest = useRef(0);
@@ -413,6 +461,24 @@ export default function Home() {
             database - the regular filters don't apply to it at all. */}
         {page !== "alerts" && <aside className="filters">
           <div className="filterHeading"><div><span>Φίλτρα</span><small>{number.format(tenders.length)} φορτωμένα · {number.format(dashboard.total || totalTenders)} συνολικά</small></div><button title={loading ? "Φόρτωση…" : "Επαναφορά φίλτρων"} onClick={() => { setStatus("Όλες"); setAuthority(""); setContractor([]); setCpv([]); setQuery(""); setYear("Όλα"); setContractType([]); setDocumentType("Όλοι"); }}><span className={loading ? "spinIcon" : ""}>↻</span></button></div>
+          <div className="savedViews">
+            <p className="eyebrow">ΠΡΟΒΟΛΕΣ</p>
+            {team.code ? <>
+              <div className="recipientInput">
+                <input value={newViewName} onChange={(event) => setNewViewName(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") saveCurrentView(); }} placeholder="Όνομα προβολής" />
+                <button type="button" onClick={saveCurrentView} disabled={!newViewName.trim()}>Αποθήκευση</button>
+              </div>
+              {savedViewsError && <p className="recipientError">{savedViewsError}</p>}
+              {savedViews.length > 0 && <ul className="savedViewsList">
+                {savedViews.map((view) => (
+                  <li key={view.id}>
+                    <button type="button" className="savedViewApply" onClick={() => applyView(view)}>{view.name}</button>
+                    <button type="button" className="savedViewDelete" onClick={() => deleteView(view.id)} aria-label={`Διαγραφή ${view.name}`}>×</button>
+                  </li>
+                ))}
+              </ul>}
+            </> : <p className="watchlistCaption">Αποθήκευσε συνδυασμούς φίλτρων που χρησιμοποιείς συχνά — συνδέσου ή εγγράψου.</p>}
+          </div>
           <label>Έτος<select value={year} onChange={(event) => setYear(event.target.value)}><option>Όλα</option>{years.map((item) => <option key={item}>{item}</option>)}</select></label>
           <SingleSearchInput label="Αναθέτουσα Αρχή" type="authority" value={authority === "Όλες" ? "" : authority} onChange={setAuthority} placeholder="Γράψε ή επίλεξε αρχή" />
           <MultiSearchInput label="Ανάδοχος" type="contractor" values={contractor} onChange={setContractor} placeholder="Αναζήτησε και επίλεξε αναδόχους" />
