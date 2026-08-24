@@ -151,17 +151,28 @@ export default function Home() {
   // already persists the Ειδοποιήσεις CPV picks - not just kept in memory
   // for the current tab, which is all the earlier fix did.
   const [homeTeamCode, setHomeTeamCode] = useState<string | null>(null);
+  // Guards against the initial load-on-login request resolving AFTER the
+  // user has already made a change (add/remove) - without this, a slow
+  // response landing late would silently wipe out whatever she'd just
+  // picked. Any manual change bumps the generation so a stale response is
+  // recognized and ignored instead of applied.
+  const contractorLoadGeneration = useRef(0);
   useEffect(() => {
     if (!homeTeamCode) return;
+    const generation = ++contractorLoadGeneration.current;
     fetch("/api/contractor-watchlist", { headers: { "x-alert-code": homeTeamCode } })
       .then((response) => response.ok ? response.json() : { items: [] })
-      .then((payload) => setContractor((payload.items ?? []).map((item: { contractor_value: string }) => item.contractor_value)))
+      .then((payload) => {
+        if (generation !== contractorLoadGeneration.current) return;
+        setContractor((payload.items ?? []).map((item: { contractor_value: string }) => item.contractor_value));
+      })
       .catch(() => {});
   }, [homeTeamCode]);
   // Single entry point for changing the Ανάδοχος filter so add/remove stay
   // mirrored to contractor_watchlist while logged in - diffs against the
   // current value rather than needing separate add/remove callers.
   const applyContractor = useCallback((next: string[]) => {
+    contractorLoadGeneration.current += 1; // a manual change invalidates any pending initial load
     setContractor((current) => {
       if (homeTeamCode) {
         current.filter((item) => !next.includes(item)).forEach((item) => {
