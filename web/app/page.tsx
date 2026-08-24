@@ -156,10 +156,13 @@ export default function Home() {
     if (previousTeamCode.current && !team.code) {
       // Logging out: clear everything that mirrored persisted/team-session
       // state so it doesn't linger and get shown as if it were free-mode
-      // state once the code is gone. Ανάδοχος is a plain shared filter (like
-      // year/authority), not team-session state, so it's untouched here.
+      // state once the code is gone. Also resets the plain shared filters
+      // (same as pressing "Επαναφορά φίλτρων") - otherwise whatever a Saved
+      // View (or manual filtering) left in place before logging out would
+      // keep filtering the page as if still logged in.
       setAlertsWatchlist([]); setAlertsNutsFilter([]);
       setMarketSelectedContractor(""); setMarketContractorSearch(""); setMarketVisibleCount(10);
+      setStatus("Όλες"); setAuthority(""); setContractor([]); setCpv([]); setYear("Όλα"); setContractType([]); setDocumentType("Όλοι");
     }
     previousTeamCode.current = team.code;
   }, [team.code]);
