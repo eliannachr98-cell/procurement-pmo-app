@@ -213,7 +213,10 @@ export default function Home() {
       .then((response) => response.ok ? response.json() : { items: [] })
       .then((payload) => setProfileRecipients(payload.items ?? []))
       .catch(() => {});
-  }, [team.code]);
+  // Re-runs on login AND every time Προφίλ is opened (not just once) -
+  // otherwise a submission/interest marked elsewhere mid-session left these
+  // counts stuck at whatever they were when she first logged in.
+  }, [team.code, page]);
   // Paid-tier feature: named, saved filter combinations (Επισκόπηση/
   // Διαγωνισμοί/Αγορά share the same filter state already, so one saved
   // view naturally applies to all three).
