@@ -169,15 +169,26 @@ export default function Home() {
     previousTeamCode.current = team.code;
   }, [team.code]);
   // Προφίλ needs the CPV/region watchlist counts even if the visitor never
-  // opens Ειδοποιήσεις this session (that's the only other place that loads
+  // opens Παρακολούθηση this session (that's the only other place that loads
   // them) - fetched independently here, on login, same endpoint
-  // AlertsPanelContent's own load() already uses.
+  // AlertsPanelContent's own load() already uses. The same response also
+  // feeds the nav bell badge (count of matches published in the last 7
+  // days, not yet awarded - the same window the "Πρόσφατοι" tab uses).
+  const [recentAlertCount, setRecentAlertCount] = useState(0);
   useEffect(() => {
-    if (!team.code) { setAlertsWatchlist([]); setAlertsNutsFilter([]); return; }
+    if (!team.code) { setAlertsWatchlist([]); setAlertsNutsFilter([]); setRecentAlertCount(0); return; }
     const code = team.code;
     fetch("/api/alerts", { headers: { "x-alert-code": code } })
-      .then((response) => response.ok ? response.json() : { watchlist: [], nutsFilter: [] })
-      .then((payload) => { setAlertsWatchlist(payload.watchlist ?? []); setAlertsNutsFilter(payload.nutsFilter ?? []); })
+      .then((response) => response.ok ? response.json() : { watchlist: [], nutsFilter: [], alerts: [] })
+      .then((payload) => {
+        setAlertsWatchlist(payload.watchlist ?? []);
+        setAlertsNutsFilter(payload.nutsFilter ?? []);
+        const sevenDaysAgo = Date.now() - 7 * 86400000;
+        const count = (payload.alerts ?? []).filter((item: { hasAward: boolean; publicationDate: string | null }) =>
+          !item.hasAward && item.publicationDate && new Date(item.publicationDate).getTime() >= sevenDaysAgo,
+        ).length;
+        setRecentAlertCount(count);
+      })
       .catch(() => {});
   }, [team.code]);
   // Paid-tier feature: named, saved filter combinations (Επισκόπηση/
@@ -409,7 +420,10 @@ export default function Home() {
         <nav aria-label="Κύρια πλοήγηση">
           {navItems.map(([id, Icon, label]) => (
             <button key={id} className={page === id ? "active" : ""} onClick={() => setPage(id)}>
-              <span><Icon size={16} strokeWidth={2.25} /></span>{label}
+              <span>
+                <Icon size={16} strokeWidth={2.25} />
+                {id === "alerts" && recentAlertCount > 0 && <i className="navBadge">{recentAlertCount > 9 ? "9+" : recentAlertCount}</i>}
+              </span>{label}
             </button>
           ))}
         </nav>
