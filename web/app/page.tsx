@@ -1400,7 +1400,10 @@ function AlertsPanelContent({ code, onUnauthorized, watchlist, setWatchlist, nut
 
   const [alerts, setAlerts] = useState<AlertItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [alertTab, setAlertTab] = useState<"recent" | "active" | "inactive">("active");
+  // Defaults to "recent" (not "active") so landing here from the nav bell
+  // badge - which counts exactly this tab's items - shows what it was
+  // counting immediately, instead of needing an extra click past "Ενεργοί".
+  const [alertTab, setAlertTab] = useState<"recent" | "active" | "inactive">("recent");
   const [authorityFilter, setAuthorityFilter] = useState<string[]>([]);
   const [error, setError] = useState("");
   const [selectedTender, setSelectedTender] = useState<Tender | null>(null);
