@@ -175,10 +175,21 @@ export default function Home() {
   // feeds the nav bell badge (count of matches published in the last 7
   // days, not yet awarded - the same window the "Πρόσφατοι" tab uses).
   const [recentAlertCount, setRecentAlertCount] = useState(0);
+  // Submitted/interested counts and the email recipient list are also only
+  // ever loaded inside AlertsPanelContent otherwise - fetched here too so
+  // Προφίλ has them without requiring a prior visit to Παρακολούθηση.
+  const [submittedCount, setSubmittedCount] = useState(0);
+  const [interestedCount, setInterestedCount] = useState(0);
+  const [profileRecipients, setProfileRecipients] = useState<{ email: string }[]>([]);
   useEffect(() => {
-    if (!team.code) { setAlertsWatchlist([]); setAlertsNutsFilter([]); setRecentAlertCount(0); return; }
+    if (!team.code) {
+      setAlertsWatchlist([]); setAlertsNutsFilter([]); setRecentAlertCount(0);
+      setSubmittedCount(0); setInterestedCount(0); setProfileRecipients([]);
+      return;
+    }
     const code = team.code;
-    fetch("/api/alerts", { headers: { "x-alert-code": code } })
+    const headers = { "x-alert-code": code };
+    fetch("/api/alerts", { headers })
       .then((response) => response.ok ? response.json() : { watchlist: [], nutsFilter: [], alerts: [] })
       .then((payload) => {
         setAlertsWatchlist(payload.watchlist ?? []);
@@ -189,6 +200,18 @@ export default function Home() {
         ).length;
         setRecentAlertCount(count);
       })
+      .catch(() => {});
+    fetch("/api/alert-submissions", { headers })
+      .then((response) => response.ok ? response.json() : { items: [] })
+      .then((payload) => setSubmittedCount((payload.items ?? []).length))
+      .catch(() => {});
+    fetch("/api/alert-interests", { headers })
+      .then((response) => response.ok ? response.json() : { items: [] })
+      .then((payload) => setInterestedCount((payload.items ?? []).length))
+      .catch(() => {});
+    fetch("/api/alert-recipients", { headers })
+      .then((response) => response.ok ? response.json() : { items: [] })
+      .then((payload) => setProfileRecipients(payload.items ?? []))
       .catch(() => {});
   }, [team.code]);
   // Paid-tier feature: named, saved filter combinations (Επισκόπηση/
@@ -497,23 +520,40 @@ export default function Home() {
             <article className="panel profileCard">
               <p className="eyebrow">ΠΡΟΒΟΛΕΣ</p>
               <h2>Αποθηκευμένες προβολές</h2>
-              {team.code ? (savedViews.length > 0 ? <ul className="savedViewsList">
-                {savedViews.map((view) => (
-                  <li key={view.id}>
-                    <button type="button" className="savedViewApply" onClick={() => { applyView(view); setPage("overview"); }}>{view.name}</button>
-                    <button type="button" className="savedViewDelete" onClick={() => deleteView(view.id)} aria-label={`Διαγραφή ${view.name}`}>×</button>
-                  </li>
-                ))}
-              </ul> : <p className="noRows">Δεν έχεις αποθηκεύσει καμία προβολή ακόμη.</p>) : <p className="watchlistCaption">Συνδέσου για να δεις τις αποθηκευμένες προβολές σου.</p>}
+              {team.code ? <>
+                <div className="recipientInput">
+                  <input value={newViewName} onChange={(event) => setNewViewName(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") saveCurrentView(); }} placeholder="Όνομα για τα τρέχοντα φίλτρα" />
+                  <button type="button" onClick={saveCurrentView} disabled={!newViewName.trim()}>Αποθήκευση τρεχόντων φίλτρων</button>
+                </div>
+                {savedViewsError && <p className="recipientError">{savedViewsError}</p>}
+                {savedViews.length > 0 ? <ul className="savedViewsList">
+                  {savedViews.map((view) => (
+                    <li key={view.id}>
+                      <button type="button" className="savedViewApply" onClick={() => { applyView(view); setPage("overview"); }}>{view.name}</button>
+                      <button type="button" className="savedViewDelete" onClick={() => deleteView(view.id)} aria-label={`Διαγραφή ${view.name}`}>×</button>
+                    </li>
+                  ))}
+                </ul> : <p className="noRows">Δεν έχεις αποθηκεύσει καμία προβολή ακόμη.</p>}
+              </> : <p className="watchlistCaption">Συνδέσου για να δεις τις αποθηκευμένες προβολές σου.</p>}
             </article>
             <article className="panel profileCard">
-              <p className="eyebrow">ΕΙΔΟΠΟΙΗΣΕΙΣ</p>
-              <h2>Παρακολούθηση</h2>
+              <p className="eyebrow">ΠΑΡΑΚΟΛΟΥΘΗΣΗ</p>
+              <h2>Τι παρακολουθείς</h2>
               {team.code ? <>
                 <p className="profileStat"><strong>{alertsWatchlist.length}</strong> CPV υπό παρακολούθηση</p>
                 <p className="profileStat"><strong>{alertsNutsFilter.length}</strong> περιοχές υπό παρακολούθηση</p>
+                <p className="profileStat"><strong>{submittedCount}</strong> υποβεβλημένες προσφορές</p>
+                <p className="profileStat"><strong>{interestedCount}</strong> διαγωνισμοί με ενδιαφέρον</p>
                 <button type="button" className="profileLink" onClick={() => setPage("alerts")}>Πήγαινε στην Παρακολούθηση →</button>
               </> : <p className="watchlistCaption">Συνδέσου για να δεις τι παρακολουθείς.</p>}
+            </article>
+            <article className="panel profileCard">
+              <p className="eyebrow">EMAIL</p>
+              <h2>Παραλήπτες ειδοποιήσεων</h2>
+              {team.code ? (profileRecipients.length > 0 ? <ul className="savedViewsList">
+                {profileRecipients.map((item) => <li key={item.email}><span className="profileStat">{item.email}</span></li>)}
+              </ul> : <p className="noRows">Δεν έχει προστεθεί κανένα email ακόμη.</p>) : <p className="watchlistCaption">Συνδέσου για να δεις τους παραλήπτες.</p>}
+              {team.code && <button type="button" className="profileLink" onClick={() => setPage("alerts")}>Διαχείριση παραληπτών →</button>}
             </article>
           </div>}
         </section>
