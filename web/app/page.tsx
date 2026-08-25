@@ -521,10 +521,6 @@ export default function Home() {
               <p className="eyebrow">ΠΡΟΒΟΛΕΣ</p>
               <h2>Αποθηκευμένες προβολές</h2>
               {team.code ? <>
-                <div className="recipientInput">
-                  <input value={newViewName} onChange={(event) => setNewViewName(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") saveCurrentView(); }} placeholder="Όνομα για τα τρέχοντα φίλτρα" />
-                  <button type="button" onClick={saveCurrentView} disabled={!newViewName.trim()}>Αποθήκευση τρεχόντων φίλτρων</button>
-                </div>
                 {savedViewsError && <p className="recipientError">{savedViewsError}</p>}
                 {savedViews.length > 0 ? <ul className="savedViewsList">
                   {savedViews.map((view) => (
