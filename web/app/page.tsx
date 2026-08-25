@@ -1749,6 +1749,7 @@ function AlertsPanelContent({ code, onUnauthorized, watchlist, setWatchlist, nut
           <button type="button" className="submittedTitle" onClick={() => openTender(item.adam)}>{item.title}</button>
           <span className="submittedMeta">{item.authority}</span>
           <span className="submittedFacts">
+            <span><b>Τύπος</b>{item.documentType ? (documentTypeLabels[item.documentType] ?? item.documentType) : "—"}</span>
             <span><b>Π/Υ</b>{euro.format(item.budget)}</span>
             <span><b>Αποσφράγιση</b>{formatDate(item.openingDate ?? undefined)}</span>
             <span className="adamCopy" role="button" tabIndex={0} title="Αντιγραφή ΑΔΑΜ" onClick={(event) => copyAdam(item.adam, event)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); copyAdam(item.adam, event); } }}><b>ΑΔΑΜ</b>{copiedAdam === item.adam ? "Αντιγράφηκε!" : item.adam}</span>
@@ -1765,6 +1766,7 @@ function AlertsPanelContent({ code, onUnauthorized, watchlist, setWatchlist, nut
             <button type="button" className="submittedTitle" onClick={() => openTender(item.adam)}>{item.title}</button>
             <span className="submittedMeta">{item.authority}</span>
             <span className="submittedFacts">
+              <span><b>Τύπος</b>{item.documentType ? (documentTypeLabels[item.documentType] ?? item.documentType) : "—"}</span>
               <span><b>Π/Υ</b>{euro.format(item.budget)}</span>
               <span><b>Αποσφράγιση</b>{formatDate(item.openingDate ?? undefined)}</span>
               <span className="adamCopy" role="button" tabIndex={0} title="Αντιγραφή ΑΔΑΜ" onClick={(event) => copyAdam(item.adam, event)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); copyAdam(item.adam, event); } }}><b>ΑΔΑΜ</b>{copiedAdam === item.adam ? "Αντιγράφηκε!" : item.adam}</span>
