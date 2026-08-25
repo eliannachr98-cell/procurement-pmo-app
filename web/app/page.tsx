@@ -406,7 +406,6 @@ export default function Home() {
           <span className="brandMark">⌖</span>
           <span><strong>TenderScope</strong><small>Ελληνικό Παρατηρητήριο Δημοσίων Συμβάσεων</small></span>
         </div>
-        {lastSync && <span className="lastSync" title={new Date(lastSync).toLocaleString("el-GR")}>Τελευταία ενημέρωση: {new Intl.DateTimeFormat("el-GR", { dateStyle: "short", timeStyle: "short" }).format(new Date(lastSync))}</span>}
         <nav aria-label="Κύρια πλοήγηση">
           {navItems.map(([id, Icon, label]) => (
             <button key={id} className={page === id ? "active" : ""} onClick={() => setPage(id)}>
@@ -479,6 +478,7 @@ export default function Home() {
               {team.code
                 ? <p className="profileStatusOn">✓ Συνδεδεμένη ομάδα</p>
                 : <p className="watchlistCaption">Δεν είσαι συνδεδεμένη — οι Προβολές και η παρακολούθηση Ειδοποιήσεων χρειάζονται σύνδεση.</p>}
+              {lastSync && <p className="profileStat" title={new Date(lastSync).toLocaleString("el-GR")}>Τελευταία ενημέρωση δεδομένων: <strong>{new Intl.DateTimeFormat("el-GR", { dateStyle: "short", timeStyle: "short" }).format(new Date(lastSync))}</strong></p>}
             </article>
             <article className="panel profileCard">
               <p className="eyebrow">ΠΡΟΒΟΛΕΣ</p>
