@@ -201,14 +201,37 @@ export default function Home() {
         setRecentAlertCount(count);
       })
       .catch(() => {});
-    fetch("/api/alert-submissions", { headers })
-      .then((response) => response.ok ? response.json() : { items: [] })
-      .then((payload) => setSubmittedCount((payload.items ?? []).length))
-      .catch(() => {});
-    fetch("/api/alert-interests", { headers })
-      .then((response) => response.ok ? response.json() : { items: [] })
-      .then((payload) => setInterestedCount((payload.items ?? []).length))
-      .catch(() => {});
+    // A single real tender is often published as BOTH a Διακήρυξη and a
+    // Προκήρυξη (two separate ΑΔΑΜ, same authority+budget) - the tracked
+    // list intentionally shows both (nothing gets hidden there), but a raw
+    // count of marked ΑΔΑΜ overstates how many distinct tenders that
+    // actually is. Resolve to full details and count distinct
+    // authority+budget pairs instead, matching how the email-candidate
+    // pairing check already identifies the same real-world pair.
+    Promise.all([
+      fetch("/api/alert-submissions", { headers }).then((response) => response.ok ? response.json() : { items: [] }),
+      fetch("/api/alert-interests", { headers }).then((response) => response.ok ? response.json() : { items: [] }),
+    ]).then(([submissions, interests]) => {
+      const submittedAdamsList: string[] = (submissions.items ?? []).map((item: { adam: string }) => item.adam);
+      const interestedAdamsList: string[] = (interests.items ?? []).map((item: { adam: string }) => item.adam);
+      const allAdams = [...new Set([...submittedAdamsList, ...interestedAdamsList])];
+      if (!allAdams.length) { setSubmittedCount(0); setInterestedCount(0); return; }
+      const params = new URLSearchParams();
+      allAdams.forEach((adam) => params.append("adam", adam));
+      fetch(`/api/alert-tenders?${params.toString()}`)
+        .then((response) => response.ok ? response.json() : { items: [] })
+        .then((payload) => {
+          const items: { adam: string; authority: string; budget: number }[] = payload.items ?? [];
+          const distinctTenderKey = (adams: string[]) => {
+            const submittedSet = new Set(adams);
+            const keys = new Set(items.filter((item) => submittedSet.has(item.adam)).map((item) => `${item.authority}|${item.budget}`));
+            return keys.size;
+          };
+          setSubmittedCount(distinctTenderKey(submittedAdamsList));
+          setInterestedCount(distinctTenderKey(interestedAdamsList));
+        })
+        .catch(() => {});
+    }).catch(() => {});
     fetch("/api/alert-recipients", { headers })
       .then((response) => response.ok ? response.json() : { items: [] })
       .then((payload) => setProfileRecipients(payload.items ?? []))
