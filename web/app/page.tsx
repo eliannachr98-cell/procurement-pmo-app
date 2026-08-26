@@ -168,6 +168,40 @@ export default function Home() {
     window.localStorage.setItem("teamProfileName", trimmed);
     setTeamName(trimmed);
   };
+  // Same local-only storage as the name - downscaled to a small square
+  // client-side first (a phone photo straight from disk would otherwise be
+  // several MB, well past what's comfortable in localStorage).
+  const [teamPhoto, setTeamPhoto] = useState("");
+  useEffect(() => {
+    setTeamPhoto(window.localStorage.getItem("teamProfilePhoto") ?? "");
+  }, []);
+  const handleTeamPhotoFile = (file: File) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new window.Image();
+      img.onload = () => {
+        const size = 160;
+        const canvas = document.createElement("canvas");
+        canvas.width = size;
+        canvas.height = size;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return;
+        const scale = Math.max(size / img.width, size / img.height);
+        const w = img.width * scale;
+        const h = img.height * scale;
+        ctx.drawImage(img, (size - w) / 2, (size - h) / 2, w, h);
+        const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+        window.localStorage.setItem("teamProfilePhoto", dataUrl);
+        setTeamPhoto(dataUrl);
+      };
+      img.src = reader.result as string;
+    };
+    reader.readAsDataURL(file);
+  };
+  const removeTeamPhoto = () => {
+    window.localStorage.removeItem("teamProfilePhoto");
+    setTeamPhoto("");
+  };
   const previousTeamCode = useRef(team.code);
   useEffect(() => {
     if (previousTeamCode.current && !team.code) {
@@ -554,7 +588,16 @@ export default function Home() {
               <p className="eyebrow">ΛΟΓΑΡΙΑΣΜΟΣ</p>
               <h2>Κατάσταση σύνδεσης</h2>
               {team.code ? <>
-                <p className="profileStatusOn">✓ Συνδεδεμένη{teamName ? `: ${teamName}` : " ομάδα"}</p>
+                <div className="profileIdentity">
+                  <label className="profileAvatar" title="Άλλαξε φωτογραφία">
+                    {teamPhoto ? <img src={teamPhoto} alt="" /> : <CircleUserRound size={28} strokeWidth={1.75} />}
+                    <input type="file" accept="image/*" onChange={(event) => { const file = event.target.files?.[0]; if (file) handleTeamPhotoFile(file); event.target.value = ""; }} />
+                  </label>
+                  <div>
+                    <p className="profileStatusOn">✓ Συνδεδεμένη{teamName ? `: ${teamName}` : " ομάδα"}</p>
+                    {teamPhoto && <button type="button" className="profileLink" onClick={removeTeamPhoto}>Αφαίρεση φωτογραφίας</button>}
+                  </div>
+                </div>
                 <div className="recipientInput">
                   <input value={teamNameInput} onChange={(event) => setTeamNameInput(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") saveTeamName(); }} placeholder="Όνομα ομάδας (προαιρετικό)" />
                   <button type="button" onClick={saveTeamName} disabled={teamNameInput.trim() === teamName}>Αποθήκευση</button>
