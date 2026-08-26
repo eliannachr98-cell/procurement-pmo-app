@@ -520,16 +520,6 @@ export default function Home() {
                 : <p className="watchlistCaption">Δεν είσαι συνδεδεμένη — οι Προβολές και η παρακολούθηση Ειδοποιήσεων χρειάζονται σύνδεση.</p>}
               {lastSync && <p className="profileStat" title={new Date(lastSync).toLocaleString("el-GR")}>Τελευταία ενημέρωση δεδομένων: <strong>{new Intl.DateTimeFormat("el-GR", { dateStyle: "short", timeStyle: "short" }).format(new Date(lastSync))}</strong></p>}
             </article>
-            {team.code && <article className="panel profileCard">
-              <p className="eyebrow">ΣΥΝΘΕΣΗ</p>
-              <h2>Τι παρακολουθείς, με μια ματιά</h2>
-              <ProfileDonut segments={[
-                { label: "CPV", value: alertsWatchlist.length, color: "#0d4565" },
-                { label: "Περιοχές", value: alertsNutsFilter.length, color: "#168c8c" },
-                { label: "Προβολές", value: savedViews.length, color: "#dca54a" },
-                { label: "Υποβεβλημένες / Ενδιαφέρον", value: submittedCount + interestedCount, color: "#6559a8" },
-              ]} />
-            </article>}
             <article className="panel profileCard">
               <p className="eyebrow">ΠΡΟΒΟΛΕΣ</p>
               <h2>Αποθηκευμένες προβολές</h2>
@@ -704,31 +694,6 @@ function CpvDonut({ counts, total, cpvTotal }: { counts: { cpv_code: string; cpv
 // υποβεβλημένα κ.λπ.) - same SVG stroke-dasharray technique as CpvDonut,
 // just driven by an arbitrary flat list of labeled counts instead of a
 // top-3-plus-other breakdown.
-function ProfileDonut({ segments }: { segments: { label: string; value: number; color: string }[] }) {
-  const total = segments.reduce((sum, item) => sum + item.value, 0);
-  const size = 148;
-  const strokeWidth = 33;
-  const radius = (size - strokeWidth) / 2;
-  const circumference = 2 * Math.PI * radius;
-  const nonZero = segments.filter((item) => item.value > 0);
-  let cursor = 0;
-  if (!total) return <p className="noRows">Δεν υπάρχουν ακόμη δεδομένα να δείξουμε.</p>;
-  return <div className="donutWrap"><div className="donut">
-    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
-      <g transform={`rotate(-90 ${size / 2} ${size / 2})`}>
-        {nonZero.map((segment, index) => {
-          const pct = (segment.value / total) * 100;
-          const dash = (pct / 100) * circumference;
-          const offset = -((cursor / 100) * circumference);
-          cursor += pct;
-          return <circle key={index} cx={size / 2} cy={size / 2} r={radius} fill="none" stroke={segment.color} strokeWidth={strokeWidth} strokeDasharray={`${dash} ${circumference - dash}`} strokeDashoffset={offset} />;
-        })}
-      </g>
-    </svg>
-    <span><strong>{number.format(total)}</strong><small>σύνολο</small></span>
-  </div><ul>{segments.map((segment, index) => <li key={index}><i style={{ background: segment.color }} /><span><b>{segment.label}</b></span><b>{segment.value}</b></li>)}</ul></div>;
-}
-
 const MONTH_NAMES = ["Ιαν","Φεβ","Μαρ","Απρ","Μαϊ","Ιουν","Ιουλ","Αυγ","Σεπ","Οκτ","Νοε","Δεκ"];
 
 function monthLabel(ym: string) {
