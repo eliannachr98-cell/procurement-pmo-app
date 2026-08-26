@@ -584,27 +584,25 @@ export default function Home() {
           {page === "market" && <MarketPanel awards={awards} contracts={contracts} cpv={cpv} setCpv={setCpv} contractor={contractor} authority={authority} year={year} contractType={contractType} documentType={documentType} loadedCount={tenders.length} totalCount={totalTenders} stillLoading={hasMore && loading} locked={!team.code} selectedContractor={marketSelectedContractor} setSelectedContractor={setMarketSelectedContractor} contractorSearch={marketContractorSearch} setContractorSearch={setMarketContractorSearch} visibleCount={marketVisibleCount} setVisibleCount={setMarketVisibleCount} />}
           {page === "alerts" && <AlertsPanelContent key={team.code ?? "free"} code={team.code ?? null} onUnauthorized={team.onUnauthorized} watchlist={alertsWatchlist} setWatchlist={setAlertsWatchlist} nutsFilter={alertsNutsFilter} setNutsFilter={setAlertsNutsFilter} />}
           {page === "profile" && <div className="profileGrid">
-            <article className="panel profileCard">
+            <article className="panel profileCard profileAccountCard">
               <p className="eyebrow">ΛΟΓΑΡΙΑΣΜΟΣ</p>
               <div className="profileHeaderMain">
                 <label className="profileAvatar" title="Άλλαξε φωτογραφία">
-                  {teamPhoto ? <img src={teamPhoto} alt="" /> : <CircleUserRound size={30} strokeWidth={1.75} />}
+                  {teamPhoto ? <img src={teamPhoto} alt="" /> : <CircleUserRound size={32} strokeWidth={1.75} />}
                   {team.code && <input type="file" accept="image/*" onChange={(event) => { const file = event.target.files?.[0]; if (file) handleTeamPhotoFile(file); event.target.value = ""; }} />}
                 </label>
-                <div>
-                  {team.code ? <>
-                    <p className="profileStatusOn">{teamName || "Η ομάδα σου"}</p>
-                    {teamPhoto && <button type="button" className="profileLink" onClick={removeTeamPhoto}>Αφαίρεση φωτογραφίας</button>}
-                  </> : <p className="profileStatusOff">Δεν είσαι συνδεδεμένη — οι Προβολές και η Παρακολούθηση χρειάζονται σύνδεση.</p>}
-                </div>
+                {team.code ? <>
+                  <p className="profileStatusOn">{teamName || "Η ομάδα σου"}</p>
+                  {teamPhoto && <button type="button" className="profileLink" onClick={removeTeamPhoto}>Αφαίρεση φωτογραφίας</button>}
+                </> : <p className="profileStatusOff">Δεν είσαι συνδεδεμένη — οι Προβολές και η Παρακολούθηση χρειάζονται σύνδεση.</p>}
               </div>
               {team.code && <div className="recipientInput">
                 <input value={teamNameInput} onChange={(event) => setTeamNameInput(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") saveTeamName(); }} placeholder="Όνομα ομάδας (προαιρετικό)" />
                 <button type="button" onClick={saveTeamName} disabled={teamNameInput.trim() === teamName}>Αποθήκευση</button>
               </div>}
-              {lastSync && <p className="profileHeaderSync">Ενημέρωση δεδομένων: <strong>{new Intl.DateTimeFormat("el-GR", { dateStyle: "short", timeStyle: "short" }).format(new Date(lastSync))}</strong></p>}
+              {lastSync && <p className="profileHeaderSync">Ενημέρωση δεδομένων<strong>{new Intl.DateTimeFormat("el-GR", { dateStyle: "short", timeStyle: "short" }).format(new Date(lastSync))}</strong></p>}
             </article>
-            <article className="panel profileCard">
+            <article className="panel profileCard profileViewsCard">
               <p className="eyebrow">ΠΡΟΒΟΛΕΣ</p>
               <h2>Αποθηκευμένες προβολές</h2>
               {team.code ? <>
@@ -619,7 +617,7 @@ export default function Home() {
                 </ul> : <p className="noRows">Δεν έχεις αποθηκεύσει καμία προβολή ακόμη.</p>}
               </> : <p className="watchlistCaption">Συνδέσου για να δεις τις αποθηκευμένες προβολές σου.</p>}
             </article>
-            <article className="panel profileCard">
+            <article className="panel profileCard profileWatchCard">
               <p className="eyebrow">ΠΑΡΑΚΟΛΟΥΘΗΣΗ</p>
               <h2>Τι παρακολουθείς</h2>
               {team.code ? <>
@@ -632,7 +630,7 @@ export default function Home() {
                 <button type="button" className="profileLink" onClick={() => setPage("alerts")}>Πήγαινε στην Παρακολούθηση →</button>
               </> : <p className="watchlistCaption">Συνδέσου για να δεις τι παρακολουθείς.</p>}
             </article>
-            <article className="panel profileCard">
+            <article className="panel profileCard profileEmailCard">
               <p className="eyebrow">EMAIL</p>
               <h2>Παραλήπτες ειδοποιήσεων</h2>
               {team.code ? (profileRecipients.length > 0 ? <ul className="savedViewsList">
