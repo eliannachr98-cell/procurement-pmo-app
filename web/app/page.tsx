@@ -520,7 +520,7 @@ export default function Home() {
                 : <p className="watchlistCaption">Δεν είσαι συνδεδεμένη — οι Προβολές και η παρακολούθηση Ειδοποιήσεων χρειάζονται σύνδεση.</p>}
               {lastSync && <p className="profileStat" title={new Date(lastSync).toLocaleString("el-GR")}>Τελευταία ενημέρωση δεδομένων: <strong>{new Intl.DateTimeFormat("el-GR", { dateStyle: "short", timeStyle: "short" }).format(new Date(lastSync))}</strong></p>}
             </article>
-            {team.code && <article className="panel profileCard profileCardWide">
+            {team.code && <article className="panel profileCard">
               <p className="eyebrow">ΣΥΝΘΕΣΗ</p>
               <h2>Τι παρακολουθείς, με μια ματιά</h2>
               <ProfileDonut segments={[
