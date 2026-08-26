@@ -602,7 +602,7 @@ export default function Home() {
               </div>}
               {lastSync && <p className="profileHeaderSync">Ενημέρωση δεδομένων<strong>{new Intl.DateTimeFormat("el-GR", { dateStyle: "short", timeStyle: "short" }).format(new Date(lastSync))}</strong></p>}
             </article>
-            <article className="panel profileCard">
+            <article className="panel profileCard profileViewsCard">
               <p className="eyebrow">ΠΡΟΒΟΛΕΣ</p>
               <h2>Αποθηκευμένες προβολές</h2>
               {team.code ? <>
@@ -617,7 +617,7 @@ export default function Home() {
                 </ul> : <p className="noRows">Δεν έχεις αποθηκεύσει καμία προβολή ακόμη.</p>}
               </> : <p className="watchlistCaption">Συνδέσου για να δεις τις αποθηκευμένες προβολές σου.</p>}
             </article>
-            <article className="panel profileCard">
+            <article className="panel profileCard profileWatchCard">
               <p className="eyebrow">ΠΑΡΑΚΟΛΟΥΘΗΣΗ</p>
               <h2>Τι παρακολουθείς</h2>
               {team.code ? <>
@@ -630,7 +630,7 @@ export default function Home() {
                 <button type="button" className="profileLink" onClick={() => setPage("alerts")}>Πήγαινε στην Παρακολούθηση →</button>
               </> : <p className="watchlistCaption">Συνδέσου για να δεις τι παρακολουθείς.</p>}
             </article>
-            <article className="panel profileCard">
+            <article className="panel profileCard profileEmailCard">
               <p className="eyebrow">EMAIL</p>
               <h2>Παραλήπτες ειδοποιήσεων</h2>
               {team.code ? (profileRecipients.length > 0 ? <ul className="savedViewsList">
