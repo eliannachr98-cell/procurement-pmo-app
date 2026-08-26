@@ -593,7 +593,7 @@ export default function Home() {
                 <div>
                   <p className="eyebrow">ΛΟΓΑΡΙΑΣΜΟΣ</p>
                   {team.code ? <>
-                    <p className="profileStatusOn">✓ Συνδεδεμένη{teamName ? `: ${teamName}` : " ομάδα"}</p>
+                    <p className="profileStatusOn">{teamName || "Η ομάδα σου"}</p>
                     <div className="profileHeaderActions">
                       <div className="recipientInput">
                         <input value={teamNameInput} onChange={(event) => setTeamNameInput(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") saveTeamName(); }} placeholder="Όνομα ομάδας (προαιρετικό)" />
