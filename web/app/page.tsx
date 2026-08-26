@@ -588,7 +588,7 @@ export default function Home() {
               <p className="eyebrow">ΛΟΓΑΡΙΑΣΜΟΣ</p>
               <div className="profileHeaderMain">
                 <label className="profileAvatar" title="Άλλαξε φωτογραφία">
-                  {teamPhoto ? <img src={teamPhoto} alt="" /> : <CircleUserRound size={32} strokeWidth={1.75} />}
+                  {teamPhoto ? <img src={teamPhoto} alt="" /> : <CircleUserRound size={46} strokeWidth={1.75} />}
                   {team.code && <input type="file" accept="image/*" onChange={(event) => { const file = event.target.files?.[0]; if (file) handleTeamPhotoFile(file); event.target.value = ""; }} />}
                 </label>
                 {team.code ? <>
