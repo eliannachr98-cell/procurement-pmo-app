@@ -153,6 +153,21 @@ export default function Home() {
   // way to know the code at all (worked around with an onCodeChange relay).
   // A single instance here, rendered once, fixes both.
   const team = useTeamCode();
+  // Purely cosmetic label for Προφίλ - there's no individual login yet (one
+  // shared team passcode), so this can't be tied to a real identity. Just a
+  // per-browser display name, stored in localStorage, not sent anywhere.
+  const [teamName, setTeamName] = useState("");
+  const [teamNameInput, setTeamNameInput] = useState("");
+  useEffect(() => {
+    const stored = window.localStorage.getItem("teamProfileName") ?? "";
+    setTeamName(stored);
+    setTeamNameInput(stored);
+  }, []);
+  const saveTeamName = () => {
+    const trimmed = teamNameInput.trim();
+    window.localStorage.setItem("teamProfileName", trimmed);
+    setTeamName(trimmed);
+  };
   const previousTeamCode = useRef(team.code);
   useEffect(() => {
     if (previousTeamCode.current && !team.code) {
@@ -538,9 +553,13 @@ export default function Home() {
             <article className="panel profileCard">
               <p className="eyebrow">ΛΟΓΑΡΙΑΣΜΟΣ</p>
               <h2>Κατάσταση σύνδεσης</h2>
-              {team.code
-                ? <p className="profileStatusOn">✓ Συνδεδεμένη ομάδα</p>
-                : <p className="watchlistCaption">Δεν είσαι συνδεδεμένη — οι Προβολές και η παρακολούθηση Ειδοποιήσεων χρειάζονται σύνδεση.</p>}
+              {team.code ? <>
+                <p className="profileStatusOn">✓ Συνδεδεμένη{teamName ? `: ${teamName}` : " ομάδα"}</p>
+                <div className="recipientInput">
+                  <input value={teamNameInput} onChange={(event) => setTeamNameInput(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") saveTeamName(); }} placeholder="Όνομα ομάδας (προαιρετικό)" />
+                  <button type="button" onClick={saveTeamName} disabled={teamNameInput.trim() === teamName}>Αποθήκευση</button>
+                </div>
+              </> : <p className="watchlistCaption">Δεν είσαι συνδεδεμένη — οι Προβολές και η παρακολούθηση Ειδοποιήσεων χρειάζονται σύνδεση.</p>}
               {lastSync && <p className="profileStat" title={new Date(lastSync).toLocaleString("el-GR")}>Τελευταία ενημέρωση δεδομένων: <strong>{new Intl.DateTimeFormat("el-GR", { dateStyle: "short", timeStyle: "short" }).format(new Date(lastSync))}</strong></p>}
             </article>
             <article className="panel profileCard">
