@@ -584,26 +584,27 @@ export default function Home() {
           {page === "market" && <MarketPanel awards={awards} contracts={contracts} cpv={cpv} setCpv={setCpv} contractor={contractor} authority={authority} year={year} contractType={contractType} documentType={documentType} loadedCount={tenders.length} totalCount={totalTenders} stillLoading={hasMore && loading} locked={!team.code} selectedContractor={marketSelectedContractor} setSelectedContractor={setMarketSelectedContractor} contractorSearch={marketContractorSearch} setContractorSearch={setMarketContractorSearch} visibleCount={marketVisibleCount} setVisibleCount={setMarketVisibleCount} />}
           {page === "alerts" && <AlertsPanelContent key={team.code ?? "free"} code={team.code ?? null} onUnauthorized={team.onUnauthorized} watchlist={alertsWatchlist} setWatchlist={setAlertsWatchlist} nutsFilter={alertsNutsFilter} setNutsFilter={setAlertsNutsFilter} />}
           {page === "profile" && <div className="profileGrid">
-            <article className="panel profileCard">
-              <p className="eyebrow">ΛΟΓΑΡΙΑΣΜΟΣ</p>
-              <h2>Κατάσταση σύνδεσης</h2>
-              {team.code ? <>
-                <div className="profileIdentity">
-                  <label className="profileAvatar" title="Άλλαξε φωτογραφία">
-                    {teamPhoto ? <img src={teamPhoto} alt="" /> : <CircleUserRound size={28} strokeWidth={1.75} />}
-                    <input type="file" accept="image/*" onChange={(event) => { const file = event.target.files?.[0]; if (file) handleTeamPhotoFile(file); event.target.value = ""; }} />
-                  </label>
-                  <div>
+            <article className="profileHeader">
+              <div className="profileHeaderMain">
+                <label className="profileAvatar" title="Άλλαξε φωτογραφία">
+                  {teamPhoto ? <img src={teamPhoto} alt="" /> : <CircleUserRound size={34} strokeWidth={1.75} />}
+                  {team.code && <input type="file" accept="image/*" onChange={(event) => { const file = event.target.files?.[0]; if (file) handleTeamPhotoFile(file); event.target.value = ""; }} />}
+                </label>
+                <div>
+                  <p className="eyebrow">ΛΟΓΑΡΙΑΣΜΟΣ</p>
+                  {team.code ? <>
                     <p className="profileStatusOn">✓ Συνδεδεμένη{teamName ? `: ${teamName}` : " ομάδα"}</p>
-                    {teamPhoto && <button type="button" className="profileLink" onClick={removeTeamPhoto}>Αφαίρεση φωτογραφίας</button>}
-                  </div>
+                    <div className="profileHeaderActions">
+                      <div className="recipientInput">
+                        <input value={teamNameInput} onChange={(event) => setTeamNameInput(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") saveTeamName(); }} placeholder="Όνομα ομάδας (προαιρετικό)" />
+                        <button type="button" onClick={saveTeamName} disabled={teamNameInput.trim() === teamName}>Αποθήκευση</button>
+                      </div>
+                      {teamPhoto && <button type="button" className="profileLink" onClick={removeTeamPhoto}>Αφαίρεση φωτογραφίας</button>}
+                    </div>
+                  </> : <p className="profileStatusOff">Δεν είσαι συνδεδεμένη — οι Προβολές και η Παρακολούθηση χρειάζονται σύνδεση.</p>}
                 </div>
-                <div className="recipientInput">
-                  <input value={teamNameInput} onChange={(event) => setTeamNameInput(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") saveTeamName(); }} placeholder="Όνομα ομάδας (προαιρετικό)" />
-                  <button type="button" onClick={saveTeamName} disabled={teamNameInput.trim() === teamName}>Αποθήκευση</button>
-                </div>
-              </> : <p className="watchlistCaption">Δεν είσαι συνδεδεμένη — οι Προβολές και η παρακολούθηση Ειδοποιήσεων χρειάζονται σύνδεση.</p>}
-              {lastSync && <p className="profileStat" title={new Date(lastSync).toLocaleString("el-GR")}>Τελευταία ενημέρωση δεδομένων: <strong>{new Intl.DateTimeFormat("el-GR", { dateStyle: "short", timeStyle: "short" }).format(new Date(lastSync))}</strong></p>}
+              </div>
+              {lastSync && <p className="profileHeaderSync">Ενημέρωση δεδομένων<strong>{new Intl.DateTimeFormat("el-GR", { dateStyle: "short", timeStyle: "short" }).format(new Date(lastSync))}</strong></p>}
             </article>
             <article className="panel profileCard">
               <p className="eyebrow">ΠΡΟΒΟΛΕΣ</p>
@@ -624,10 +625,12 @@ export default function Home() {
               <p className="eyebrow">ΠΑΡΑΚΟΛΟΥΘΗΣΗ</p>
               <h2>Τι παρακολουθείς</h2>
               {team.code ? <>
-                <p className="profileStat"><strong>{alertsWatchlist.length}</strong> CPV υπό παρακολούθηση</p>
-                <p className="profileStat"><strong>{alertsNutsFilter.length}</strong> περιοχές υπό παρακολούθηση</p>
-                <p className="profileStat"><strong>{submittedCount}</strong> υποβεβλημένες προσφορές</p>
-                <p className="profileStat"><strong>{interestedCount}</strong> διαγωνισμοί με ενδιαφέρον</p>
+                <div className="metrics profileMetrics">
+                  <Metric label="CPV υπό παρακολούθηση" value={number.format(alertsWatchlist.length)} tone="sky" />
+                  <Metric label="Περιοχές υπό παρακολούθηση" value={number.format(alertsNutsFilter.length)} tone="mint" />
+                  <Metric label="Υποβεβλημένες προσφορές" value={number.format(submittedCount)} tone="sand" />
+                  <Metric label="Ενδιαφέρον συμμετοχής" value={number.format(interestedCount)} tone="lilac" />
+                </div>
                 <button type="button" className="profileLink" onClick={() => setPage("alerts")}>Πήγαινε στην Παρακολούθηση →</button>
               </> : <p className="watchlistCaption">Συνδέσου για να δεις τι παρακολουθείς.</p>}
             </article>
