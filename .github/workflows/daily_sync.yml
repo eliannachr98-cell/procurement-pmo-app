@@ -2,8 +2,11 @@ name: Daily KHMDHS sync
 
 on:
   schedule:
-    # 03:00 UTC = 06:00 Athens time (EEST) - well outside business hours.
-    - cron: "0 3 * * *"
+    # 03:17 UTC = ~06:17 Athens time (EEST) - well outside business hours.
+    # Off the top of the hour on purpose: GitHub Actions explicitly warns
+    # that scheduled workflows queue behind everyone else's :00 cron jobs
+    # and can be delayed by hours during that congestion.
+    - cron: "17 3 * * *"
   workflow_dispatch:
     inputs:
       days_back:
