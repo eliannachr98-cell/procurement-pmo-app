@@ -684,7 +684,7 @@ export default function Home() {
 }
 
 function Metric({ label, value, sub, tone }: { label: string; value: string; sub?: string; tone: string }) {
-  return <article className={`metric ${tone}`}><span>{label}</span><strong>{value}</strong>{sub && <small>{sub}</small>}</article>;
+  return <article className={`metric ${tone}`}><div className="metricMain"><span>{label}</span><strong>{value}</strong></div>{sub && <small>{sub}</small>}</article>;
 }
 
 function PanelHeader({ title, caption, onDownload, chartRef }: { title: string; caption: string; onDownload?: ExportPayload; chartRef?: RefObject<HTMLElement | null> }) {
