@@ -517,7 +517,7 @@ export default function Home() {
         </div>
         <nav aria-label="Κύρια πλοήγηση">
           {navItems.map(([id, Icon, label]) => (
-            <button key={id} className={page === id ? "active" : ""} onClick={() => setPage(id)}>
+            <button key={id} className={`${page === id ? "active" : ""} ${id === "profile" ? "navProfile" : ""}`} onClick={() => setPage(id)}>
               <span>
                 <Icon size={16} strokeWidth={2.25} />
                 {id === "alerts" && recentAlertCount > 0 && <i className="navBadge">{recentAlertCount > 9 ? "9+" : recentAlertCount}</i>}
