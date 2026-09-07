@@ -516,14 +516,23 @@ export default function Home() {
           <span><strong>TenderScope</strong><small>Ελληνικό Παρατηρητήριο Δημοσίων Συμβάσεων</small></span>
         </div>
         <nav aria-label="Κύρια πλοήγηση">
-          {navItems.map(([id, Icon, label]) => (
-            <button key={id} className={`${page === id ? "active" : ""} ${id === "profile" ? "navProfile" : ""}`} onClick={() => setPage(id)}>
-              <span>
-                <Icon size={16} strokeWidth={2.25} />
-                {id === "alerts" && recentAlertCount > 0 && <i className="navBadge">{recentAlertCount > 9 ? "9+" : recentAlertCount}</i>}
-              </span>{label}
-            </button>
-          ))}
+          <div className="navMain">
+            {navItems.filter(([id]) => id !== "profile").map(([id, Icon, label]) => (
+              <button key={id} className={page === id ? "active" : ""} onClick={() => setPage(id)}>
+                <span>
+                  <Icon size={16} strokeWidth={2.25} />
+                  {id === "alerts" && recentAlertCount > 0 && <i className="navBadge">{recentAlertCount > 9 ? "9+" : recentAlertCount}</i>}
+                </span>{label}
+              </button>
+            ))}
+          </div>
+          <div className="navProfileCol">
+            {navItems.filter(([id]) => id === "profile").map(([id, Icon, label]) => (
+              <button key={id} className={page === id ? "active" : ""} onClick={() => setPage(id)}>
+                <span><Icon size={16} strokeWidth={2.25} /></span>{label}
+              </button>
+            ))}
+          </div>
         </nav>
       </header>
 
