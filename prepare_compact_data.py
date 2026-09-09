@@ -36,10 +36,14 @@ def date_windows(date_from: str, date_to: str, days: int = 7):
         current = window_end + timedelta(days=1)
 
 
+MAX_ATTEMPTS = 8
+MAX_BACKOFF_SECONDS = 90
+
+
 def request_page(source: str, page: int, payload: dict) -> dict:
     url = f"{BASE_URL}/{ENDPOINTS[source]}"
     read_timeout = float(os.environ.get("KHMDHS_READ_TIMEOUT", "60"))
-    for attempt in range(1, 6):
+    for attempt in range(1, MAX_ATTEMPTS + 1):
         try:
             response = requests.post(
                 url,
@@ -58,16 +62,16 @@ def request_page(source: str, page: int, payload: dict) -> dict:
             if response.status_code not in (429, 500, 502, 503, 504):
                 response.raise_for_status()
                 return response.json()
-            if attempt == 5:
+            if attempt == MAX_ATTEMPTS:
                 response.raise_for_status()
-            wait = min(45, 5 * (2 ** (attempt - 1)))
-            print(f"{source}: HTTP {response.status_code} on page {page + 1}; retry {attempt}/5 in {wait}s")
+            wait = min(MAX_BACKOFF_SECONDS, 5 * (2 ** (attempt - 1)))
+            print(f"{source}: HTTP {response.status_code} on page {page + 1}; retry {attempt}/{MAX_ATTEMPTS} in {wait}s")
             time.sleep(wait)
         except requests.RequestException as exc:
-            if attempt == 5:
+            if attempt == MAX_ATTEMPTS:
                 raise
-            wait = min(45, 5 * (2 ** (attempt - 1)))
-            print(f"{source}: network error on page {page + 1}: {exc}; retry {attempt}/5 in {wait}s")
+            wait = min(MAX_BACKOFF_SECONDS, 5 * (2 ** (attempt - 1)))
+            print(f"{source}: network error on page {page + 1}: {exc}; retry {attempt}/{MAX_ATTEMPTS} in {wait}s")
             time.sleep(wait)
     raise RuntimeError("unreachable retry state")
 
