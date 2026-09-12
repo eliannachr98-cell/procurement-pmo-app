@@ -29,7 +29,7 @@ language sql stable as $$
     where record_type = 'procurement' and cpv_code = any(p_cpv_codes)
   ),
   notices as (
-    select p.adam, p.title, p.authority_name, p.contract_type, p.document_category, p.publication_date, p.opening_at,
+    select p.adam, p.title, p.authority_name, p.contract_type, p.document_category, p.publication_date, p.opening_at, p.procedure_type,
            coalesce(p.budget_inc_vat, p.budget_ex_vat, p.budget_unknown_vat, 0) as budget
     from public.procurements_compact p
     join matched_notice_adams m on m.adam = p.adam
@@ -63,6 +63,7 @@ language sql stable as $$
     'authority', coalesce(n.authority_name, '—'),
     'contractType', n.contract_type,
     'documentType', n.document_category,
+    'procedureType', n.procedure_type,
     'publicationDate', n.publication_date,
     'openingDate', n.opening_at,
     'budget', n.budget,
