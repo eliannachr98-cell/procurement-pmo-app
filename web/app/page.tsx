@@ -1412,9 +1412,12 @@ type WatchlistItem = { cpv_code: string; cpv_label: string | null };
 type NutsFilterItem = { nuts_code: string; nuts_name: string | null };
 type AlertItem = {
   adam: string; title: string; authority: string; contractType?: string; documentType?: string | null;
+  procedureType?: string | null;
   publicationDate: string | null; openingDate: string | null; budget: number; hasAward: boolean;
   matchedCpv: string[]; cpvs: { code: string; description: string | null }[];
 };
+
+const DIRECT_AWARD_PROCEDURE = "Απευθείας ανάθεση";
 
 const ALERT_URGENT_DAYS = 15;
 
@@ -1533,6 +1536,7 @@ function AlertsPanelContent({ code, onUnauthorized, watchlist, setWatchlist, nut
   // counting immediately, instead of needing an extra click past "Ενεργοί".
   const [alertTab, setAlertTab] = useState<"recent" | "active" | "inactive">("recent");
   const [authorityFilter, setAuthorityFilter] = useState<string[]>([]);
+  const [hideDirectAwards, setHideDirectAwards] = useState(false);
   const [error, setError] = useState("");
   const [selectedTender, setSelectedTender] = useState<Tender | null>(null);
   const [loadingTender, setLoadingTender] = useState(false);
@@ -1996,9 +2000,9 @@ function AlertsPanelContent({ code, onUnauthorized, watchlist, setWatchlist, nut
     {watchlist.length > 0 && (() => {
       const isWithinDays = (item: AlertItem, days: number) => item.publicationDate ? (Date.now() - new Date(item.publicationDate).getTime()) < days * 86400000 : false;
       const authorityTerms = authorityFilter.map((item) => item.toLocaleLowerCase("el"));
-      const scoped = authorityTerms.length
-        ? alerts.filter((item) => authorityTerms.some((term) => item.authority.toLocaleLowerCase("el").includes(term)))
-        : alerts;
+      const scoped = alerts
+        .filter((item) => !authorityTerms.length || authorityTerms.some((term) => item.authority.toLocaleLowerCase("el").includes(term)))
+        .filter((item) => !hideDirectAwards || item.procedureType !== DIRECT_AWARD_PROCEDURE);
       // Πρόσφατοι = published in the last week (with a ΝΕΟ badge for the
       // last-3-days sub-tier within it), Ενεργοί = everything else still
       // open (colored by how close its αποσφράγιση is), Ανενεργοί = passed.
@@ -2052,7 +2056,7 @@ function AlertsPanelContent({ code, onUnauthorized, watchlist, setWatchlist, nut
             onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); event.stopPropagation(); toggleSubmitted(item.adam); } }}
           >{isMarked ? "✓ Υποβλήθηκε" : "Σήμανση προσφοράς"}</span>
         </span>
-        <span className="alertCardHead"><strong>{item.title}</strong><span>{alertTab === "recent" && isWithinDays(item, 3) && <b className="newBadge">ΝΕΟ</b>}{formatDate(item.publicationDate ?? undefined)}</span></span>
+        <span className="alertCardHead"><strong>{item.title}</strong><span>{alertTab === "recent" && isWithinDays(item, 3) && <b className="newBadge">ΝΕΟ</b>}{item.procedureType === DIRECT_AWARD_PROCEDURE && <b className="directAwardBadge" title="Απευθείας ανάθεση - όχι ανοιχτός διαγωνισμός">Απευθείας ανάθεση</b>}{formatDate(item.publicationDate ?? undefined)}</span></span>
         <span className="alertCardAuthority">{item.authority}</span>
         <span className="alertCardFacts">
           <span className="adamCopy" role="button" tabIndex={0} title="Αντιγραφή ΑΔΑΜ" onClick={(event) => copyAdam(item.adam, event)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); copyAdam(item.adam, event); } }}><b>ΑΔΑΜ</b>{copiedAdam === item.adam ? "Αντιγράφηκε!" : item.adam}</span>
@@ -2075,6 +2079,10 @@ function AlertsPanelContent({ code, onUnauthorized, watchlist, setWatchlist, nut
           onChange={setAuthorityFilter}
           placeholder="Αναζητήστε Αναθέτουσα Αρχή"
         />
+        <label className="alertDirectAwardToggle">
+          <input type="checkbox" checked={hideDirectAwards} onChange={(event) => setHideDirectAwards(event.target.checked)} />
+          Απόκρυψη απευθείας αναθέσεων
+        </label>
       </div>
       <div className="alertTabs">
         {tabs.map((tab) => <button type="button" key={tab.key} className={`alertTabBtn ${alertTab === tab.key ? "active" : ""}`} onClick={() => setAlertTab(tab.key)}>
