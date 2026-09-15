@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { supabaseGet, supabaseRpc, supabaseWrite, requireAlertCode } from "@/lib/matching";
+import { supabaseGet, supabaseRpc, supabaseWrite, resolveTeam } from "@/lib/matching";
 import { CandidateRow, sendAlertEmailToRecipient } from "@/lib/alertEmail";
 
 export const dynamic = "force-dynamic";
@@ -11,9 +11,10 @@ type NutsFilterRow = { nuts_code: string };
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export async function GET(request: Request) {
-  if (!requireAlertCode(request)) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const team = await resolveTeam(request);
+  if (!team) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   try {
-    const items = await supabaseGet<RecipientRow[]>("alert_recipients?select=email,created_at&order=created_at.desc");
+    const items = await supabaseGet<RecipientRow[]>(`alert_recipients?select=email,created_at&team_id=eq.${team.id}&order=created_at.desc`);
     return NextResponse.json({ items });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown alert-recipients error";
@@ -22,7 +23,8 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  if (!requireAlertCode(request)) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const team = await resolveTeam(request);
+  if (!team) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   try {
     const body = await request.json().catch(() => ({}));
     const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
@@ -31,7 +33,7 @@ export async function POST(request: Request) {
     const items = await supabaseWrite<RecipientRow[]>(
       "alert_recipients",
       "POST",
-      [{ email }],
+      [{ team_id: team.id, email }],
       "return=representation,resolution=merge-duplicates",
     );
 
@@ -48,8 +50,8 @@ export async function POST(request: Request) {
       const apiKey = process.env.RESEND_API_KEY;
       if (apiKey) {
         const [watchlist, nutsFilter] = await Promise.all([
-          supabaseGet<WatchlistRow[]>("cpv_watchlist?select=cpv_code"),
-          supabaseGet<NutsFilterRow[]>("alert_nuts_filter?select=nuts_code"),
+          supabaseGet<WatchlistRow[]>(`cpv_watchlist?select=cpv_code&team_id=eq.${team.id}`),
+          supabaseGet<NutsFilterRow[]>(`alert_nuts_filter?select=nuts_code&team_id=eq.${team.id}`),
         ]);
         if (watchlist.length) {
           const candidates = await supabaseRpc<CandidateRow[]>("alert_email_candidates", {
@@ -73,11 +75,12 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE(request: Request) {
-  if (!requireAlertCode(request)) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const team = await resolveTeam(request);
+  if (!team) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   try {
     const email = new URL(request.url).searchParams.get("email")?.trim().toLowerCase() ?? "";
     if (!email) return NextResponse.json({ error: "email απαιτείται" }, { status: 400 });
-    await supabaseWrite(`alert_recipients?email=eq.${encodeURIComponent(email)}`, "DELETE", undefined, "return=minimal");
+    await supabaseWrite(`alert_recipients?team_id=eq.${team.id}&email=eq.${encodeURIComponent(email)}`, "DELETE", undefined, "return=minimal");
     return NextResponse.json({ ok: true });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown alert-recipients error";

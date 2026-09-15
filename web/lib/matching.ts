@@ -27,17 +27,20 @@ type ContractorRow = {
   record_adam: string;
 };
 
-// The Ειδοποιήσεις tab (watchlist CPVs/region, submitted/interested tenders,
-// email recipients) holds the team's own competitive picks, not public
-// ΚΗΜΔΗΣ data - the app itself has no login, so this is the only thing
-// standing between a link shared with an outside viewer and them seeing
-// exactly what the team is watching/bidding on. ALERT_ACCESS_CODE unset
-// means the gate is off (fails open) so local/preview environments without
-// the var configured aren't accidentally locked out.
-export function requireAlertCode(request: Request): boolean {
-  const expected = process.env.ALERT_ACCESS_CODE;
-  if (!expected) return true;
-  return request.headers.get("x-alert-code") === expected;
+// The Παρακολούθηση tab (watchlist CPVs/region, submitted/interested
+// tenders, saved views, email recipients) holds each team's own competitive
+// picks, not public ΚΗΜΔΗΣ data - the app itself has no login, so a team's
+// own passcode (see public.teams, sql/teams.sql) is the only thing standing
+// between a link shared with an outside viewer and them seeing exactly what
+// that team is watching/bidding on. Each team is self-registered (own name +
+// passcode, see POST /api/teams) rather than one hardcoded env var, so every
+// route that used to gate on a single global code now resolves *which* team
+// a request belongs to instead of a plain yes/no.
+export async function resolveTeam(request: Request): Promise<{ id: string } | null> {
+  const code = request.headers.get("x-alert-code");
+  if (!code) return null;
+  const rows = await supabaseGet<{ id: string }[]>(`teams?select=id&passcode=eq.${encodeURIComponent(code)}`);
+  return rows[0] ?? null;
 }
 
 export async function supabaseGet<T>(path: string): Promise<T> {

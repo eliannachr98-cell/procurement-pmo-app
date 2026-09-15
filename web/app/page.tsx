@@ -1439,6 +1439,11 @@ function useTeamCode() {
   const [checking, setChecking] = useState(false);
   const [lockError, setLockError] = useState("");
   const [showCodeBox, setShowCodeBox] = useState(false);
+  const [showSignupBox, setShowSignupBox] = useState(false);
+  const [signupName, setSignupName] = useState("");
+  const [signupPasscode, setSignupPasscode] = useState("");
+  const [signupChecking, setSignupChecking] = useState(false);
+  const [signupError, setSignupError] = useState("");
 
   useEffect(() => {
     setCode(window.localStorage.getItem("alertAccessCode"));
@@ -1462,6 +1467,35 @@ function useTeamCode() {
       .finally(() => setChecking(false));
   };
 
+  // Self-service team creation: pick a name + your own passcode, no email
+  // needed (see sql/teams.sql). Success logs the creator straight into their
+  // new team, same as unlock() above - the new passcode already works
+  // against every team-gated route the instant the team row exists.
+  const signup = () => {
+    if (!signupName.trim() || !signupPasscode.trim()) return;
+    setSignupChecking(true);
+    setSignupError("");
+    fetch("/api/teams", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: signupName.trim(), passcode: signupPasscode.trim() }),
+    })
+      .then(async (response) => {
+        const payload = await response.json().catch(() => ({}));
+        if (response.ok) {
+          window.localStorage.setItem("alertAccessCode", signupPasscode.trim());
+          setCode(signupPasscode.trim());
+          setShowSignupBox(false);
+          setSignupName("");
+          setSignupPasscode("");
+        } else {
+          setSignupError(payload.error ?? "Κάτι πήγε στραβά - δοκίμασε ξανά.");
+        }
+      })
+      .catch(() => setSignupError("Σφάλμα σύνδεσης - δοκίμασε ξανά."))
+      .finally(() => setSignupChecking(false));
+  };
+
   const logout = () => {
     window.localStorage.removeItem("alertAccessCode");
     setCode(null);
@@ -1474,11 +1508,17 @@ function useTeamCode() {
     setLockError("Ο κωδικός δεν ισχύει πια.");
   }, []);
 
-  return { code, inputCode, setInputCode, checking, lockError, setLockError, showCodeBox, setShowCodeBox, unlock, logout, onUnauthorized };
+  return {
+    code, inputCode, setInputCode, checking, lockError, setLockError, showCodeBox, setShowCodeBox, unlock, logout, onUnauthorized,
+    showSignupBox, setShowSignupBox, signupName, setSignupName, signupPasscode, setSignupPasscode, signupChecking, signupError, setSignupError, signup,
+  };
 }
 
 function TeamCodeBar({ team }: { team: ReturnType<typeof useTeamCode> }) {
-  const { code, inputCode, setInputCode, checking, lockError, setLockError, showCodeBox, setShowCodeBox, unlock, logout } = team;
+  const {
+    code, inputCode, setInputCode, checking, lockError, setLockError, showCodeBox, setShowCodeBox, unlock, logout,
+    showSignupBox, setShowSignupBox, signupName, setSignupName, signupPasscode, setSignupPasscode, signupChecking, signupError, setSignupError, signup,
+  } = team;
   return <div className="teamCodeBar">
     {code
       ? <span className="teamCodeStatus">✓ Σύνδεση ενεργή<button type="button" onClick={logout}>Αποσύνδεση</button></span>
@@ -1488,15 +1528,17 @@ function TeamCodeBar({ team }: { team: ReturnType<typeof useTeamCode> }) {
             <button type="button" onClick={unlock} disabled={checking}>{checking ? "…" : "Είσοδος"}</button>
             {lockError && <span className="recipientError">{lockError}</span>}
           </span>
-        : <span className="teamCodeStatus">
-            <button type="button" className="teamCodeToggle" onClick={() => setShowCodeBox(true)}>Σύνδεση</button>
-            {/* Not wired up yet - individual self-service registration is a
-                separate, bigger feature to build later (own login +
-                persistent profile per person, distinct from this shared
-                passcode). Shown now, disabled, so the entry point is
-                already in place. */}
-            <button type="button" className="teamCodeSignup" disabled title="Σύντομα διαθέσιμο">Εγγραφή</button>
-          </span>}
+        : showSignupBox
+          ? <span className="teamCodeStatus teamCodeSignupBox">
+              <input value={signupName} onChange={(event) => { setSignupName(event.target.value); setSignupError(""); }} placeholder="Όνομα ομάδας" autoFocus />
+              <input type="password" value={signupPasscode} onChange={(event) => { setSignupPasscode(event.target.value); setSignupError(""); }} onKeyDown={(event) => { if (event.key === "Enter") signup(); }} placeholder="Διάλεξε κωδικό (4+ χαρακτήρες)" />
+              <button type="button" onClick={signup} disabled={signupChecking}>{signupChecking ? "…" : "Δημιουργία ομάδας"}</button>
+              {signupError && <span className="recipientError">{signupError}</span>}
+            </span>
+          : <span className="teamCodeStatus">
+              <button type="button" className="teamCodeToggle" onClick={() => setShowCodeBox(true)}>Σύνδεση</button>
+              <button type="button" className="teamCodeSignup" onClick={() => setShowSignupBox(true)}>Εγγραφή</button>
+            </span>}
   </div>;
 }
 

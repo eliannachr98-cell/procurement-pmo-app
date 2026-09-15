@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { Document, Packer, Paragraph, HeadingLevel, Table, TableRow, TableCell, TextRun, WidthType, ShadingType, BorderStyle } from "docx";
-import { requireAlertCode } from "@/lib/matching";
+import { resolveTeam } from "@/lib/matching";
 import { ApodeltiosiSchema, type Apodeltiosi } from "@/lib/apodeltiosi";
 
 export const dynamic = "force-dynamic";
@@ -130,7 +130,7 @@ function buildDocument(data: Apodeltiosi) {
 }
 
 export async function POST(request: Request) {
-  if (!requireAlertCode(request)) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  if (!(await resolveTeam(request))) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
   try {
     const body = await request.json().catch(() => null);

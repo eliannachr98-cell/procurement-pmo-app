@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
-import { requireAlertCode } from "@/lib/matching";
+import { resolveTeam } from "@/lib/matching";
 import { ApodeltiosiSchema, APODELTIOSI_PROMPT } from "@/lib/apodeltiosi";
 
 export const dynamic = "force-dynamic";
@@ -11,7 +11,7 @@ export const maxDuration = 60;
 // this calls a paid external API per upload, unlike everything else in the
 // app which only reads Supabase.
 export async function POST(request: Request) {
-  if (!requireAlertCode(request)) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  if (!(await resolveTeam(request))) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
   try {
     const apiKey = process.env.ANTHROPIC_API_KEY;

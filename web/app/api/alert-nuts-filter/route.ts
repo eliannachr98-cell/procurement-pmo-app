@@ -1,14 +1,15 @@
 import { NextResponse } from "next/server";
-import { supabaseGet, supabaseWrite, requireAlertCode } from "@/lib/matching";
+import { supabaseGet, supabaseWrite, resolveTeam } from "@/lib/matching";
 
 export const dynamic = "force-dynamic";
 
 type NutsFilterRow = { nuts_code: string; nuts_name: string | null; created_at: string };
 
 export async function GET(request: Request) {
-  if (!requireAlertCode(request)) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const team = await resolveTeam(request);
+  if (!team) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   try {
-    const items = await supabaseGet<NutsFilterRow[]>("alert_nuts_filter?select=nuts_code,nuts_name,created_at&order=created_at.desc");
+    const items = await supabaseGet<NutsFilterRow[]>(`alert_nuts_filter?select=nuts_code,nuts_name,created_at&team_id=eq.${team.id}&order=created_at.desc`);
     return NextResponse.json({ items });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown alert-nuts-filter error";
@@ -17,7 +18,8 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  if (!requireAlertCode(request)) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const team = await resolveTeam(request);
+  if (!team) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   try {
     const body = await request.json().catch(() => ({}));
     const nutsCode = typeof body.nuts_code === "string" ? body.nuts_code.trim() : "";
@@ -27,7 +29,7 @@ export async function POST(request: Request) {
     const items = await supabaseWrite<NutsFilterRow[]>(
       "alert_nuts_filter",
       "POST",
-      [{ nuts_code: nutsCode, nuts_name: nutsName }],
+      [{ team_id: team.id, nuts_code: nutsCode, nuts_name: nutsName }],
       "return=representation,resolution=merge-duplicates",
     );
     return NextResponse.json({ items });
@@ -38,11 +40,12 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE(request: Request) {
-  if (!requireAlertCode(request)) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const team = await resolveTeam(request);
+  if (!team) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   try {
     const nutsCode = new URL(request.url).searchParams.get("nuts_code")?.trim() ?? "";
     if (!nutsCode) return NextResponse.json({ error: "nuts_code απαιτείται" }, { status: 400 });
-    await supabaseWrite(`alert_nuts_filter?nuts_code=eq.${encodeURIComponent(nutsCode)}`, "DELETE", undefined, "return=minimal");
+    await supabaseWrite(`alert_nuts_filter?team_id=eq.${team.id}&nuts_code=eq.${encodeURIComponent(nutsCode)}`, "DELETE", undefined, "return=minimal");
     return NextResponse.json({ ok: true });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown alert-nuts-filter error";

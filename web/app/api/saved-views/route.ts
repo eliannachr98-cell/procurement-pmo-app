@@ -1,14 +1,15 @@
 import { NextResponse } from "next/server";
-import { supabaseGet, supabaseWrite, requireAlertCode } from "@/lib/matching";
+import { supabaseGet, supabaseWrite, resolveTeam } from "@/lib/matching";
 
 export const dynamic = "force-dynamic";
 
 type SavedViewRow = { id: string; name: string; filters: Record<string, unknown>; created_at: string };
 
 export async function GET(request: Request) {
-  if (!requireAlertCode(request)) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const team = await resolveTeam(request);
+  if (!team) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   try {
-    const items = await supabaseGet<SavedViewRow[]>("saved_views?select=id,name,filters,created_at&order=created_at.desc");
+    const items = await supabaseGet<SavedViewRow[]>(`saved_views?select=id,name,filters,created_at&team_id=eq.${team.id}&order=created_at.desc`);
     return NextResponse.json({ items });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown saved-views error";
@@ -17,7 +18,8 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  if (!requireAlertCode(request)) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const team = await resolveTeam(request);
+  if (!team) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   try {
     const body = await request.json().catch(() => ({}));
     const name = typeof body.name === "string" ? body.name.trim() : "";
@@ -27,7 +29,7 @@ export async function POST(request: Request) {
     const items = await supabaseWrite<SavedViewRow[]>(
       "saved_views",
       "POST",
-      [{ name, filters }],
+      [{ team_id: team.id, name, filters }],
       "return=representation",
     );
     return NextResponse.json({ items });
@@ -38,11 +40,12 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE(request: Request) {
-  if (!requireAlertCode(request)) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const team = await resolveTeam(request);
+  if (!team) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   try {
     const id = new URL(request.url).searchParams.get("id")?.trim() ?? "";
     if (!id) return NextResponse.json({ error: "id απαιτείται" }, { status: 400 });
-    await supabaseWrite(`saved_views?id=eq.${encodeURIComponent(id)}`, "DELETE", undefined, "return=minimal");
+    await supabaseWrite(`saved_views?team_id=eq.${team.id}&id=eq.${encodeURIComponent(id)}`, "DELETE", undefined, "return=minimal");
     return NextResponse.json({ ok: true });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown saved-views error";

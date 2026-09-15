@@ -1,14 +1,15 @@
 import { NextResponse } from "next/server";
-import { supabaseGet, supabaseWrite, requireAlertCode } from "@/lib/matching";
+import { supabaseGet, supabaseWrite, resolveTeam } from "@/lib/matching";
 
 export const dynamic = "force-dynamic";
 
 type WatchlistRow = { cpv_code: string; cpv_label: string | null; created_at: string };
 
 export async function GET(request: Request) {
-  if (!requireAlertCode(request)) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const team = await resolveTeam(request);
+  if (!team) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   try {
-    const items = await supabaseGet<WatchlistRow[]>("cpv_watchlist?select=cpv_code,cpv_label,created_at&order=created_at.desc");
+    const items = await supabaseGet<WatchlistRow[]>(`cpv_watchlist?select=cpv_code,cpv_label,created_at&team_id=eq.${team.id}&order=created_at.desc`);
     return NextResponse.json({ items });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown watchlist error";
@@ -17,7 +18,8 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  if (!requireAlertCode(request)) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const team = await resolveTeam(request);
+  if (!team) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   try {
     const body = await request.json().catch(() => ({}));
     const cpvCode = typeof body.cpv_code === "string" ? body.cpv_code.trim() : "";
@@ -28,7 +30,7 @@ export async function POST(request: Request) {
     const items = await supabaseWrite<WatchlistRow[]>(
       "cpv_watchlist",
       "POST",
-      [{ cpv_code: cpvCode, cpv_label: cpvLabel }],
+      [{ team_id: team.id, cpv_code: cpvCode, cpv_label: cpvLabel }],
       "return=representation,resolution=merge-duplicates",
     );
     return NextResponse.json({ items });
@@ -39,11 +41,12 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE(request: Request) {
-  if (!requireAlertCode(request)) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const team = await resolveTeam(request);
+  if (!team) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   try {
     const cpvCode = new URL(request.url).searchParams.get("cpv_code")?.trim() ?? "";
     if (!cpvCode) return NextResponse.json({ error: "cpv_code απαιτείται" }, { status: 400 });
-    await supabaseWrite(`cpv_watchlist?cpv_code=eq.${encodeURIComponent(cpvCode)}`, "DELETE", undefined, "return=minimal");
+    await supabaseWrite(`cpv_watchlist?team_id=eq.${team.id}&cpv_code=eq.${encodeURIComponent(cpvCode)}`, "DELETE", undefined, "return=minimal");
     return NextResponse.json({ ok: true });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown watchlist error";
