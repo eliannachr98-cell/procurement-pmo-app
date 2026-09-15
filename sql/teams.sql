@@ -22,6 +22,12 @@ create policy "teams_insert" on public.teams for insert with check (true);
 drop policy if exists "teams_update" on public.teams;
 create policy "teams_update" on public.teams for update using (true) with check (true);
 
+-- Persistent account avatar - a single emoji character, chosen at signup
+-- and shown every time that account logs in (any device/browser), unlike
+-- the earlier localStorage-only photo/emoji which reset on logout and
+-- never left the browser it was picked in.
+alter table public.teams add column if not exists avatar text;
+
 -- Step 1 of the migration: create the first team from the existing shared
 -- passcode, so nobody currently using the app loses access or data.
 -- Replace '<CURRENT_ALERT_ACCESS_CODE>' below with the real value of the
