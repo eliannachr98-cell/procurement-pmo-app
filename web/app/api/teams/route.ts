@@ -5,7 +5,7 @@ export const dynamic = "force-dynamic";
 
 type TeamRow = { id: string; name: string; passcode: string; avatar: string | null };
 
-const AVATAR_OPTIONS = ["👤", "🏢", "📊", "💼", "🔧", "⚡", "🌟", "🎯"];
+const AVATAR_OPTIONS = ["👤", "🏢", "📊", "💼", "🔧", "⚡", "🌟", "🎯", "🚀", "💡", "📈", "🔍", "🏆", "💎", "🌐", "🧭"];
 
 // Self-service team signup - no email/verification, the creator just picks
 // a name, a passcode, and an emoji avatar for their team (see sql/teams.sql).

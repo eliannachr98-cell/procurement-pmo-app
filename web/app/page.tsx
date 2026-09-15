@@ -153,6 +153,11 @@ export default function Home() {
   // way to know the code at all (worked around with an onCodeChange relay).
   // A single instance here, rendered once, fixes both.
   const team = useTeamCode();
+  // Emoji picker for the Προφίλ avatar is hidden until the avatar itself is
+  // clicked - deliberately set up as a menu-on-click so a future "or upload
+  // a photo" option has a natural place to sit alongside emoji, instead of
+  // permanently showing a whole grid of options under the avatar.
+  const [avatarPickerOpen, setAvatarPickerOpen] = useState(false);
   const previousTeamCode = useRef(team.code);
   useEffect(() => {
     if (previousTeamCode.current && !team.code) {
@@ -539,18 +544,24 @@ export default function Home() {
             <article className="panel profileCard profileAccountCard">
               <p className="eyebrow">ΛΟΓΑΡΙΑΣΜΟΣ</p>
               <div className="profileHeaderMain">
-                <div className="profileAvatar">
+                <button
+                  type="button"
+                  className="profileAvatar"
+                  disabled={!team.code}
+                  title={team.code ? "Άλλαξε avatar" : undefined}
+                  onClick={() => setAvatarPickerOpen((open) => !open)}
+                >
                   {team.code && team.teamAvatar ? <span className="profileAvatarEmoji">{team.teamAvatar}</span> : <CircleUserRound size={46} strokeWidth={1.75} />}
-                </div>
+                </button>
                 {team.code
                   ? <p className="profileStatusOn">{team.teamName || "Ο λογαριασμός σου"}</p>
                   : <p className="profileStatusOff">Δεν είσαι συνδεδεμένη — οι Προβολές και η Παρακολούθηση χρειάζονται σύνδεση.</p>}
               </div>
-              {team.code && <>
-                <p className="watchlistCaption">Avatar</p>
+              {team.code && avatarPickerOpen && <>
+                <p className="watchlistCaption">Διάλεξε emoji</p>
                 <div className="profileEmojiPicker">
                   {AVATAR_OPTIONS.map((emoji) => (
-                    <button type="button" key={emoji} className={`profileEmojiOption ${team.teamAvatar === emoji ? "active" : ""}`} disabled={team.avatarSaving} onClick={() => team.updateAvatar(emoji)}>{emoji}</button>
+                    <button type="button" key={emoji} className={`profileEmojiOption ${team.teamAvatar === emoji ? "active" : ""}`} disabled={team.avatarSaving} onClick={() => { team.updateAvatar(emoji); setAvatarPickerOpen(false); }}>{emoji}</button>
                   ))}
                 </div>
                 {team.avatarError && <p className="recipientError">{team.avatarError}</p>}
@@ -1387,7 +1398,7 @@ function alertUrgency(openingDate: string | null): "open" | "urgent" | "passed" 
 // (Ειδοποιήσεις's own data, Αγορά & Ανταγωνισμός) - one login unlocks all of
 // them, since the code is just read from/written to the same localStorage
 // key regardless of which page's hook instance is asking.
-const AVATAR_OPTIONS = ["👤", "🏢", "📊", "💼", "🔧", "⚡", "🌟", "🎯"];
+const AVATAR_OPTIONS = ["👤", "🏢", "📊", "💼", "🔧", "⚡", "🌟", "🎯", "🚀", "💡", "📈", "🔍", "🏆", "💎", "🌐", "🧭"];
 
 function useTeamCode() {
   const [code, setCode] = useState<string | null | undefined>(undefined);
