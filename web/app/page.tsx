@@ -1519,26 +1519,37 @@ function TeamCodeBar({ team }: { team: ReturnType<typeof useTeamCode> }) {
     code, inputCode, setInputCode, checking, lockError, setLockError, showCodeBox, setShowCodeBox, unlock, logout,
     showSignupBox, setShowSignupBox, signupName, setSignupName, signupPasscode, setSignupPasscode, signupChecking, signupError, setSignupError, signup,
   } = team;
+  const closeModal = () => { setShowCodeBox(false); setShowSignupBox(false); setLockError(""); setSignupError(""); };
   return <div className="teamCodeBar">
     {code
       ? <span className="teamCodeStatus">✓ Σύνδεση ενεργή<button type="button" onClick={logout}>Αποσύνδεση</button></span>
-      : showCodeBox
-        ? <span className="teamCodeStatus">
+      : <span className="teamCodeStatus">
+          <button type="button" className="teamCodeToggle" onClick={() => setShowCodeBox(true)}>Σύνδεση</button>
+          <button type="button" className="teamCodeSignup" onClick={() => setShowSignupBox(true)}>Εγγραφή</button>
+        </span>}
+    {(showCodeBox || showSignupBox) && <div className="teamAuthOverlay" onClick={closeModal}>
+      <div className="teamAuthModal" onClick={(event) => event.stopPropagation()}>
+        <button type="button" className="teamAuthClose" aria-label="Κλείσιμο" onClick={closeModal}>×</button>
+        {showCodeBox ? <>
+          <h3>Σύνδεση</h3>
+          <div className="teamAuthField">
             <input type="password" value={inputCode} onChange={(event) => { setInputCode(event.target.value); setLockError(""); }} onKeyDown={(event) => { if (event.key === "Enter") unlock(); }} placeholder="Κωδικός πρόσβασης" autoFocus />
-            <button type="button" onClick={unlock} disabled={checking}>{checking ? "…" : "Είσοδος"}</button>
-            {lockError && <span className="recipientError">{lockError}</span>}
-          </span>
-        : showSignupBox
-          ? <span className="teamCodeStatus teamCodeSignupBox">
-              <input value={signupName} onChange={(event) => { setSignupName(event.target.value); setSignupError(""); }} placeholder="Όνομα ομάδας" autoFocus />
-              <input type="password" value={signupPasscode} onChange={(event) => { setSignupPasscode(event.target.value); setSignupError(""); }} onKeyDown={(event) => { if (event.key === "Enter") signup(); }} placeholder="Διάλεξε κωδικό (4+ χαρακτήρες)" />
-              <button type="button" onClick={signup} disabled={signupChecking}>{signupChecking ? "…" : "Δημιουργία ομάδας"}</button>
-              {signupError && <span className="recipientError">{signupError}</span>}
-            </span>
-          : <span className="teamCodeStatus">
-              <button type="button" className="teamCodeToggle" onClick={() => setShowCodeBox(true)}>Σύνδεση</button>
-              <button type="button" className="teamCodeSignup" onClick={() => setShowSignupBox(true)}>Εγγραφή</button>
-            </span>}
+          </div>
+          <button type="button" className="teamAuthSubmit" onClick={unlock} disabled={checking}>{checking ? "…" : "Είσοδος"}</button>
+          {lockError && <p className="recipientError">{lockError}</p>}
+        </> : <>
+          <h3>Δημιουργία Λογαριασμού</h3>
+          <div className="teamAuthField">
+            <input value={signupName} onChange={(event) => { setSignupName(event.target.value); setSignupError(""); }} placeholder="Όνομα λογαριασμού" autoFocus />
+          </div>
+          <div className="teamAuthField">
+            <input type="password" value={signupPasscode} onChange={(event) => { setSignupPasscode(event.target.value); setSignupError(""); }} onKeyDown={(event) => { if (event.key === "Enter") signup(); }} placeholder="Διάλεξε κωδικό (4+ χαρακτήρες)" />
+          </div>
+          <button type="button" className="teamAuthSubmit" onClick={signup} disabled={signupChecking}>{signupChecking ? "…" : "Δημιουργία Λογαριασμού"}</button>
+          {signupError && <p className="recipientError">{signupError}</p>}
+        </>}
+      </div>
+    </div>}
   </div>;
 }
 
