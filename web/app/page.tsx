@@ -216,6 +216,13 @@ export default function Home() {
       setAlertsWatchlist([]); setAlertsNutsFilter([]);
       setMarketSelectedContractor(""); setMarketContractorSearch(""); setMarketVisibleCount(10);
       setStatus("Όλες"); setAuthority(""); setContractor([]); setCpv([]); setYear("Όλα"); setContractType([]); setDocumentType("Όλοι");
+      // Avatar (photo/emoji) is per-browser storage, not per-account, but
+      // leaving it visible after logout - or worse, carried over into a
+      // different account logged into on the same browser next - would read
+      // as if it belonged to whoever's now signed in.
+      window.localStorage.removeItem("teamProfilePhoto");
+      window.localStorage.removeItem("teamProfileEmoji");
+      setTeamPhoto(""); setTeamEmoji("");
     }
     previousTeamCode.current = team.code;
   }, [team.code]);
