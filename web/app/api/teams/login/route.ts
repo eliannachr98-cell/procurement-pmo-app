@@ -3,7 +3,7 @@ import { supabaseGet } from "@/lib/matching";
 
 export const dynamic = "force-dynamic";
 
-type TeamRow = { id: string; name: string };
+type TeamRow = { id: string; name: string; avatar: string | null };
 
 // Login checks name AND passcode together (not passcode alone) - the name
 // isn't a secret, but requiring both means a typo'd or half-remembered
@@ -17,7 +17,7 @@ export async function POST(request: Request) {
     if (!name || !passcode) return NextResponse.json({ error: "Όνομα λογαριασμού και κωδικός απαιτούνται" }, { status: 400 });
 
     const [team] = await supabaseGet<TeamRow[]>(
-      `teams?select=id,name&name=eq.${encodeURIComponent(name)}&passcode=eq.${encodeURIComponent(passcode)}`,
+      `teams?select=id,name,avatar&name=eq.${encodeURIComponent(name)}&passcode=eq.${encodeURIComponent(passcode)}`,
     );
     if (!team) return NextResponse.json({ error: "Λάθος όνομα ή κωδικός" }, { status: 401 });
     return NextResponse.json({ team });

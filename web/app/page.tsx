@@ -153,57 +153,6 @@ export default function Home() {
   // way to know the code at all (worked around with an onCodeChange relay).
   // A single instance here, rendered once, fixes both.
   const team = useTeamCode();
-  // Avatar is still a purely local, per-browser cosmetic (not synced to the
-  // account) - either an uploaded photo or a picked emoji, never both at
-  // once. Downscaled to a small square client-side first for the photo case
-  // (a phone photo straight from disk would otherwise be several MB, well
-  // past what's comfortable in localStorage) - an emoji is just a character,
-  // no processing needed.
-  const [teamPhoto, setTeamPhoto] = useState("");
-  const [teamEmoji, setTeamEmoji] = useState("");
-  useEffect(() => {
-    setTeamPhoto(window.localStorage.getItem("teamProfilePhoto") ?? "");
-    setTeamEmoji(window.localStorage.getItem("teamProfileEmoji") ?? "");
-  }, []);
-  const handleTeamPhotoFile = (file: File) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const img = new window.Image();
-      img.onload = () => {
-        const size = 160;
-        const canvas = document.createElement("canvas");
-        canvas.width = size;
-        canvas.height = size;
-        const ctx = canvas.getContext("2d");
-        if (!ctx) return;
-        const scale = Math.max(size / img.width, size / img.height);
-        const w = img.width * scale;
-        const h = img.height * scale;
-        ctx.drawImage(img, (size - w) / 2, (size - h) / 2, w, h);
-        const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
-        window.localStorage.setItem("teamProfilePhoto", dataUrl);
-        window.localStorage.removeItem("teamProfileEmoji");
-        setTeamPhoto(dataUrl);
-        setTeamEmoji("");
-      };
-      img.src = reader.result as string;
-    };
-    reader.readAsDataURL(file);
-  };
-  const removeTeamPhoto = () => {
-    window.localStorage.removeItem("teamProfilePhoto");
-    setTeamPhoto("");
-  };
-  const pickTeamEmoji = (emoji: string) => {
-    window.localStorage.setItem("teamProfileEmoji", emoji);
-    window.localStorage.removeItem("teamProfilePhoto");
-    setTeamEmoji(emoji);
-    setTeamPhoto("");
-  };
-  const removeTeamEmoji = () => {
-    window.localStorage.removeItem("teamProfileEmoji");
-    setTeamEmoji("");
-  };
   const previousTeamCode = useRef(team.code);
   useEffect(() => {
     if (previousTeamCode.current && !team.code) {
@@ -216,13 +165,6 @@ export default function Home() {
       setAlertsWatchlist([]); setAlertsNutsFilter([]);
       setMarketSelectedContractor(""); setMarketContractorSearch(""); setMarketVisibleCount(10);
       setStatus("Όλες"); setAuthority(""); setContractor([]); setCpv([]); setYear("Όλα"); setContractType([]); setDocumentType("Όλοι");
-      // Avatar (photo/emoji) is per-browser storage, not per-account, but
-      // leaving it visible after logout - or worse, carried over into a
-      // different account logged into on the same browser next - would read
-      // as if it belonged to whoever's now signed in.
-      window.localStorage.removeItem("teamProfilePhoto");
-      window.localStorage.removeItem("teamProfileEmoji");
-      setTeamPhoto(""); setTeamEmoji("");
     }
     previousTeamCode.current = team.code;
   }, [team.code]);
@@ -597,28 +539,23 @@ export default function Home() {
             <article className="panel profileCard profileAccountCard">
               <p className="eyebrow">ΛΟΓΑΡΙΑΣΜΟΣ</p>
               <div className="profileHeaderMain">
-                <label className="profileAvatar" title="Άλλαξε φωτογραφία">
-                  {team.code && teamPhoto ? <img src={teamPhoto} alt="" /> : team.code && teamEmoji ? <span className="profileAvatarEmoji">{teamEmoji}</span> : <CircleUserRound size={46} strokeWidth={1.75} />}
-                  {team.code && <input type="file" accept="image/*" onChange={(event) => { const file = event.target.files?.[0]; if (file) handleTeamPhotoFile(file); event.target.value = ""; }} />}
-                </label>
-                {team.code ? <>
-                  {!team.editingName && <p className="profileStatusOn">{team.teamName || "Ο λογαριασμός σου"}</p>}
-                  {(teamPhoto || teamEmoji) && <button type="button" className="profileLink" onClick={teamPhoto ? removeTeamPhoto : removeTeamEmoji}>Αφαίρεση {teamPhoto ? "φωτογραφίας" : "emoji"}</button>}
-                </> : <p className="profileStatusOff">Δεν είσαι συνδεδεμένη — οι Προβολές και η Παρακολούθηση χρειάζονται σύνδεση.</p>}
+                <div className="profileAvatar">
+                  {team.code && team.teamAvatar ? <span className="profileAvatarEmoji">{team.teamAvatar}</span> : <CircleUserRound size={46} strokeWidth={1.75} />}
+                </div>
+                {team.code
+                  ? <p className="profileStatusOn">{team.teamName || "Ο λογαριασμός σου"}</p>
+                  : <p className="profileStatusOff">Δεν είσαι συνδεδεμένη — οι Προβολές και η Παρακολούθηση χρειάζονται σύνδεση.</p>}
               </div>
-              {team.code && <div className="profileEmojiPicker">
-                {["👤", "🏢", "📊", "💼", "🔧", "⚡", "🌟", "🎯"].map((emoji) => (
-                  <button type="button" key={emoji} className={`profileEmojiOption ${teamEmoji === emoji ? "active" : ""}`} onClick={() => pickTeamEmoji(emoji)}>{emoji}</button>
-                ))}
-              </div>}
-              {team.code && (team.editingName
-                ? <div className="recipientInput">
-                    <input value={team.teamNameInput} onChange={(event) => team.setTeamNameInput(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") team.renameTeam(); if (event.key === "Escape") team.cancelEditingName(); }} placeholder="Όνομα λογαριασμού" autoFocus />
-                    <button type="button" onClick={team.renameTeam} disabled={team.teamNameInput.trim() === team.teamName || team.renaming}>{team.renaming ? "…" : "Αποθήκευση"}</button>
-                    <button type="button" className="profileLink" onClick={team.cancelEditingName}>Άκυρο</button>
-                  </div>
-                : <button type="button" className="profileLink" onClick={team.startEditingName}>Επεξεργασία ονόματος</button>)}
-              {team.renameError && <p className="recipientError">{team.renameError}</p>}
+              {team.code && <>
+                <p className="watchlistCaption">Avatar</p>
+                <div className="profileEmojiPicker">
+                  {AVATAR_OPTIONS.map((emoji) => (
+                    <button type="button" key={emoji} className={`profileEmojiOption ${team.teamAvatar === emoji ? "active" : ""}`} disabled={team.avatarSaving} onClick={() => team.updateAvatar(emoji)}>{emoji}</button>
+                  ))}
+                </div>
+                {team.avatarError && <p className="recipientError">{team.avatarError}</p>}
+              </>}
+              {lastSync && <p className="profileHeaderSync">Ενημέρωση δεδομένων<strong>{new Intl.DateTimeFormat("el-GR", { dateStyle: "short", timeStyle: "short" }).format(new Date(lastSync))}</strong></p>}
               {lastSync && <p className="profileHeaderSync">Ενημέρωση δεδομένων<strong>{new Intl.DateTimeFormat("el-GR", { dateStyle: "short", timeStyle: "short" }).format(new Date(lastSync))}</strong></p>}
             </article>
             <article className="panel profileCard profileViewsCard">
@@ -1451,6 +1388,8 @@ function alertUrgency(openingDate: string | null): "open" | "urgent" | "passed" 
 // (Ειδοποιήσεις's own data, Αγορά & Ανταγωνισμός) - one login unlocks all of
 // them, since the code is just read from/written to the same localStorage
 // key regardless of which page's hook instance is asking.
+const AVATAR_OPTIONS = ["👤", "🏢", "📊", "💼", "🔧", "⚡", "🌟", "🎯"];
+
 function useTeamCode() {
   const [code, setCode] = useState<string | null | undefined>(undefined);
   const [loginName, setLoginName] = useState("");
@@ -1461,31 +1400,31 @@ function useTeamCode() {
   const [showSignupBox, setShowSignupBox] = useState(false);
   const [signupName, setSignupName] = useState("");
   const [signupPasscode, setSignupPasscode] = useState("");
+  const [signupAvatar, setSignupAvatar] = useState(AVATAR_OPTIONS[0]);
   const [signupChecking, setSignupChecking] = useState(false);
   const [signupError, setSignupError] = useState("");
 
-  // The account's display name (real teams.name column - see sql/teams.sql)
-  // isn't part of the localStorage session, only the passcode is - so a
-  // fresh page load with an already-stored passcode re-fetches it here.
+  // Name and avatar are both set once at signup and fixed after that (see
+  // POST /api/teams) - neither is part of the localStorage session, only
+  // the passcode is, so a fresh page load with an already-stored passcode
+  // re-fetches both here. Avatar can still be changed later (PATCH), just
+  // not the name.
   const [teamName, setTeamName] = useState("");
-  const [teamNameInput, setTeamNameInput] = useState("");
-  const [editingName, setEditingName] = useState(false);
-  const [renaming, setRenaming] = useState(false);
-  const [renameError, setRenameError] = useState("");
-
-  const startEditingName = () => { setTeamNameInput(teamName); setRenameError(""); setEditingName(true); };
-  const cancelEditingName = () => { setTeamNameInput(teamName); setRenameError(""); setEditingName(false); };
+  const [teamAvatar, setTeamAvatar] = useState("");
+  const [avatarSaving, setAvatarSaving] = useState(false);
+  const [avatarError, setAvatarError] = useState("");
 
   useEffect(() => {
     setCode(window.localStorage.getItem("alertAccessCode"));
   }, []);
 
   useEffect(() => {
-    if (!code) { setTeamName(""); setTeamNameInput(""); return; }
+    if (!code) { setTeamName(""); setTeamAvatar(""); return; }
     fetch("/api/teams", { headers: { "x-alert-code": code } })
       .then((response) => (response.ok ? response.json() : null))
       .then((payload) => {
-        if (payload?.team?.name) { setTeamName(payload.team.name); setTeamNameInput(payload.team.name); }
+        if (payload?.team?.name) setTeamName(payload.team.name);
+        setTeamAvatar(payload?.team?.avatar ?? "");
       })
       .catch(() => {});
   }, [code]);
@@ -1508,7 +1447,7 @@ function useTeamCode() {
           window.localStorage.setItem("alertAccessCode", inputCode.trim());
           setCode(inputCode.trim());
           setTeamName(payload.team?.name ?? "");
-          setTeamNameInput(payload.team?.name ?? "");
+          setTeamAvatar(payload.team?.avatar ?? "");
           setShowCodeBox(false);
           setLoginName("");
           setInputCode("");
@@ -1520,33 +1459,11 @@ function useTeamCode() {
       .finally(() => setChecking(false));
   };
 
-  const renameTeam = () => {
-    const trimmed = teamNameInput.trim();
-    if (!trimmed || trimmed === teamName || !code) return;
-    setRenaming(true);
-    setRenameError("");
-    fetch("/api/teams", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json", "x-alert-code": code },
-      body: JSON.stringify({ name: trimmed }),
-    })
-      .then(async (response) => {
-        const payload = await response.json().catch(() => ({}));
-        if (response.ok) {
-          setTeamName(payload.team?.name ?? trimmed);
-          setEditingName(false);
-        } else {
-          setRenameError(payload.error ?? "Κάτι πήγε στραβά.");
-        }
-      })
-      .catch(() => setRenameError("Σφάλμα σύνδεσης - δοκίμασε ξανά."))
-      .finally(() => setRenaming(false));
-  };
-
-  // Self-service team creation: pick a name + your own passcode, no email
-  // needed (see sql/teams.sql). Success logs the creator straight into their
-  // new team, same as unlock() above - the new passcode already works
-  // against every team-gated route the instant the team row exists.
+  // Self-service team creation: pick a name, your own passcode, and an
+  // avatar emoji, no email needed (see sql/teams.sql). Success logs the
+  // creator straight into their new team, same as unlock() above - the new
+  // passcode already works against every team-gated route the instant the
+  // team row exists.
   const signup = () => {
     if (!signupName.trim() || !signupPasscode.trim()) return;
     setSignupChecking(true);
@@ -1554,7 +1471,7 @@ function useTeamCode() {
     fetch("/api/teams", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: signupName.trim(), passcode: signupPasscode.trim() }),
+      body: JSON.stringify({ name: signupName.trim(), passcode: signupPasscode.trim(), avatar: signupAvatar }),
     })
       .then(async (response) => {
         const payload = await response.json().catch(() => ({}));
@@ -1562,10 +1479,11 @@ function useTeamCode() {
           window.localStorage.setItem("alertAccessCode", signupPasscode.trim());
           setCode(signupPasscode.trim());
           setTeamName(payload.team?.name ?? signupName.trim());
-          setTeamNameInput(payload.team?.name ?? signupName.trim());
+          setTeamAvatar(payload.team?.avatar ?? signupAvatar);
           setShowSignupBox(false);
           setSignupName("");
           setSignupPasscode("");
+          setSignupAvatar(AVATAR_OPTIONS[0]);
         } else {
           setSignupError(payload.error ?? "Κάτι πήγε στραβά - δοκίμασε ξανά.");
         }
@@ -1574,37 +1492,55 @@ function useTeamCode() {
       .finally(() => setSignupChecking(false));
   };
 
+  // Avatar (unlike the name) can still be changed after signup, and it's
+  // server-synced so the change shows up on every device/browser the next
+  // time this account logs in - not a per-browser localStorage cosmetic.
+  const updateAvatar = (avatar: string) => {
+    if (!code || avatar === teamAvatar) return;
+    setAvatarSaving(true);
+    setAvatarError("");
+    fetch("/api/teams", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", "x-alert-code": code },
+      body: JSON.stringify({ avatar }),
+    })
+      .then(async (response) => {
+        const payload = await response.json().catch(() => ({}));
+        if (response.ok) setTeamAvatar(payload.team?.avatar ?? avatar);
+        else setAvatarError(payload.error ?? "Κάτι πήγε στραβά.");
+      })
+      .catch(() => setAvatarError("Σφάλμα σύνδεσης - δοκίμασε ξανά."))
+      .finally(() => setAvatarSaving(false));
+  };
+
   const logout = () => {
     window.localStorage.removeItem("alertAccessCode");
     setCode(null);
     setLoginName("");
     setInputCode("");
     setTeamName("");
-    setTeamNameInput("");
-    setEditingName(false);
+    setTeamAvatar("");
   };
 
   const onUnauthorized = useCallback(() => {
     window.localStorage.removeItem("alertAccessCode");
     setCode(null);
     setTeamName("");
-    setTeamNameInput("");
-    setEditingName(false);
+    setTeamAvatar("");
     setLockError("Ο κωδικός δεν ισχύει πια.");
   }, []);
 
   return {
     code, loginName, setLoginName, inputCode, setInputCode, checking, lockError, setLockError, showCodeBox, setShowCodeBox, unlock, logout, onUnauthorized,
-    showSignupBox, setShowSignupBox, signupName, setSignupName, signupPasscode, setSignupPasscode, signupChecking, signupError, setSignupError, signup,
-    teamName, teamNameInput, setTeamNameInput, renaming, renameError, renameTeam,
-    editingName, startEditingName, cancelEditingName,
+    showSignupBox, setShowSignupBox, signupName, setSignupName, signupPasscode, setSignupPasscode, signupAvatar, setSignupAvatar, signupChecking, signupError, setSignupError, signup,
+    teamName, teamAvatar, avatarSaving, avatarError, updateAvatar,
   };
 }
 
 function TeamCodeBar({ team }: { team: ReturnType<typeof useTeamCode> }) {
   const {
     code, loginName, setLoginName, inputCode, setInputCode, checking, lockError, setLockError, showCodeBox, setShowCodeBox, unlock, logout,
-    showSignupBox, setShowSignupBox, signupName, setSignupName, signupPasscode, setSignupPasscode, signupChecking, signupError, setSignupError, signup,
+    showSignupBox, setShowSignupBox, signupName, setSignupName, signupPasscode, setSignupPasscode, signupAvatar, setSignupAvatar, signupChecking, signupError, setSignupError, signup,
   } = team;
   const closeModal = () => { setShowCodeBox(false); setShowSignupBox(false); setLockError(""); setSignupError(""); };
   return <div className="teamCodeBar">
@@ -1634,6 +1570,12 @@ function TeamCodeBar({ team }: { team: ReturnType<typeof useTeamCode> }) {
           </div>
           <div className="teamAuthField">
             <input type="password" value={signupPasscode} onChange={(event) => { setSignupPasscode(event.target.value); setSignupError(""); }} onKeyDown={(event) => { if (event.key === "Enter") signup(); }} placeholder="Διάλεξε κωδικό (4+ χαρακτήρες)" />
+          </div>
+          <p className="teamAuthAvatarLabel">Avatar</p>
+          <div className="profileEmojiPicker">
+            {AVATAR_OPTIONS.map((emoji) => (
+              <button type="button" key={emoji} className={`profileEmojiOption ${signupAvatar === emoji ? "active" : ""}`} onClick={() => setSignupAvatar(emoji)}>{emoji}</button>
+            ))}
           </div>
           <button type="button" className="teamAuthSubmit" onClick={signup} disabled={signupChecking}>{signupChecking ? "…" : "Δημιουργία Λογαριασμού"}</button>
           {signupError && <p className="recipientError">{signupError}</p>}
