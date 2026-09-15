@@ -595,7 +595,7 @@ export default function Home() {
                   {team.code && <input type="file" accept="image/*" onChange={(event) => { const file = event.target.files?.[0]; if (file) handleTeamPhotoFile(file); event.target.value = ""; }} />}
                 </label>
                 {team.code ? <>
-                  <p className="profileStatusOn">{team.teamName || "Ο λογαριασμός σου"}</p>
+                  {!team.editingName && <p className="profileStatusOn">{team.teamName || "Ο λογαριασμός σου"}</p>}
                   {(teamPhoto || teamEmoji) && <button type="button" className="profileLink" onClick={teamPhoto ? removeTeamPhoto : removeTeamEmoji}>Αφαίρεση {teamPhoto ? "φωτογραφίας" : "emoji"}</button>}
                 </> : <p className="profileStatusOff">Δεν είσαι συνδεδεμένη — οι Προβολές και η Παρακολούθηση χρειάζονται σύνδεση.</p>}
               </div>
@@ -604,10 +604,13 @@ export default function Home() {
                   <button type="button" key={emoji} className={`profileEmojiOption ${teamEmoji === emoji ? "active" : ""}`} onClick={() => pickTeamEmoji(emoji)}>{emoji}</button>
                 ))}
               </div>}
-              {team.code && <div className="recipientInput">
-                <input value={team.teamNameInput} onChange={(event) => team.setTeamNameInput(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") team.renameTeam(); }} placeholder="Όνομα λογαριασμού" />
-                <button type="button" onClick={team.renameTeam} disabled={team.teamNameInput.trim() === team.teamName || team.renaming}>{team.renaming ? "…" : "Αποθήκευση"}</button>
-              </div>}
+              {team.code && (team.editingName
+                ? <div className="recipientInput">
+                    <input value={team.teamNameInput} onChange={(event) => team.setTeamNameInput(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") team.renameTeam(); if (event.key === "Escape") team.cancelEditingName(); }} placeholder="Όνομα λογαριασμού" autoFocus />
+                    <button type="button" onClick={team.renameTeam} disabled={team.teamNameInput.trim() === team.teamName || team.renaming}>{team.renaming ? "…" : "Αποθήκευση"}</button>
+                    <button type="button" className="profileLink" onClick={team.cancelEditingName}>Άκυρο</button>
+                  </div>
+                : <button type="button" className="profileLink" onClick={team.startEditingName}>Επεξεργασία ονόματος</button>)}
               {team.renameError && <p className="recipientError">{team.renameError}</p>}
               {lastSync && <p className="profileHeaderSync">Ενημέρωση δεδομένων<strong>{new Intl.DateTimeFormat("el-GR", { dateStyle: "short", timeStyle: "short" }).format(new Date(lastSync))}</strong></p>}
             </article>
@@ -1459,8 +1462,12 @@ function useTeamCode() {
   // fresh page load with an already-stored passcode re-fetches it here.
   const [teamName, setTeamName] = useState("");
   const [teamNameInput, setTeamNameInput] = useState("");
+  const [editingName, setEditingName] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [renameError, setRenameError] = useState("");
+
+  const startEditingName = () => { setTeamNameInput(teamName); setRenameError(""); setEditingName(true); };
+  const cancelEditingName = () => { setTeamNameInput(teamName); setRenameError(""); setEditingName(false); };
 
   useEffect(() => {
     setCode(window.localStorage.getItem("alertAccessCode"));
@@ -1518,8 +1525,12 @@ function useTeamCode() {
     })
       .then(async (response) => {
         const payload = await response.json().catch(() => ({}));
-        if (response.ok) setTeamName(payload.team?.name ?? trimmed);
-        else setRenameError(payload.error ?? "Κάτι πήγε στραβά.");
+        if (response.ok) {
+          setTeamName(payload.team?.name ?? trimmed);
+          setEditingName(false);
+        } else {
+          setRenameError(payload.error ?? "Κάτι πήγε στραβά.");
+        }
       })
       .catch(() => setRenameError("Σφάλμα σύνδεσης - δοκίμασε ξανά."))
       .finally(() => setRenaming(false));
@@ -1563,6 +1574,7 @@ function useTeamCode() {
     setInputCode("");
     setTeamName("");
     setTeamNameInput("");
+    setEditingName(false);
   };
 
   const onUnauthorized = useCallback(() => {
@@ -1570,6 +1582,7 @@ function useTeamCode() {
     setCode(null);
     setTeamName("");
     setTeamNameInput("");
+    setEditingName(false);
     setLockError("Ο κωδικός δεν ισχύει πια.");
   }, []);
 
@@ -1577,6 +1590,7 @@ function useTeamCode() {
     code, loginName, setLoginName, inputCode, setInputCode, checking, lockError, setLockError, showCodeBox, setShowCodeBox, unlock, logout, onUnauthorized,
     showSignupBox, setShowSignupBox, signupName, setSignupName, signupPasscode, setSignupPasscode, signupChecking, signupError, setSignupError, signup,
     teamName, teamNameInput, setTeamNameInput, renaming, renameError, renameTeam,
+    editingName, startEditingName, cancelEditingName,
   };
 }
 
