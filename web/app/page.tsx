@@ -153,27 +153,17 @@ export default function Home() {
   // way to know the code at all (worked around with an onCodeChange relay).
   // A single instance here, rendered once, fixes both.
   const team = useTeamCode();
-  // Purely cosmetic label for Προφίλ - there's no individual login yet (one
-  // shared team passcode), so this can't be tied to a real identity. Just a
-  // per-browser display name, stored in localStorage, not sent anywhere.
-  const [teamName, setTeamName] = useState("");
-  const [teamNameInput, setTeamNameInput] = useState("");
-  useEffect(() => {
-    const stored = window.localStorage.getItem("teamProfileName") ?? "";
-    setTeamName(stored);
-    setTeamNameInput(stored);
-  }, []);
-  const saveTeamName = () => {
-    const trimmed = teamNameInput.trim();
-    window.localStorage.setItem("teamProfileName", trimmed);
-    setTeamName(trimmed);
-  };
-  // Same local-only storage as the name - downscaled to a small square
-  // client-side first (a phone photo straight from disk would otherwise be
-  // several MB, well past what's comfortable in localStorage).
+  // Avatar is still a purely local, per-browser cosmetic (not synced to the
+  // account) - either an uploaded photo or a picked emoji, never both at
+  // once. Downscaled to a small square client-side first for the photo case
+  // (a phone photo straight from disk would otherwise be several MB, well
+  // past what's comfortable in localStorage) - an emoji is just a character,
+  // no processing needed.
   const [teamPhoto, setTeamPhoto] = useState("");
+  const [teamEmoji, setTeamEmoji] = useState("");
   useEffect(() => {
     setTeamPhoto(window.localStorage.getItem("teamProfilePhoto") ?? "");
+    setTeamEmoji(window.localStorage.getItem("teamProfileEmoji") ?? "");
   }, []);
   const handleTeamPhotoFile = (file: File) => {
     const reader = new FileReader();
@@ -192,7 +182,9 @@ export default function Home() {
         ctx.drawImage(img, (size - w) / 2, (size - h) / 2, w, h);
         const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
         window.localStorage.setItem("teamProfilePhoto", dataUrl);
+        window.localStorage.removeItem("teamProfileEmoji");
         setTeamPhoto(dataUrl);
+        setTeamEmoji("");
       };
       img.src = reader.result as string;
     };
@@ -201,6 +193,16 @@ export default function Home() {
   const removeTeamPhoto = () => {
     window.localStorage.removeItem("teamProfilePhoto");
     setTeamPhoto("");
+  };
+  const pickTeamEmoji = (emoji: string) => {
+    window.localStorage.setItem("teamProfileEmoji", emoji);
+    window.localStorage.removeItem("teamProfilePhoto");
+    setTeamEmoji(emoji);
+    setTeamPhoto("");
+  };
+  const removeTeamEmoji = () => {
+    window.localStorage.removeItem("teamProfileEmoji");
+    setTeamEmoji("");
   };
   const previousTeamCode = useRef(team.code);
   useEffect(() => {
@@ -589,18 +591,24 @@ export default function Home() {
               <p className="eyebrow">ΛΟΓΑΡΙΑΣΜΟΣ</p>
               <div className="profileHeaderMain">
                 <label className="profileAvatar" title="Άλλαξε φωτογραφία">
-                  {teamPhoto ? <img src={teamPhoto} alt="" /> : <CircleUserRound size={46} strokeWidth={1.75} />}
+                  {teamPhoto ? <img src={teamPhoto} alt="" /> : teamEmoji ? <span className="profileAvatarEmoji">{teamEmoji}</span> : <CircleUserRound size={46} strokeWidth={1.75} />}
                   {team.code && <input type="file" accept="image/*" onChange={(event) => { const file = event.target.files?.[0]; if (file) handleTeamPhotoFile(file); event.target.value = ""; }} />}
                 </label>
                 {team.code ? <>
-                  <p className="profileStatusOn">{teamName || "Η ομάδα σου"}</p>
-                  {teamPhoto && <button type="button" className="profileLink" onClick={removeTeamPhoto}>Αφαίρεση φωτογραφίας</button>}
+                  <p className="profileStatusOn">{team.teamName || "Ο λογαριασμός σου"}</p>
+                  {(teamPhoto || teamEmoji) && <button type="button" className="profileLink" onClick={teamPhoto ? removeTeamPhoto : removeTeamEmoji}>Αφαίρεση {teamPhoto ? "φωτογραφίας" : "emoji"}</button>}
                 </> : <p className="profileStatusOff">Δεν είσαι συνδεδεμένη — οι Προβολές και η Παρακολούθηση χρειάζονται σύνδεση.</p>}
               </div>
-              {team.code && <div className="recipientInput">
-                <input value={teamNameInput} onChange={(event) => setTeamNameInput(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") saveTeamName(); }} placeholder="Όνομα ομάδας (προαιρετικό)" />
-                <button type="button" onClick={saveTeamName} disabled={teamNameInput.trim() === teamName}>Αποθήκευση</button>
+              {team.code && <div className="profileEmojiPicker">
+                {["👤", "🏢", "📊", "💼", "🔧", "⚡", "🌟", "🎯"].map((emoji) => (
+                  <button type="button" key={emoji} className={`profileEmojiOption ${teamEmoji === emoji ? "active" : ""}`} onClick={() => pickTeamEmoji(emoji)}>{emoji}</button>
+                ))}
               </div>}
+              {team.code && <div className="recipientInput">
+                <input value={team.teamNameInput} onChange={(event) => team.setTeamNameInput(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") team.renameTeam(); }} placeholder="Όνομα λογαριασμού" />
+                <button type="button" onClick={team.renameTeam} disabled={team.teamNameInput.trim() === team.teamName || team.renaming}>{team.renaming ? "…" : "Αποθήκευση"}</button>
+              </div>}
+              {team.renameError && <p className="recipientError">{team.renameError}</p>}
               {lastSync && <p className="profileHeaderSync">Ενημέρωση δεδομένων<strong>{new Intl.DateTimeFormat("el-GR", { dateStyle: "short", timeStyle: "short" }).format(new Date(lastSync))}</strong></p>}
             </article>
             <article className="panel profileCard profileViewsCard">
@@ -1435,6 +1443,7 @@ function alertUrgency(openingDate: string | null): "open" | "urgent" | "passed" 
 // key regardless of which page's hook instance is asking.
 function useTeamCode() {
   const [code, setCode] = useState<string | null | undefined>(undefined);
+  const [loginName, setLoginName] = useState("");
   const [inputCode, setInputCode] = useState("");
   const [checking, setChecking] = useState(false);
   const [lockError, setLockError] = useState("");
@@ -1445,26 +1454,75 @@ function useTeamCode() {
   const [signupChecking, setSignupChecking] = useState(false);
   const [signupError, setSignupError] = useState("");
 
+  // The account's display name (real teams.name column - see sql/teams.sql)
+  // isn't part of the localStorage session, only the passcode is - so a
+  // fresh page load with an already-stored passcode re-fetches it here.
+  const [teamName, setTeamName] = useState("");
+  const [teamNameInput, setTeamNameInput] = useState("");
+  const [renaming, setRenaming] = useState(false);
+  const [renameError, setRenameError] = useState("");
+
   useEffect(() => {
     setCode(window.localStorage.getItem("alertAccessCode"));
   }, []);
 
+  useEffect(() => {
+    if (!code) { setTeamName(""); setTeamNameInput(""); return; }
+    fetch("/api/teams", { headers: { "x-alert-code": code } })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((payload) => {
+        if (payload?.team?.name) { setTeamName(payload.team.name); setTeamNameInput(payload.team.name); }
+      })
+      .catch(() => {});
+  }, [code]);
+
+  // Login now checks name + passcode together (see api/teams/login), not
+  // just the passcode - matches signup asking for both, and a half-remembered
+  // passcode can't accidentally land in an unrelated account that shares it.
   const unlock = () => {
-    if (!inputCode.trim()) return;
+    if (!loginName.trim() || !inputCode.trim()) return;
     setChecking(true);
     setLockError("");
-    fetch("/api/alert-recipients", { headers: { "x-alert-code": inputCode } })
-      .then((response) => {
+    fetch("/api/teams/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: loginName.trim(), passcode: inputCode.trim() }),
+    })
+      .then(async (response) => {
+        const payload = await response.json().catch(() => ({}));
         if (response.ok) {
-          window.localStorage.setItem("alertAccessCode", inputCode);
-          setCode(inputCode);
+          window.localStorage.setItem("alertAccessCode", inputCode.trim());
+          setCode(inputCode.trim());
+          setTeamName(payload.team?.name ?? "");
+          setTeamNameInput(payload.team?.name ?? "");
           setShowCodeBox(false);
+          setLoginName("");
+          setInputCode("");
         } else {
-          setLockError("Λάθος κωδικός.");
+          setLockError(payload.error ?? "Λάθος όνομα ή κωδικός.");
         }
       })
       .catch(() => setLockError("Σφάλμα σύνδεσης - δοκίμασε ξανά."))
       .finally(() => setChecking(false));
+  };
+
+  const renameTeam = () => {
+    const trimmed = teamNameInput.trim();
+    if (!trimmed || trimmed === teamName || !code) return;
+    setRenaming(true);
+    setRenameError("");
+    fetch("/api/teams", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", "x-alert-code": code },
+      body: JSON.stringify({ name: trimmed }),
+    })
+      .then(async (response) => {
+        const payload = await response.json().catch(() => ({}));
+        if (response.ok) setTeamName(payload.team?.name ?? trimmed);
+        else setRenameError(payload.error ?? "Κάτι πήγε στραβά.");
+      })
+      .catch(() => setRenameError("Σφάλμα σύνδεσης - δοκίμασε ξανά."))
+      .finally(() => setRenaming(false));
   };
 
   // Self-service team creation: pick a name + your own passcode, no email
@@ -1485,6 +1543,8 @@ function useTeamCode() {
         if (response.ok) {
           window.localStorage.setItem("alertAccessCode", signupPasscode.trim());
           setCode(signupPasscode.trim());
+          setTeamName(payload.team?.name ?? signupName.trim());
+          setTeamNameInput(payload.team?.name ?? signupName.trim());
           setShowSignupBox(false);
           setSignupName("");
           setSignupPasscode("");
@@ -1499,24 +1559,30 @@ function useTeamCode() {
   const logout = () => {
     window.localStorage.removeItem("alertAccessCode");
     setCode(null);
+    setLoginName("");
     setInputCode("");
+    setTeamName("");
+    setTeamNameInput("");
   };
 
   const onUnauthorized = useCallback(() => {
     window.localStorage.removeItem("alertAccessCode");
     setCode(null);
+    setTeamName("");
+    setTeamNameInput("");
     setLockError("Ο κωδικός δεν ισχύει πια.");
   }, []);
 
   return {
-    code, inputCode, setInputCode, checking, lockError, setLockError, showCodeBox, setShowCodeBox, unlock, logout, onUnauthorized,
+    code, loginName, setLoginName, inputCode, setInputCode, checking, lockError, setLockError, showCodeBox, setShowCodeBox, unlock, logout, onUnauthorized,
     showSignupBox, setShowSignupBox, signupName, setSignupName, signupPasscode, setSignupPasscode, signupChecking, signupError, setSignupError, signup,
+    teamName, teamNameInput, setTeamNameInput, renaming, renameError, renameTeam,
   };
 }
 
 function TeamCodeBar({ team }: { team: ReturnType<typeof useTeamCode> }) {
   const {
-    code, inputCode, setInputCode, checking, lockError, setLockError, showCodeBox, setShowCodeBox, unlock, logout,
+    code, loginName, setLoginName, inputCode, setInputCode, checking, lockError, setLockError, showCodeBox, setShowCodeBox, unlock, logout,
     showSignupBox, setShowSignupBox, signupName, setSignupName, signupPasscode, setSignupPasscode, signupChecking, signupError, setSignupError, signup,
   } = team;
   const closeModal = () => { setShowCodeBox(false); setShowSignupBox(false); setLockError(""); setSignupError(""); };
@@ -1533,7 +1599,10 @@ function TeamCodeBar({ team }: { team: ReturnType<typeof useTeamCode> }) {
         {showCodeBox ? <>
           <h3>Σύνδεση</h3>
           <div className="teamAuthField">
-            <input type="password" value={inputCode} onChange={(event) => { setInputCode(event.target.value); setLockError(""); }} onKeyDown={(event) => { if (event.key === "Enter") unlock(); }} placeholder="Κωδικός πρόσβασης" autoFocus />
+            <input value={loginName} onChange={(event) => { setLoginName(event.target.value); setLockError(""); }} placeholder="Όνομα λογαριασμού" autoFocus />
+          </div>
+          <div className="teamAuthField">
+            <input type="password" value={inputCode} onChange={(event) => { setInputCode(event.target.value); setLockError(""); }} onKeyDown={(event) => { if (event.key === "Enter") unlock(); }} placeholder="Κωδικός πρόσβασης" />
           </div>
           <button type="button" className="teamAuthSubmit" onClick={unlock} disabled={checking}>{checking ? "…" : "Είσοδος"}</button>
           {lockError && <p className="recipientError">{lockError}</p>}
