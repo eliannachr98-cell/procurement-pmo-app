@@ -20,16 +20,6 @@ export async function POST(request: Request) {
     const name = typeof body.name === "string" ? body.name.trim() : "";
     const passcode = typeof body.passcode === "string" ? body.passcode.trim() : "";
     const avatar = typeof body.avatar === "string" && AVATAR_OPTIONS.includes(body.avatar) ? body.avatar : AVATAR_OPTIONS[0];
-    if (body.debug) {
-      return NextResponse.json({
-        debug: true,
-        rawAvatar: body.avatar,
-        rawAvatarCodes: typeof body.avatar === "string" ? [...body.avatar].map((c: string) => c.codePointAt(0)?.toString(16)) : null,
-        optionsCodes: AVATAR_OPTIONS.map((o) => [...o].map((c) => c.codePointAt(0)?.toString(16))),
-        matched: typeof body.avatar === "string" && AVATAR_OPTIONS.includes(body.avatar),
-        computedAvatar: avatar,
-      });
-    }
     if (!name) return NextResponse.json({ error: "Όνομα λογαριασμού απαιτείται" }, { status: 400 });
     if (passcode.length < 4) return NextResponse.json({ error: "Ο κωδικός πρέπει να έχει τουλάχιστον 4 χαρακτήρες" }, { status: 400 });
 
