@@ -556,7 +556,6 @@ export default function Home() {
                 {team.avatarError && <p className="recipientError">{team.avatarError}</p>}
               </>}
               {lastSync && <p className="profileHeaderSync">Ενημέρωση δεδομένων<strong>{new Intl.DateTimeFormat("el-GR", { dateStyle: "short", timeStyle: "short" }).format(new Date(lastSync))}</strong></p>}
-              {lastSync && <p className="profileHeaderSync">Ενημέρωση δεδομένων<strong>{new Intl.DateTimeFormat("el-GR", { dateStyle: "short", timeStyle: "short" }).format(new Date(lastSync))}</strong></p>}
             </article>
             <article className="panel profileCard profileViewsCard">
               <p className="eyebrow">ΠΡΟΒΟΛΕΣ</p>
