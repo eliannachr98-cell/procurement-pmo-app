@@ -657,6 +657,48 @@ function Metric({ label, value, sub, tone }: { label: string; value: string; sub
   return <article className={`metric ${tone}`}><div className="metricMain"><span>{label}</span><strong>{value}</strong></div>{sub && <small>{sub}</small>}</article>;
 }
 
+// Click-to-copy ΑΔΑΜ, used everywhere a tender/award/contract code is shown
+// (Επισκόπηση/Διαγωνισμοί table, καρτέλα διαγωνισμού, Αγορά's award/contract
+// tables, Παρακολούθηση cards) - self-contained local "copied" state so any
+// number of instances on the same page work independently of each other.
+function AdamCopy({ adam, label, className = "adamCopy" }: { adam: string; label?: string; className?: string }) {
+  const [copied, setCopied] = useState(false);
+  const handleCopy = (event: SyntheticEvent) => {
+    event.stopPropagation();
+    const onCopied = () => {
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
+    };
+    navigator.clipboard.writeText(adam).then(onCopied, () => {
+      // Some browsers refuse the async Clipboard API outside a focused tab
+      // or a secure context - a hidden textarea + execCommand still works.
+      const textarea = document.createElement("textarea");
+      textarea.value = adam;
+      textarea.style.position = "fixed";
+      textarea.style.left = "-9999px";
+      document.body.appendChild(textarea);
+      textarea.select();
+      try {
+        if (document.execCommand("copy")) onCopied();
+      } catch {
+        // Nothing more we can do - the click still worked, just not the copy.
+      }
+      document.body.removeChild(textarea);
+    });
+  };
+  return <span
+    className={className}
+    role="button"
+    tabIndex={0}
+    title="Αντιγραφή ΑΔΑΜ"
+    onClick={handleCopy}
+    onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); handleCopy(event); } }}
+  >
+    {label && <b>{label}</b>}
+    {copied ? "Αντιγράφηκε!" : adam}
+  </span>;
+}
+
 function PanelHeader({ title, caption, onDownload, chartRef }: { title: string; caption: string; onDownload?: ExportPayload; chartRef?: RefObject<HTMLElement | null> }) {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState<"excel" | "pdf" | null>(null);
@@ -802,7 +844,7 @@ function MonthlyBarChart({ months, metric, formatValue, unitLabel }: {
 function TenderTable({ rows, expanded = false, title = "Λίστα διαγωνισμών", caption, onViewAll }: { rows: Tender[]; expanded?: boolean; title?: string; caption?: string; onViewAll?: () => void }) {
   const [selected, setSelected] = useState<Tender | null>(null);
   if (selected) return <TenderDetail tender={selected} onBack={() => setSelected(null)} />;
-  return <article className={`panel tablePanel ${expanded ? "expanded" : ""}`}><PanelHeader title={title} caption={caption ?? `${number.format(rows.length)} εγγραφές μετά τα φίλτρα`} onDownload={{ filename: title, title, headers: ["ΑΔΑΜ", "Τίτλος", "Αναθέτουσα Αρχή", "CPV", "Περιγραφή CPV", "Τύπος σύμβασης", "Τύπος διαδικασίας", "Τύπος εγγράφου", "Κατάσταση", "Δημοσίευση"], rows: rows.map((item) => [item.adam, item.title, item.authority, item.cpv, item.cpvDescription ?? "", item.contractType ?? "", item.procedureType ?? "", documentTypeLabels[item.documentType ?? ""] ?? item.documentType ?? "", item.status, item.publicationDate ?? ""]), columnTypes: ["text", "text", "text", "text", "text", "text", "text", "text", "text", "date"] }} /><div className="tableScroll"><table><thead><tr><th>ΑΔΑΜ</th><th>Τίτλος</th><th>Αναθέτουσα Αρχή</th><th>CPV / Τίτλος</th><th>Τύπος σύμβασης</th><th>Τύπος εγγράφου</th><th>Κατάσταση</th><th>Δημοσίευση</th><th /></tr></thead><tbody>{rows.map((item) => <tr key={item.adam}><td className="adam">{item.adam}</td><td>{item.procedureType === DIRECT_AWARD_PROCEDURE && <b className="directAwardBadge" title="Απευθείας ανάθεση - όχι ανοιχτός διαγωνισμός">Απευθείας</b>}{item.title}</td><td>{item.authority}</td><td><strong>{item.cpv}</strong><small className="cellSub">{item.cpvDescription}</small></td><td className="cellPlain">{item.contractType ?? "—"}</td><td className="cellPlain">{item.documentType ? (documentTypeLabels[item.documentType] ?? item.documentType) : "—"}</td><td><span className={`status ${statusTone[item.status]}`}>{item.status}</span></td><td>{formatDate(item.publicationDate)}</td><td><button className="view" aria-label={`Προβολή ${item.adam}`} onClick={() => setSelected(item)}>→</button></td></tr>)}</tbody></table></div>{!rows.length && <p className="noRows">Δεν βρέθηκαν διαγωνισμοί για τα επιλεγμένα φίλτρα.</p>}{onViewAll && <button className="viewAll" onClick={onViewAll}>Προβολή όλων των διαγωνισμών →</button>}</article>;
+  return <article className={`panel tablePanel ${expanded ? "expanded" : ""}`}><PanelHeader title={title} caption={caption ?? `${number.format(rows.length)} εγγραφές μετά τα φίλτρα`} onDownload={{ filename: title, title, headers: ["ΑΔΑΜ", "Τίτλος", "Αναθέτουσα Αρχή", "CPV", "Περιγραφή CPV", "Τύπος σύμβασης", "Τύπος διαδικασίας", "Τύπος εγγράφου", "Κατάσταση", "Δημοσίευση"], rows: rows.map((item) => [item.adam, item.title, item.authority, item.cpv, item.cpvDescription ?? "", item.contractType ?? "", item.procedureType ?? "", documentTypeLabels[item.documentType ?? ""] ?? item.documentType ?? "", item.status, item.publicationDate ?? ""]), columnTypes: ["text", "text", "text", "text", "text", "text", "text", "text", "text", "date"] }} /><div className="tableScroll"><table><thead><tr><th>ΑΔΑΜ</th><th>Τίτλος</th><th>Αναθέτουσα Αρχή</th><th>CPV / Τίτλος</th><th>Τύπος σύμβασης</th><th>Τύπος εγγράφου</th><th>Κατάσταση</th><th>Δημοσίευση</th><th /></tr></thead><tbody>{rows.map((item) => <tr key={item.adam}><td><AdamCopy adam={item.adam} className="adam adamCopy" /></td><td>{item.procedureType === DIRECT_AWARD_PROCEDURE && <b className="directAwardBadge" title="Απευθείας ανάθεση - όχι ανοιχτός διαγωνισμός">Απευθείας</b>}{item.title}</td><td>{item.authority}</td><td><strong>{item.cpv}</strong><small className="cellSub">{item.cpvDescription}</small></td><td className="cellPlain">{item.contractType ?? "—"}</td><td className="cellPlain">{item.documentType ? (documentTypeLabels[item.documentType] ?? item.documentType) : "—"}</td><td><span className={`status ${statusTone[item.status]}`}>{item.status}</span></td><td>{formatDate(item.publicationDate)}</td><td><button className="view" aria-label={`Προβολή ${item.adam}`} onClick={() => setSelected(item)}>→</button></td></tr>)}</tbody></table></div>{!rows.length && <p className="noRows">Δεν βρέθηκαν διαγωνισμοί για τα επιλεγμένα φίλτρα.</p>}{onViewAll && <button className="viewAll" onClick={onViewAll}>Προβολή όλων των διαγωνισμών →</button>}</article>;
 }
 
 function TenderDetail({ tender, onBack }: { tender: Tender; onBack: () => void }) {
@@ -812,7 +854,7 @@ function TenderDetail({ tender, onBack }: { tender: Tender; onBack: () => void }
   ].filter((item): item is [string, string] => Boolean(item[1]));
   const dates = milestones.map((item) => new Date(item[1]).getTime()).filter(Number.isFinite);
   const start = Math.min(...dates); const end = Math.max(...dates); const span = Math.max(end - start, 86400000);
-  return <article className="panel tenderDetail"><button className="back" onClick={onBack}>← Πίσω στη λίστα</button><p className="eyebrow">ΚΑΡΤΕΛΑ ΔΙΑΓΩΝΙΣΜΟΥ</p><h2>{tender.title}</h2><p className="detailMeta">{tender.adam} · {tender.authority} · {tender.cpv} {tender.cpvDescription}</p><div className="detailMetrics"><Metric label="Προϋπολογισμός" value={euro.format(tender.budget)} tone="sky" /><Metric label="Αξία ανάθεσης" value={euro.format(tender.awardValue ?? 0)} tone="sand" /><Metric label="Αξία σύμβασης" value={euro.format(tender.contractValue ?? 0)} tone="mint" /></div><section className="gantt"><h3>Χρονοδιάγραμμα διαγωνισμού</h3>{milestones.map(([label,date], index) => <div className="ganttRow" key={`${label}-${date}`}><span>{label}</span><div><i style={{left:`${((new Date(date).getTime()-start)/span)*88}%`,width:index === milestones.length-1 ? "12%" : `${Math.max(8,((new Date(milestones[Math.min(index+1,milestones.length-1)][1]).getTime()-new Date(date).getTime())/span)*88)}%`}} /></div><time>{formatDate(date)}</time></div>)}</section><div className="detailFacts"><p><b>Ανάδοχος:</b> {tender.contractors?.join(", ") || "Δεν έχει καταχωριστεί"}</p><p><b>Τύπος διαδικασίας:</b> {tender.procedureType || "—"}</p><p><b>NUTS:</b> {[tender.nutsCode,tender.nutsName].filter(Boolean).join(" · ") || "—"}</p></div></article>;
+  return <article className="panel tenderDetail"><button className="back" onClick={onBack}>← Πίσω στη λίστα</button><p className="eyebrow">ΚΑΡΤΕΛΑ ΔΙΑΓΩΝΙΣΜΟΥ</p><h2>{tender.title}</h2><p className="detailMeta"><AdamCopy adam={tender.adam} className="adamCopy" /> · {tender.authority} · {tender.cpv} {tender.cpvDescription}</p><div className="detailMetrics"><Metric label="Προϋπολογισμός" value={euro.format(tender.budget)} tone="sky" /><Metric label="Αξία ανάθεσης" value={euro.format(tender.awardValue ?? 0)} tone="sand" /><Metric label="Αξία σύμβασης" value={euro.format(tender.contractValue ?? 0)} tone="mint" /></div><section className="gantt"><h3>Χρονοδιάγραμμα διαγωνισμού</h3>{milestones.map(([label,date], index) => <div className="ganttRow" key={`${label}-${date}`}><span>{label}</span><div><i style={{left:`${((new Date(date).getTime()-start)/span)*88}%`,width:index === milestones.length-1 ? "12%" : `${Math.max(8,((new Date(milestones[Math.min(index+1,milestones.length-1)][1]).getTime()-new Date(date).getTime())/span)*88)}%`}} /></div><time>{formatDate(date)}</time></div>)}</section><div className="detailFacts"><p><b>Ανάδοχος:</b> {tender.contractors?.join(", ") || "Δεν έχει καταχωριστεί"}</p><p><b>Τύπος διαδικασίας:</b> {tender.procedureType || "—"}</p><p><b>NUTS:</b> {[tender.nutsCode,tender.nutsName].filter(Boolean).join(" · ") || "—"}</p></div></article>;
 }
 
 function NutsMap({ counts }: { counts: { nuts_code: string; nuts_name: string; count: number }[] }) {
@@ -1360,7 +1402,7 @@ function ContractorProfile({ name, summary, awards, contracts, onClose }: {
     {tab === "awards" && <div className="tableScroll"><table><thead><tr><th>ΑΔΑΜ Ανάθεσης</th><th>Τίτλος</th><th>Αναθέτουσα Αρχή</th><th>Ημ. ανάθεσης</th><th>Αξία</th><th>Διακήρυξη</th></tr></thead><tbody>{awardRows.map((item) => {
       const hasNotice = Boolean(item.noticeAdam && item.noticeTitle);
       return <tr key={item.adam} className={hasNotice ? "clickableRow" : ""} onClick={hasNotice ? () => openTender(item.noticeAdam!) : undefined}>
-        <td className="adam">{item.adam}</td>
+        <td><AdamCopy adam={item.adam} className="adam adamCopy" /></td>
         <td>{item.title}</td>
         <td>{item.authority}</td>
         <td>{formatDate(item.awardDate)}</td>
@@ -1368,7 +1410,7 @@ function ContractorProfile({ name, summary, awards, contracts, onClose }: {
         <td>{hasNotice ? item.noticeTitle : <span className="cellSub">—</span>}</td>
       </tr>;
     })}</tbody></table>{!awardRows.length && <p className="noRows">Δεν βρέθηκαν αναθέσεις.</p>}{loadingTender && <p className="noRows">Φόρτωση στοιχείων διαγωνισμού…</p>}</div>}
-    {tab === "contracts" && <div className="tableScroll"><table><thead><tr><th>ΑΔΑΜ Σύμβασης</th><th>Τίτλος</th><th>Αναθέτουσα Αρχή</th><th>Ημ. υπογραφής</th><th>Αξία</th></tr></thead><tbody>{contracts.map((item) => <tr key={item.adam}><td className="adam">{item.adam}</td><td>{item.title}</td><td>{item.authority}</td><td>{formatDate(item.signedDate)}</td><td>{euro.format(item.value)}</td></tr>)}</tbody></table>{!contracts.length && <p className="noRows">Δεν βρέθηκαν συμβάσεις.</p>}</div>}
+    {tab === "contracts" && <div className="tableScroll"><table><thead><tr><th>ΑΔΑΜ Σύμβασης</th><th>Τίτλος</th><th>Αναθέτουσα Αρχή</th><th>Ημ. υπογραφής</th><th>Αξία</th></tr></thead><tbody>{contracts.map((item) => <tr key={item.adam}><td><AdamCopy adam={item.adam} className="adam adamCopy" /></td><td>{item.title}</td><td>{item.authority}</td><td>{formatDate(item.signedDate)}</td><td>{euro.format(item.value)}</td></tr>)}</tbody></table>{!contracts.length && <p className="noRows">Δεν βρέθηκαν συμβάσεις.</p>}</div>}
     {tab === "distribution" && <div className="bars">{distribution.slice(0, 10).map(([label, value]) => <div className="barRow" key={label}><span title={label}>{label}</span><div><i className="teal" style={{ width: `${(value / distributionTotal) * 100}%` }} /></div><strong>{euro.format(value)}</strong></div>)}{!distribution.length && <p className="noRows">Δεν υπάρχουν δεδομένα κατανομής.</p>}</div>}
   </article>;
 }
@@ -1651,31 +1693,6 @@ function AlertsPanelContent({ code, onUnauthorized, watchlist, setWatchlist, nut
   const [submittedAdams, setSubmittedAdams] = useState<Set<string>>(new Set());
   const [interestedAdams, setInterestedAdams] = useState<Set<string>>(new Set());
   const [trackedItems, setTrackedItems] = useState<AlertItem[]>([]);
-  const [copiedAdam, setCopiedAdam] = useState<string | null>(null);
-
-  const copyAdam = useCallback((adam: string, event: SyntheticEvent) => {
-    event.stopPropagation();
-    const onCopied = () => {
-      setCopiedAdam(adam);
-      window.setTimeout(() => setCopiedAdam((current) => (current === adam ? null : current)), 1500);
-    };
-    navigator.clipboard.writeText(adam).then(onCopied, () => {
-      // Some browsers refuse the async Clipboard API outside a focused tab
-      // or a secure context - a hidden textarea + execCommand still works.
-      const textarea = document.createElement("textarea");
-      textarea.value = adam;
-      textarea.style.position = "fixed";
-      textarea.style.left = "-9999px";
-      document.body.appendChild(textarea);
-      textarea.select();
-      try {
-        if (document.execCommand("copy")) onCopied();
-      } catch {
-        // Nothing more we can do - the click still worked, just not the copy.
-      }
-      document.body.removeChild(textarea);
-    });
-  }, []);
 
   const loadSubmissions = useCallback(() => {
     if (!code) return; // free mode: nothing to load, state starts empty every visit
@@ -1948,7 +1965,7 @@ function AlertsPanelContent({ code, onUnauthorized, watchlist, setWatchlist, nut
             <span><b>Τύπος</b>{item.documentType ? (documentTypeLabels[item.documentType] ?? item.documentType) : "—"}</span>
             <span><b>Π/Υ</b>{euro.format(item.budget)}</span>
             <span><b>Αποσφράγιση</b>{formatDate(item.openingDate ?? undefined)}</span>
-            <span className="adamCopy" role="button" tabIndex={0} title="Αντιγραφή ΑΔΑΜ" onClick={(event) => copyAdam(item.adam, event)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); copyAdam(item.adam, event); } }}><b>ΑΔΑΜ</b>{copiedAdam === item.adam ? "Αντιγράφηκε!" : item.adam}</span>
+            <AdamCopy adam={item.adam} label="ΑΔΑΜ" />
           </span>
           <button type="button" className="submittedUnmark" onClick={() => toggleSubmitted(item.adam)} aria-label={`Αναίρεση σήμανσης ${item.title}`}>Αναίρεση</button>
         </li>)}
@@ -1965,7 +1982,7 @@ function AlertsPanelContent({ code, onUnauthorized, watchlist, setWatchlist, nut
               <span><b>Τύπος</b>{item.documentType ? (documentTypeLabels[item.documentType] ?? item.documentType) : "—"}</span>
               <span><b>Π/Υ</b>{euro.format(item.budget)}</span>
               <span><b>Αποσφράγιση</b>{formatDate(item.openingDate ?? undefined)}</span>
-              <span className="adamCopy" role="button" tabIndex={0} title="Αντιγραφή ΑΔΑΜ" onClick={(event) => copyAdam(item.adam, event)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); copyAdam(item.adam, event); } }}><b>ΑΔΑΜ</b>{copiedAdam === item.adam ? "Αντιγράφηκε!" : item.adam}</span>
+              <AdamCopy adam={item.adam} label="ΑΔΑΜ" />
             </span>
             <button type="button" className="submittedUnmark" onClick={() => toggleInterested(item.adam)} aria-label={`Αναίρεση σήμανσης ${item.title}`}>Αναίρεση</button>
           </li>)}
@@ -2159,7 +2176,7 @@ function AlertsPanelContent({ code, onUnauthorized, watchlist, setWatchlist, nut
         <span className="alertCardHead"><strong>{item.title}</strong><span>{alertTab === "recent" && isWithinDays(item, 3) && <b className="newBadge">ΝΕΟ</b>}{item.procedureType === DIRECT_AWARD_PROCEDURE && <b className="directAwardBadge" title="Απευθείας ανάθεση - όχι ανοιχτός διαγωνισμός">Απευθείας ανάθεση</b>}{formatDate(item.publicationDate ?? undefined)}</span></span>
         <span className="alertCardAuthority">{item.authority}</span>
         <span className="alertCardFacts">
-          <span className="adamCopy" role="button" tabIndex={0} title="Αντιγραφή ΑΔΑΜ" onClick={(event) => copyAdam(item.adam, event)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); copyAdam(item.adam, event); } }}><b>ΑΔΑΜ</b>{copiedAdam === item.adam ? "Αντιγράφηκε!" : item.adam}</span>
+          <AdamCopy adam={item.adam} label="ΑΔΑΜ" />
           <span title={item.cpvs.map((cpv) => cpv.code).join(", ")}><b>CPV</b>{shownCpvs.map((cpv) => cpv.code).join(", ") || "—"}</span>
           <span><b>Π/Υ</b>{euro.format(item.budget)}</span>
           <span><b>Αποσφράγιση</b>{formatDate(item.openingDate ?? undefined)}</span>
