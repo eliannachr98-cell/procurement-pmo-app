@@ -134,6 +134,7 @@ export default function Home() {
   const [year, setYear] = useState("Όλα");
   const [contractType, setContractType] = useState<string[]>([]);
   const [documentType, setDocumentType] = useState("Όλοι");
+  const [hideDirectAwards, setHideDirectAwards] = useState(false);
   // Lifted out of AlertsPanelContent so it survives switching to another tab
   // and back - that page unmounts/remounts on every tab change, which would
   // otherwise wipe free-mode watchlist picks (they're not persisted anywhere
@@ -169,7 +170,7 @@ export default function Home() {
       // keep filtering the page as if still logged in.
       setAlertsWatchlist([]); setAlertsNutsFilter([]);
       setMarketSelectedContractor(""); setMarketContractorSearch(""); setMarketVisibleCount(10);
-      setStatus("Όλες"); setAuthority(""); setContractor([]); setCpv([]); setYear("Όλα"); setContractType([]); setDocumentType("Όλοι");
+      setStatus("Όλες"); setAuthority(""); setContractor([]); setCpv([]); setYear("Όλα"); setContractType([]); setDocumentType("Όλοι"); setHideDirectAwards(false);
     }
     previousTeamCode.current = team.code;
   }, [team.code]);
@@ -266,7 +267,7 @@ export default function Home() {
     const name = newViewName.trim();
     if (!name || !team.code) return;
     const code = team.code;
-    const filters = { year, authority, contractor, cpv, contractType, documentType, status };
+    const filters = { year, authority, contractor, cpv, contractType, documentType, status, hideDirectAwards };
     fetch("/api/saved-views", { method: "POST", headers: { "Content-Type": "application/json", "x-alert-code": code }, body: JSON.stringify({ name, filters }) })
       .then(async (response) => {
         if (!response.ok) throw new Error(`Αποθήκευση προβολής: ${response.status} ${(await response.text()).slice(0, 200)}`);
@@ -284,6 +285,7 @@ export default function Home() {
     if (Array.isArray(f.contractType)) setContractType(f.contractType as string[]);
     if (typeof f.documentType === "string") setDocumentType(f.documentType);
     if (typeof f.status === "string") setStatus(f.status);
+    if (typeof f.hideDirectAwards === "boolean") setHideDirectAwards(f.hideDirectAwards);
   };
   const deleteView = (id: string) => {
     if (!team.code) return;
@@ -331,6 +333,7 @@ export default function Home() {
     if (year !== "Όλα") params.set("year", year);
     contractType.forEach((item) => params.append("contractType", item));
     if (documentType !== "Όλοι") params.set("documentType", documentType);
+    if (hideDirectAwards) params.set("hideDirectAwards", "true");
     // Pages are intentionally small; users can continue through the complete
     // dataset without downloading the whole historical database at once.
     fetch(`/api/procurement?${params.toString()}`)
@@ -354,7 +357,7 @@ export default function Home() {
       .finally(() => {
         if (requestId === latestRequest.current) setLoading(false);
       });
-  }, [query, authority, contractor, cpv, year, contractType, documentType]);
+  }, [query, authority, contractor, cpv, year, contractType, documentType, hideDirectAwards]);
 
   const loadDashboard = useCallback(() => {
     const requestId = ++latestDashboardRequest.current;
@@ -456,8 +459,9 @@ export default function Home() {
       (!authority || authority === "Όλες" || tender.authority.toLocaleLowerCase("el").includes(authority.toLocaleLowerCase("el"))) &&
       (year === "Όλα" || tender.publicationDate?.startsWith(year)) &&
       (contractType.length === 0 || contractType.includes(tender.contractType ?? "")) &&
-      (documentType === "Όλοι" || tender.documentType === documentType);
-  }), [tenders, query, status, authority, year, contractType, documentType, page]);
+      (documentType === "Όλοι" || tender.documentType === documentType) &&
+      (!hideDirectAwards || tender.procedureType !== DIRECT_AWARD_PROCEDURE);
+  }), [tenders, query, status, authority, year, contractType, documentType, hideDirectAwards, page]);
 
   const documentTypes = Object.entries(documentTypeLabels);
   const statusCount = (value: Status) => dashboard.status.find((item) => item.status === value)?.count ?? 0;
@@ -610,7 +614,7 @@ export default function Home() {
         {/* Ειδοποιήσεις is a CPV watch-list/alert feed, not a filtered view of the
             database - the regular filters don't apply to it at all. */}
         {page !== "alerts" && page !== "profile" && <aside className="filters">
-          <div className="filterHeading"><div><span>Φίλτρα</span><small>{number.format(tenders.length)} φορτωμένα · {number.format(dashboard.total || totalTenders)} συνολικά</small></div><button title={loading ? "Φόρτωση…" : "Επαναφορά φίλτρων"} onClick={() => { setStatus("Όλες"); setAuthority(""); setContractor([]); setCpv([]); setQuery(""); setYear("Όλα"); setContractType([]); setDocumentType("Όλοι"); }}><span className={loading ? "spinIcon" : ""}>↻</span></button></div>
+          <div className="filterHeading"><div><span>Φίλτρα</span><small>{number.format(tenders.length)} φορτωμένα · {number.format(dashboard.total || totalTenders)} συνολικά</small></div><button title={loading ? "Φόρτωση…" : "Επαναφορά φίλτρων"} onClick={() => { setStatus("Όλες"); setAuthority(""); setContractor([]); setCpv([]); setQuery(""); setYear("Όλα"); setContractType([]); setDocumentType("Όλοι"); setHideDirectAwards(false); }}><span className={loading ? "spinIcon" : ""}>↻</span></button></div>
           <div className="savedViews">
             <p className="eyebrow">ΠΡΟΒΟΛΕΣ</p>
             {team.code ? <>
@@ -639,6 +643,7 @@ export default function Home() {
               or a not-yet-awarded status, so these two never apply anything meaningful here. */}
           {page !== "market" && <label>Τύπος εγγράφου<select value={documentType} onChange={(event) => setDocumentType(event.target.value)}><option value="Όλοι">Όλοι</option>{documentTypes.map(([value,label]) => <option key={value} value={value}>{label}</option>)}</select></label>}
           {page !== "market" && <label>Κατάσταση<select value={status} onChange={(event) => setStatus(event.target.value)}><option>Όλες</option>{Object.keys(statusTone).map((item) => <option key={item}>{item}</option>)}</select></label>}
+          {page !== "market" && <label className="checkboxRow"><input type="checkbox" checked={hideDirectAwards} onChange={(event) => setHideDirectAwards(event.target.checked)} />Απόκρυψη απευθείας αναθέσεων</label>}
           <div className="filterNote"><span>i</span><p>{page === "market"
             ? "Το CPV επιλέγεται μέσα στον πίνακα της Αγοράς. Τύπος εγγράφου και Κατάσταση δεν εφαρμόζονται εδώ - αφορούν το στάδιο της ίδιας της διακήρυξης, όχι τις αναθέσεις/συμβάσεις."
             : "Τα ίδια φίλτρα εφαρμόζονται στην Επισκόπηση και στους Διαγωνισμούς."}</p></div>
@@ -797,7 +802,7 @@ function MonthlyBarChart({ months, metric, formatValue, unitLabel }: {
 function TenderTable({ rows, expanded = false, title = "Λίστα διαγωνισμών", caption, onViewAll }: { rows: Tender[]; expanded?: boolean; title?: string; caption?: string; onViewAll?: () => void }) {
   const [selected, setSelected] = useState<Tender | null>(null);
   if (selected) return <TenderDetail tender={selected} onBack={() => setSelected(null)} />;
-  return <article className={`panel tablePanel ${expanded ? "expanded" : ""}`}><PanelHeader title={title} caption={caption ?? `${number.format(rows.length)} εγγραφές μετά τα φίλτρα`} onDownload={{ filename: title, title, headers: ["ΑΔΑΜ", "Τίτλος", "Αναθέτουσα Αρχή", "CPV", "Περιγραφή CPV", "Τύπος σύμβασης", "Τύπος εγγράφου", "Κατάσταση", "Δημοσίευση"], rows: rows.map((item) => [item.adam, item.title, item.authority, item.cpv, item.cpvDescription ?? "", item.contractType ?? "", documentTypeLabels[item.documentType ?? ""] ?? item.documentType ?? "", item.status, item.publicationDate ?? ""]), columnTypes: ["text", "text", "text", "text", "text", "text", "text", "text", "date"] }} /><div className="tableScroll"><table><thead><tr><th>ΑΔΑΜ</th><th>Τίτλος</th><th>Αναθέτουσα Αρχή</th><th>CPV / Τίτλος</th><th>Τύπος σύμβασης</th><th>Τύπος εγγράφου</th><th>Κατάσταση</th><th>Δημοσίευση</th><th /></tr></thead><tbody>{rows.map((item) => <tr key={item.adam}><td className="adam">{item.adam}</td><td>{item.title}</td><td>{item.authority}</td><td><strong>{item.cpv}</strong><small className="cellSub">{item.cpvDescription}</small></td><td className="cellPlain">{item.contractType ?? "—"}</td><td className="cellPlain">{item.documentType ? (documentTypeLabels[item.documentType] ?? item.documentType) : "—"}</td><td><span className={`status ${statusTone[item.status]}`}>{item.status}</span></td><td>{formatDate(item.publicationDate)}</td><td><button className="view" aria-label={`Προβολή ${item.adam}`} onClick={() => setSelected(item)}>→</button></td></tr>)}</tbody></table></div>{!rows.length && <p className="noRows">Δεν βρέθηκαν διαγωνισμοί για τα επιλεγμένα φίλτρα.</p>}{onViewAll && <button className="viewAll" onClick={onViewAll}>Προβολή όλων των διαγωνισμών →</button>}</article>;
+  return <article className={`panel tablePanel ${expanded ? "expanded" : ""}`}><PanelHeader title={title} caption={caption ?? `${number.format(rows.length)} εγγραφές μετά τα φίλτρα`} onDownload={{ filename: title, title, headers: ["ΑΔΑΜ", "Τίτλος", "Αναθέτουσα Αρχή", "CPV", "Περιγραφή CPV", "Τύπος σύμβασης", "Τύπος διαδικασίας", "Τύπος εγγράφου", "Κατάσταση", "Δημοσίευση"], rows: rows.map((item) => [item.adam, item.title, item.authority, item.cpv, item.cpvDescription ?? "", item.contractType ?? "", item.procedureType ?? "", documentTypeLabels[item.documentType ?? ""] ?? item.documentType ?? "", item.status, item.publicationDate ?? ""]), columnTypes: ["text", "text", "text", "text", "text", "text", "text", "text", "text", "date"] }} /><div className="tableScroll"><table><thead><tr><th>ΑΔΑΜ</th><th>Τίτλος</th><th>Αναθέτουσα Αρχή</th><th>CPV / Τίτλος</th><th>Τύπος σύμβασης</th><th>Τύπος εγγράφου</th><th>Κατάσταση</th><th>Δημοσίευση</th><th /></tr></thead><tbody>{rows.map((item) => <tr key={item.adam}><td className="adam">{item.adam}</td><td>{item.procedureType === DIRECT_AWARD_PROCEDURE && <b className="directAwardBadge" title="Απευθείας ανάθεση - όχι ανοιχτός διαγωνισμός">Απευθείας</b>}{item.title}</td><td>{item.authority}</td><td><strong>{item.cpv}</strong><small className="cellSub">{item.cpvDescription}</small></td><td className="cellPlain">{item.contractType ?? "—"}</td><td className="cellPlain">{item.documentType ? (documentTypeLabels[item.documentType] ?? item.documentType) : "—"}</td><td><span className={`status ${statusTone[item.status]}`}>{item.status}</span></td><td>{formatDate(item.publicationDate)}</td><td><button className="view" aria-label={`Προβολή ${item.adam}`} onClick={() => setSelected(item)}>→</button></td></tr>)}</tbody></table></div>{!rows.length && <p className="noRows">Δεν βρέθηκαν διαγωνισμοί για τα επιλεγμένα φίλτρα.</p>}{onViewAll && <button className="viewAll" onClick={onViewAll}>Προβολή όλων των διαγωνισμών →</button>}</article>;
 }
 
 function TenderDetail({ tender, onBack }: { tender: Tender; onBack: () => void }) {

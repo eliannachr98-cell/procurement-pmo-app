@@ -9,6 +9,8 @@ import {
   union,
 } from "@/lib/matching";
 
+const DIRECT_AWARD_PROCEDURE = "Απευθείας ανάθεση";
+
 type ProcurementRow = {
   adam: string;
   title: string;
@@ -150,6 +152,7 @@ export async function GET(request: Request) {
     const year = searchParams.get("year")?.trim() ?? "";
     const contractTypes = searchParams.getAll("contractType").flatMap((value) => value.split(",")).map((value) => value.trim()).filter(Boolean);
     const documentType = searchParams.get("documentType")?.trim() ?? "";
+    const hideDirectAwards = searchParams.get("hideDirectAwards") === "true";
 
     let matchingAdams: string[] | null = null;
     let matchingAwardAdams: string[] | null = null;
@@ -184,6 +187,10 @@ export async function GET(request: Request) {
     }
     if (contractTypes.length) filters.push(`contract_type=in.(${contractTypes.map(encodeURIComponent).join(",")})`);
     if (documentType) filters.push(`document_category=eq.${encodeURIComponent(documentType)}`);
+    // Rows with no recorded procedure_type (older data, before this field
+    // was captured) get excluded too, not just confirmed direct awards -
+    // an acceptable edge case for an opt-in checkbox rather than a real bug.
+    if (hideDirectAwards) filters.push(`procedure_type=neq.${encodeURIComponent(DIRECT_AWARD_PROCEDURE)}`);
     if (matchingAdams) filters.push(`adam=in.(${matchingAdams.map(encodeURIComponent).join(",")})`);
 
     const noticePage = await supabasePage<ProcurementRow[]>(
