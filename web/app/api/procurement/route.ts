@@ -75,6 +75,28 @@ const MAX_PAGE_SIZE = 1000;
 // Preview reads live compact rows while the historical backfill continues.
 export const dynamic = "force-dynamic";
 
+// The same award is often published several times (corrections/re-postings),
+// each as its own record with an identical amount and contractor - summing
+// them made a tender's award value several times its real size (e.g.
+// 25PROC016185999: 3 x 1,636,800 shown as 4,910,400 against a 2,046,000 budget).
+function sumDistinct<T extends Parameters<typeof money>[0]>(
+  rows: (T & { adam: string })[],
+  contractorsFor: (row: T & { adam: string }) => { contractor_name: string; contractor_vat: string | null }[] | undefined,
+) {
+  const seen = new Set<string>();
+  let total = 0;
+  for (const row of rows) {
+    const amount = money(row);
+    const first = contractorsFor(row)?.[0];
+    const identity = first ? (first.contractor_vat?.trim() || first.contractor_name) : row.adam;
+    const key = `${identity}|${amount}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    total += amount;
+  }
+  return total;
+}
+
 function money(row: {
   amount_inc_vat?: number | null;
   amount_ex_vat?: number | null;
@@ -465,8 +487,8 @@ export async function GET(request: Request) {
         contractDates: linkedContracts.map((row) => row.signed_date).filter(Boolean),
         deliveryDates: linkedContracts.map((row) => row.delivery_date).filter(Boolean),
         contractors: [...new Set(contractorNames)],
-        awardValue: linkedAwards.reduce((sum, row) => sum + money(row), 0),
-        contractValue: linkedContracts.reduce((sum, row) => sum + money(row), 0),
+        awardValue: sumDistinct(linkedAwards, (row) => awardContractorsByAdam.get(row.adam)),
+        contractValue: sumDistinct(linkedContracts, (row) => contractContractorsByAdam.get(row.adam)),
         budget: money(notice),
       };
     });
