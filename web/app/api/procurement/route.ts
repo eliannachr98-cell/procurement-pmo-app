@@ -100,7 +100,14 @@ function sumDistinct<T extends Parameters<typeof money>[0]>(
 // Which VAT basis a stored amount is on - a discount is only meaningful when
 // the notice budget and the awarded amount are on the same one.
 function basisOf(inc?: number | null, ex?: number | null, unknown?: number | null) {
-  return inc != null ? "inc" : ex != null ? "ex" : unknown != null ? "unknown" : undefined;
+  return positive(inc) !== undefined ? "inc" : positive(ex) !== undefined ? "ex" : positive(unknown) !== undefined ? "unknown" : undefined;
+}
+
+// A stored 0 means "not filled in" (the source sends 0 for a missing amount),
+// so it must not block falling back to the other VAT-basis fields.
+function positive(value?: number | string | null) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
 }
 
 // A consortium award lists one contractor row per member; this gives each
@@ -131,8 +138,8 @@ function money(row: {
   budget_unknown_vat?: number | null;
 }) {
   return Number(
-    row.amount_inc_vat ?? row.amount_ex_vat ?? row.amount_unknown_vat ??
-    row.budget_inc_vat ?? row.budget_ex_vat ?? row.budget_unknown_vat ?? 0,
+    positive(row.amount_inc_vat) ?? positive(row.amount_ex_vat) ?? positive(row.amount_unknown_vat) ??
+    positive(row.budget_inc_vat) ?? positive(row.budget_ex_vat) ?? positive(row.budget_unknown_vat) ?? 0,
   );
 }
 
