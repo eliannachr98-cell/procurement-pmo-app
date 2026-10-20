@@ -1200,10 +1200,9 @@ function MarketPanel({ awards, contracts, cpv, setCpv, contractor, authority, ye
     // "Αναθέσεις" counts award records directly (not deduped by original
     // tender) - a contractor profile is about what this company was actually
     // given, so a 12-lot tender showing 12 awards is correct, not inflated.
-    // Money per tender is the sum of its distinct awards and the sum of its
-    // distinct contracts (a multi-lot tender has one contract per lot, which
-    // together equal the award), and the larger of the two is used so an award
-    // and its eventual signed contract for the same lot aren't both counted.
+    // Money per tender is the sum of its distinct contracts plus the distinct
+    // awards that haven't become a contract yet - exactly what the Αναθέσεις
+    // and Συμβάσεις tabs list, so the total can be checked against them.
     type ContractorGroup = { key: string; names: Map<string, number>; awardCount: number; contracts: Set<string>; authorities: Set<string>; valueByTender: Map<string, number>; awardSums: Map<string, number>; contractSums: Map<string, number> };
     const newGroup = (key: string): ContractorGroup => ({ key, names: new Map(), awardCount: 0, contracts: new Set(), authorities: new Set(), valueByTender: new Map(), awardSums: new Map(), contractSums: new Map() });
     const byContractor = new Map<string, ContractorGroup>();
@@ -1229,8 +1228,10 @@ function MarketPanel({ awards, contracts, cpv, setCpv, contractor, authority, ye
       const duplicateKey = `${groupKeyFor(item)}|${tenderKey}|${item.value}`;
       if (!seenAwards.has(duplicateKey)) {
         seenAwards.add(duplicateKey);
-        if (!contractedAwardAdams.has(item.adam)) row.awardCount += 1;
-        row.awardSums.set(tenderKey, (row.awardSums.get(tenderKey) ?? 0) + item.value);
+        if (!contractedAwardAdams.has(item.adam)) {
+          row.awardCount += 1;
+          row.awardSums.set(tenderKey, (row.awardSums.get(tenderKey) ?? 0) + item.value);
+        }
       }
       row.authorities.add(item.authority);
     }
@@ -1248,7 +1249,7 @@ function MarketPanel({ awards, contracts, cpv, setCpv, contractor, authority, ye
     }
     for (const row of byContractor.values()) {
       for (const tenderKey of new Set([...row.awardSums.keys(), ...row.contractSums.keys()])) {
-        row.valueByTender.set(tenderKey, Math.max(row.awardSums.get(tenderKey) ?? 0, row.contractSums.get(tenderKey) ?? 0));
+        row.valueByTender.set(tenderKey, (row.awardSums.get(tenderKey) ?? 0) + (row.contractSums.get(tenderKey) ?? 0));
       }
     }
 
@@ -1404,10 +1405,9 @@ function ContractorProfile({ name, summary, awards, contracts, onClose }: {
   const awardRows = collapseRepeats([...awards].filter((item) => !contractedAwardAdams.has(item.adam)).sort((a, b) => (b.awardDate ?? "").localeCompare(a.awardDate ?? "")));
   const contractRows = collapseRepeats(contracts);
 
-  // Same rule as MarketPanel's per-contractor value: per tender, sum the
-  // distinct awards and the distinct contracts (republished duplicates with
-  // the same amount count once, lots add up) and keep the larger of the two,
-  // so an award and its own signed contract aren't both counted.
+  // Same rule as MarketPanel's per-contractor value: the total is the
+  // contracts plus the awards that have no contract yet (the two tabs'
+  // contents), with republished duplicates of the same amount counted once.
   const awardSums = new Map<string, { value: number; label: string }>();
   const contractSums = new Map<string, { value: number; label: string }>();
   const addDistinct = (target: Map<string, { value: number; label: string }>, seen: Set<string>, item: { noticeAdam?: string; adam: string; value: number; cpv: string; cpvDescription?: string }) => {
@@ -1420,14 +1420,16 @@ function ContractorProfile({ name, summary, awards, contracts, onClose }: {
   };
   const seenAwardKeys = new Set<string>();
   const seenContractKeys = new Set<string>();
-  for (const item of awards) addDistinct(awardSums, seenAwardKeys, item);
+  for (const item of awards) if (!contractedAwardAdams.has(item.adam)) addDistinct(awardSums, seenAwardKeys, item);
   for (const item of contracts) addDistinct(contractSums, seenContractKeys, item);
   const valueByTender = new Map<string, { value: number; label: string }>();
   for (const key of new Set([...awardSums.keys(), ...contractSums.keys()])) {
     const awardEntry = awardSums.get(key);
     const contractEntry = contractSums.get(key);
-    const chosen = !awardEntry || (contractEntry && contractEntry.value >= awardEntry.value) ? contractEntry : awardEntry;
-    if (chosen) valueByTender.set(key, chosen);
+    valueByTender.set(key, {
+      value: (awardEntry?.value ?? 0) + (contractEntry?.value ?? 0),
+      label: contractEntry?.label ?? awardEntry!.label,
+    });
   }
   const distribution = [...[...valueByTender.values()].reduce((map, item) => {
     map.set(item.label, (map.get(item.label) ?? 0) + item.value);
