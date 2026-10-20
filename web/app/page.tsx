@@ -1210,11 +1210,19 @@ function MarketPanel({ awards, contracts, cpv, setCpv, contractor, authority, ye
       row.names.set(item.contractor, (row.names.get(item.contractor) ?? 0) + 1);
       return row;
     };
+    // The same award/contract is often republished as separate records with an
+    // identical contractor and amount - count each distinct one once.
+    const seenAwards = new Set<string>();
+    const seenContracts = new Set<string>();
     for (const item of relevantAwards) {
       if (!item.contractor || item.contractor === "Χωρίς ανάδοχο") continue;
       const row = ensure(item);
       const tenderKey = item.noticeAdam ?? item.adam;
-      row.awardCount += 1;
+      const duplicateKey = `${groupKeyFor(item)}|${tenderKey}|${item.value}`;
+      if (!seenAwards.has(duplicateKey)) {
+        seenAwards.add(duplicateKey);
+        row.awardCount += 1;
+      }
       row.authorities.add(item.authority);
       // A contract for the same tender (added below) overrides this placeholder.
       if (!row.valueByTender.has(tenderKey)) row.valueByTender.set(tenderKey, item.value);
@@ -1223,7 +1231,11 @@ function MarketPanel({ awards, contracts, cpv, setCpv, contractor, authority, ye
       if (!item.contractor || item.contractor === "Χωρίς ανάδοχο") continue;
       const row = ensure(item);
       const tenderKey = item.noticeAdam ?? item.adam;
-      row.contracts.add(item.adam);
+      const duplicateKey = `${groupKeyFor(item)}|${tenderKey}|${item.value}`;
+      if (!seenContracts.has(duplicateKey)) {
+        seenContracts.add(duplicateKey);
+        row.contracts.add(item.adam);
+      }
       row.authorities.add(item.authority);
       row.valueByTender.set(tenderKey, item.value);
     }
