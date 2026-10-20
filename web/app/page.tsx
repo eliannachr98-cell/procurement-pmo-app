@@ -1160,8 +1160,9 @@ function SingleSearchInput({ label, type, value, onChange, placeholder }: {
 type ContractorSummary = { key: string; name: string; awards: number; contracts: number; authorities: number; value: number; discount: number | null; discountCount: number };
 
 // Average discount vs the tender budget, only over cases that compare cleanly:
-// one award/contract for the tender, not a consortium, both amounts on the
-// same VAT basis, and the awarded amount not above the budget.
+// one award/contract for the tender (a consortium's amount is for the whole
+// tender, so it counts), both amounts on the same VAT basis, and the awarded
+// amount not above the budget.
 function averageDiscount(rows: (Award | Contract)[]) {
   const byNotice = new Map<string, Map<number, Award | Contract>>();
   for (const row of rows) {
@@ -1174,7 +1175,6 @@ function averageDiscount(rows: (Award | Contract)[]) {
   for (const values of byNotice.values()) {
     if (values.size !== 1) continue;
     const row = [...values.values()][0];
-    if (row.partners?.length) continue;
     if (!row.noticeBudget || row.noticeBudget <= 0 || row.value <= 0 || row.value > row.noticeBudget) continue;
     if (!row.valueBasis || row.valueBasis === "unknown" || row.valueBasis !== row.noticeBudgetBasis) continue;
     samples.push((1 - row.value / row.noticeBudget) * 100);
@@ -1380,7 +1380,7 @@ function MarketPanel({ awards, contracts, cpv, setCpv, contractor, authority, ye
       <article className="panel tablePanel">
         <PanelHeader title="Ανάδοχοι" caption="Ταξινομημένοι κατά αριθμό αναθέσεων. Πάτησε πάνω σε έναν ανάδοχο για να δεις τις αναθέσεις και τις συμβάσεις του." onDownload={locked ? undefined : { filename: "anadoxoi", title: "Ανάδοχοι", headers: ["Ανάδοχος", "Αναθέσεις", "Συμβάσεις", "Συνολική αξία", "Μέση έκπτωση", "Διαγωνισμοί στη μέση έκπτωση", "Αναθέτουσες Αρχές"], rows: contractorRows.map((item) => [item.name, item.awards, item.contracts, item.value, formatDiscount(item.discount), item.discountCount, item.authorities]), columnTypes: ["text", "number", "number", "currency", "text", "number", "number"] }} />
         <div className="tableScroll"><table>
-          <thead><tr><th /><th>Ανάδοχος</th><th>Αναθέσεις</th><th>Συμβάσεις</th><th>Συνολική αξία</th><th title="Μέσος όρος έκπτωσης σε σχέση με τον Π/Υ, από διαγωνισμούς με μία ανάθεση χωρίς ένωση">Μέση έκπτωση</th><th>Αναθέτουσες Αρχές</th></tr></thead>
+          <thead><tr><th /><th>Ανάδοχος</th><th>Αναθέσεις</th><th>Συμβάσεις</th><th>Συνολική αξία</th><th title="Μέσος όρος έκπτωσης της ανάθεσης/σύμβασης σε σχέση με τον Π/Υ της διακήρυξης">Μέση έκπτωση</th><th>Αναθέτουσες Αρχές</th></tr></thead>
           <tbody>{visibleRows.map((item) => (
             <tr key={item.key} className={selectedContractor === item.key ? "selectedRow" : ""} onClick={() => !locked && setSelectedContractor(item.key === selectedContractor ? "" : item.key)}>
               <td><input type="checkbox" checked={selectedContractor === item.key} disabled={locked} readOnly /></td>
