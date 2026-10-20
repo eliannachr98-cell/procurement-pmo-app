@@ -97,6 +97,12 @@ function sumDistinct<T extends Parameters<typeof money>[0]>(
   return total;
 }
 
+// Which VAT basis a stored amount is on - a discount is only meaningful when
+// the notice budget and the awarded amount are on the same one.
+function basisOf(inc?: number | null, ex?: number | null, unknown?: number | null) {
+  return inc != null ? "inc" : ex != null ? "ex" : unknown != null ? "unknown" : undefined;
+}
+
 // A consortium award lists one contractor row per member; this gives each
 // member the names of the others so the UI can show "with: ..." for it.
 function otherMembers(
@@ -429,7 +435,7 @@ export async function GET(request: Request) {
       ),
       relatedRows<ProcurementRow>(
         "procurements_compact", "adam", marketNoticeAdams,
-        "adam,title,authority_name,contract_type",
+        "adam,title,authority_name,contract_type,budget_ex_vat,budget_inc_vat,budget_unknown_vat",
       ),
     ]);
 
@@ -534,6 +540,9 @@ export async function GET(request: Request) {
         partners: otherMembers(contractor, contractorsForAward),
         awardDate: award.award_date ?? undefined,
         value: money(award),
+        valueBasis: basisOf(award.amount_inc_vat, award.amount_ex_vat, award.amount_unknown_vat),
+        noticeBudget: linkedNotice ? money(linkedNotice) : undefined,
+        noticeBudgetBasis: linkedNotice ? basisOf(linkedNotice.budget_inc_vat, linkedNotice.budget_ex_vat, linkedNotice.budget_unknown_vat) : undefined,
       }));
     });
 
@@ -567,6 +576,9 @@ export async function GET(request: Request) {
         signedDate: contract.signed_date ?? undefined,
         deliveryDate: contract.delivery_date ?? undefined,
         value: money(contract),
+        valueBasis: basisOf(contract.amount_inc_vat, contract.amount_ex_vat, contract.amount_unknown_vat),
+        noticeBudget: linkedNotice ? money(linkedNotice) : undefined,
+        noticeBudgetBasis: linkedNotice ? basisOf(linkedNotice.budget_inc_vat, linkedNotice.budget_ex_vat, linkedNotice.budget_unknown_vat) : undefined,
       }));
     });
 

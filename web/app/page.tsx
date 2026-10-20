@@ -43,6 +43,9 @@ type Award = {
   partners?: string[];
   awardDate?: string;
   value: number;
+  valueBasis?: string;
+  noticeBudget?: number;
+  noticeBudgetBasis?: string;
 };
 type Contract = {
   adam: string;
@@ -59,6 +62,9 @@ type Contract = {
   signedDate?: string;
   deliveryDate?: string;
   value: number;
+  valueBasis?: string;
+  noticeBudget?: number;
+  noticeBudgetBasis?: string;
 };
 
 const fallbackTenders: Tender[] = [
@@ -1409,6 +1415,25 @@ function ContractorProfile({ name, summary, awards, contracts, onClose }: {
   const awardRows = collapseRepeats([...awards].filter((item) => !contractedAwardAdams.has(item.adam)).sort((a, b) => (b.awardDate ?? "").localeCompare(a.awardDate ?? "")));
   const contractRows = collapseRepeats(contracts);
 
+  // Average discount vs the tender budget, only over cases that compare
+  // cleanly: one award/contract for the tender, not a consortium, both amounts
+  // on the same VAT basis, and the awarded amount not above the budget.
+  const discountSamples: number[] = [];
+  const rowsByNotice = new Map<string, (Award | Contract)[]>();
+  for (const { row } of [...contractRows, ...awardRows]) {
+    if (!row.noticeAdam) continue;
+    rowsByNotice.set(row.noticeAdam, [...(rowsByNotice.get(row.noticeAdam) ?? []), row]);
+  }
+  for (const group of rowsByNotice.values()) {
+    if (group.length !== 1) continue;
+    const row = group[0];
+    if (row.partners?.length) continue;
+    if (!row.noticeBudget || row.noticeBudget <= 0 || row.value <= 0 || row.value > row.noticeBudget) continue;
+    if (!row.valueBasis || row.valueBasis === "unknown" || row.valueBasis !== row.noticeBudgetBasis) continue;
+    discountSamples.push((1 - row.value / row.noticeBudget) * 100);
+  }
+  const averageDiscount = discountSamples.length ? discountSamples.reduce((sum, item) => sum + item, 0) / discountSamples.length : null;
+
   // Same rule as MarketPanel's per-contractor value: the total is the
   // contracts plus the awards that have no contract yet (the two tabs'
   // contents), with republished duplicates of the same amount counted once.
@@ -1448,6 +1473,7 @@ function ContractorProfile({ name, summary, awards, contracts, onClose }: {
       <Metric label="Συμβάσεις" value={number.format(summary.contracts)} tone="mint" />
       <Metric label="Αναθέτουσες Αρχές" value={number.format(summary.authorities)} tone="sand" />
       <Metric label="Συνολική αξία" value={euro.format(summary.value)} tone="lilac" />
+      <Metric label="Μέση έκπτωση" value={averageDiscount === null ? "—" : `${averageDiscount.toFixed(1).replace(".", ",")}%`} tone="sky" sub={averageDiscount === null ? "Δεν υπάρχουν συγκρίσιμοι διαγωνισμοί" : `από ${discountSamples.length} ${discountSamples.length === 1 ? "διαγωνισμό" : "διαγωνισμούς"} με ίδια βάση ΦΠΑ`} />
     </div>
     <div className="tabRow">
       <button type="button" className={tab === "awards" ? "active" : ""} onClick={() => setTab("awards")}>Αναθέσεις</button>
