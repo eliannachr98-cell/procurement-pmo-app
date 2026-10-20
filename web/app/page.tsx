@@ -1157,7 +1157,32 @@ function SingleSearchInput({ label, type, value, onChange, placeholder }: {
 }
 
 
-type ContractorSummary = { key: string; name: string; awards: number; contracts: number; authorities: number; value: number };
+type ContractorSummary = { key: string; name: string; awards: number; contracts: number; authorities: number; value: number; discount: number | null; discountCount: number };
+
+// Average discount vs the tender budget, only over cases that compare cleanly:
+// one award/contract for the tender, not a consortium, both amounts on the
+// same VAT basis, and the awarded amount not above the budget.
+function averageDiscount(rows: (Award | Contract)[]) {
+  const byNotice = new Map<string, Map<number, Award | Contract>>();
+  for (const row of rows) {
+    if (!row.noticeAdam) continue;
+    const values = byNotice.get(row.noticeAdam) ?? new Map<number, Award | Contract>();
+    values.set(row.value, row);
+    byNotice.set(row.noticeAdam, values);
+  }
+  const samples: number[] = [];
+  for (const values of byNotice.values()) {
+    if (values.size !== 1) continue;
+    const row = [...values.values()][0];
+    if (row.partners?.length) continue;
+    if (!row.noticeBudget || row.noticeBudget <= 0 || row.value <= 0 || row.value > row.noticeBudget) continue;
+    if (!row.valueBasis || row.valueBasis === "unknown" || row.valueBasis !== row.noticeBudgetBasis) continue;
+    samples.push((1 - row.value / row.noticeBudget) * 100);
+  }
+  return { average: samples.length ? samples.reduce((sum, item) => sum + item, 0) / samples.length : null, count: samples.length };
+}
+
+const formatDiscount = (value: number | null) => value === null ? "—" : `${value.toFixed(1).replace(".", ",")}%`;
 
 const CONTRACTOR_ALIASES: Record<string, string> = { PWC: "PRICEWATERHOUSECOOPERS", EY: "ERNST" };
 
@@ -1297,9 +1322,21 @@ function MarketPanel({ awards, contracts, cpv, setCpv, contractor, authority, ye
       for (const [tenderKey, amount] of row.valueByTender) if (!target.valueByTender.has(tenderKey)) target.valueByTender.set(tenderKey, amount);
     }
 
+    const discountRowsByRoot = new Map<string, (Award | Contract)[]>();
+    for (const item of [...relevantContracts, ...relevantAwards.filter((award) => !contractedAwardAdams.has(award.adam))]) {
+      const root = resolvedKeyFor(item);
+      const list = discountRowsByRoot.get(root);
+      if (list) list.push(item);
+      else discountRowsByRoot.set(root, [item]);
+    }
+
     const contractorRowsBase: ContractorSummary[] = [...mergedGroups.values()]
       .map((row) => ({
         key: row.key,
+        ...(() => {
+          const { average, count } = averageDiscount(discountRowsByRoot.get(row.key) ?? []);
+          return { discount: average, discountCount: count };
+        })(),
         // Show the spelling that shows up most often across the matched records.
         name: [...row.names.entries()].sort((a, b) => b[1] - a[1])[0][0],
         awards: row.awardCount,
@@ -1341,9 +1378,9 @@ function MarketPanel({ awards, contracts, cpv, setCpv, contractor, authority, ye
       </div>}
       <label className="search marketContractorSearch"><span>⌕</span><input value={contractorSearch} onChange={(event) => setContractorSearch(event.target.value)} placeholder="Αναζήτηση αναδόχου" /></label>
       <article className="panel tablePanel">
-        <PanelHeader title="Ανάδοχοι" caption="Ταξινομημένοι κατά αριθμό αναθέσεων. Πάτησε πάνω σε έναν ανάδοχο για να δεις τις αναθέσεις και τις συμβάσεις του." onDownload={locked ? undefined : { filename: "anadoxoi", title: "Ανάδοχοι", headers: ["Ανάδοχος", "Αναθέσεις", "Συμβάσεις", "Συνολική αξία", "Αναθέτουσες Αρχές"], rows: contractorRows.map((item) => [item.name, item.awards, item.contracts, item.value, item.authorities]), columnTypes: ["text", "number", "number", "currency", "number"] }} />
+        <PanelHeader title="Ανάδοχοι" caption="Ταξινομημένοι κατά αριθμό αναθέσεων. Πάτησε πάνω σε έναν ανάδοχο για να δεις τις αναθέσεις και τις συμβάσεις του." onDownload={locked ? undefined : { filename: "anadoxoi", title: "Ανάδοχοι", headers: ["Ανάδοχος", "Αναθέσεις", "Συμβάσεις", "Συνολική αξία", "Μέση έκπτωση", "Διαγωνισμοί στη μέση έκπτωση", "Αναθέτουσες Αρχές"], rows: contractorRows.map((item) => [item.name, item.awards, item.contracts, item.value, formatDiscount(item.discount), item.discountCount, item.authorities]), columnTypes: ["text", "number", "number", "currency", "text", "number", "number"] }} />
         <div className="tableScroll"><table>
-          <thead><tr><th /><th>Ανάδοχος</th><th>Αναθέσεις</th><th>Συμβάσεις</th><th>Συνολική αξία</th><th>Αναθέτουσες Αρχές</th></tr></thead>
+          <thead><tr><th /><th>Ανάδοχος</th><th>Αναθέσεις</th><th>Συμβάσεις</th><th>Συνολική αξία</th><th title="Μέσος όρος έκπτωσης σε σχέση με τον Π/Υ, από διαγωνισμούς με μία ανάθεση χωρίς ένωση">Μέση έκπτωση</th><th>Αναθέτουσες Αρχές</th></tr></thead>
           <tbody>{visibleRows.map((item) => (
             <tr key={item.key} className={selectedContractor === item.key ? "selectedRow" : ""} onClick={() => !locked && setSelectedContractor(item.key === selectedContractor ? "" : item.key)}>
               <td><input type="checkbox" checked={selectedContractor === item.key} disabled={locked} readOnly /></td>
@@ -1351,6 +1388,7 @@ function MarketPanel({ awards, contracts, cpv, setCpv, contractor, authority, ye
               <td>{number.format(item.awards)}</td>
               <td>{number.format(item.contracts)}</td>
               <td>{euro.format(item.value)}</td>
+              <td>{formatDiscount(item.discount)}{item.discountCount > 0 && <small className="cellSub">από {number.format(item.discountCount)}</small>}</td>
               <td>{number.format(item.authorities)}</td>
             </tr>
           ))}</tbody>
@@ -1415,24 +1453,6 @@ function ContractorProfile({ name, summary, awards, contracts, onClose }: {
   const awardRows = collapseRepeats([...awards].filter((item) => !contractedAwardAdams.has(item.adam)).sort((a, b) => (b.awardDate ?? "").localeCompare(a.awardDate ?? "")));
   const contractRows = collapseRepeats(contracts);
 
-  // Average discount vs the tender budget, only over cases that compare
-  // cleanly: one award/contract for the tender, not a consortium, both amounts
-  // on the same VAT basis, and the awarded amount not above the budget.
-  const discountSamples: number[] = [];
-  const rowsByNotice = new Map<string, (Award | Contract)[]>();
-  for (const { row } of [...contractRows, ...awardRows]) {
-    if (!row.noticeAdam) continue;
-    rowsByNotice.set(row.noticeAdam, [...(rowsByNotice.get(row.noticeAdam) ?? []), row]);
-  }
-  for (const group of rowsByNotice.values()) {
-    if (group.length !== 1) continue;
-    const row = group[0];
-    if (row.partners?.length) continue;
-    if (!row.noticeBudget || row.noticeBudget <= 0 || row.value <= 0 || row.value > row.noticeBudget) continue;
-    if (!row.valueBasis || row.valueBasis === "unknown" || row.valueBasis !== row.noticeBudgetBasis) continue;
-    discountSamples.push((1 - row.value / row.noticeBudget) * 100);
-  }
-  const averageDiscount = discountSamples.length ? discountSamples.reduce((sum, item) => sum + item, 0) / discountSamples.length : null;
 
   // Same rule as MarketPanel's per-contractor value: the total is the
   // contracts plus the awards that have no contract yet (the two tabs'
@@ -1473,7 +1493,7 @@ function ContractorProfile({ name, summary, awards, contracts, onClose }: {
       <Metric label="Συμβάσεις" value={number.format(summary.contracts)} tone="mint" />
       <Metric label="Αναθέτουσες Αρχές" value={number.format(summary.authorities)} tone="sand" />
       <Metric label="Συνολική αξία" value={euro.format(summary.value)} tone="lilac" />
-      <Metric label="Μέση έκπτωση" value={averageDiscount === null ? "—" : `${averageDiscount.toFixed(1).replace(".", ",")}%`} tone="sky" sub={averageDiscount === null ? "Δεν υπάρχουν συγκρίσιμοι διαγωνισμοί" : `από ${discountSamples.length} ${discountSamples.length === 1 ? "διαγωνισμό" : "διαγωνισμούς"} με ίδια βάση ΦΠΑ`} />
+      <Metric label="Μέση έκπτωση" value={formatDiscount(summary.discount)} tone="sky" sub={summary.discount === null ? "Δεν υπάρχουν συγκρίσιμοι διαγωνισμοί" : `από ${summary.discountCount} ${summary.discountCount === 1 ? "διαγωνισμό" : "διαγωνισμούς"} με ίδια βάση ΦΠΑ`} />
     </div>
     <div className="tabRow">
       <button type="button" className={tab === "awards" ? "active" : ""} onClick={() => setTab("awards")}>Αναθέσεις</button>
