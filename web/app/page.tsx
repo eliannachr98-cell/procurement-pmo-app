@@ -1382,7 +1382,22 @@ function ContractorProfile({ name, summary, awards, contracts, onClose }: {
   // won, not how many distinct competitive procedures it entered). The
   // original tender is a secondary, best-effort reference: shown when known,
   // never required for the row to appear or be counted.
-  const awardRows = [...awards].sort((a, b) => (b.awardDate ?? "").localeCompare(a.awardDate ?? ""));
+  // The same award/contract appears once per contractor row (consortium
+  // members, spelling variants) and is often republished under new ADAMs with
+  // identical tender and amount - show each of those once (the same rule the
+  // Αναθέσεις/Συμβάσεις counters above use), with a count of the extra postings.
+  const collapseRepeats = <T extends { adam: string; noticeAdam?: string; value: number }>(rows: T[]) => {
+    const groups = new Map<string, { row: T; adams: Set<string> }>();
+    for (const row of rows) {
+      const key = `${row.noticeAdam ?? row.adam}|${row.value}`;
+      const group = groups.get(key);
+      if (group) group.adams.add(row.adam);
+      else groups.set(key, { row, adams: new Set([row.adam]) });
+    }
+    return [...groups.values()].map(({ row, adams }) => ({ row, repeats: adams.size - 1 }));
+  };
+  const awardRows = collapseRepeats([...awards].sort((a, b) => (b.awardDate ?? "").localeCompare(a.awardDate ?? "")));
+  const contractRows = collapseRepeats(contracts);
 
   // Same rule as MarketPanel's per-contractor value: per tender, sum the
   // distinct awards and the distinct contracts (republished duplicates with
@@ -1428,10 +1443,10 @@ function ContractorProfile({ name, summary, awards, contracts, onClose }: {
       <button type="button" className={tab === "contracts" ? "active" : ""} onClick={() => setTab("contracts")}>Συμβάσεις</button>
       <button type="button" className={tab === "distribution" ? "active" : ""} onClick={() => setTab("distribution")}>Κατανομή</button>
     </div>
-    {tab === "awards" && <div className="tableScroll"><table><thead><tr><th>ΑΔΑΜ Ανάθεσης</th><th>Τίτλος</th><th>Αναθέτουσα Αρχή</th><th>Ημ. ανάθεσης</th><th>Αξία</th><th>Διακήρυξη</th></tr></thead><tbody>{awardRows.map((item) => {
+    {tab === "awards" && <div className="tableScroll"><table><thead><tr><th>ΑΔΑΜ Ανάθεσης</th><th>Τίτλος</th><th>Αναθέτουσα Αρχή</th><th>Ημ. ανάθεσης</th><th>Αξία</th><th>Διακήρυξη</th></tr></thead><tbody>{awardRows.map(({ row: item, repeats }) => {
       const hasNotice = Boolean(item.noticeAdam && item.noticeTitle);
       return <tr key={item.adam} className={hasNotice ? "clickableRow" : ""} onClick={hasNotice ? () => openTender(item.noticeAdam!) : undefined}>
-        <td><AdamCopy adam={item.adam} className="adam adamCopy" /></td>
+        <td><AdamCopy adam={item.adam} className="adam adamCopy" />{repeats > 0 && <small className="cellSub">+{repeats} επαναδημοσίευση</small>}</td>
         <td>{item.title}{item.partners && <small className="cellSub">Ένωση με: {item.partners.join(", ")} - η αξία αφορά όλη την ανάθεση</small>}</td>
         <td>{item.authority}</td>
         <td>{formatDate(item.awardDate)}</td>
@@ -1439,7 +1454,7 @@ function ContractorProfile({ name, summary, awards, contracts, onClose }: {
         <td>{hasNotice ? item.noticeTitle : <span className="cellSub">—</span>}</td>
       </tr>;
     })}</tbody></table>{!awardRows.length && <p className="noRows">Δεν βρέθηκαν αναθέσεις.</p>}{loadingTender && <p className="noRows">Φόρτωση στοιχείων διαγωνισμού…</p>}</div>}
-    {tab === "contracts" && <div className="tableScroll"><table><thead><tr><th>ΑΔΑΜ Σύμβασης</th><th>Τίτλος</th><th>Αναθέτουσα Αρχή</th><th>Ημ. υπογραφής</th><th>Αξία</th></tr></thead><tbody>{contracts.map((item) => <tr key={item.adam}><td><AdamCopy adam={item.adam} className="adam adamCopy" /></td><td>{item.title}{item.partners && <small className="cellSub">Ένωση με: {item.partners.join(", ")} - η αξία αφορά όλη τη σύμβαση</small>}</td><td>{item.authority}</td><td>{formatDate(item.signedDate)}</td><td>{euro.format(item.value)}</td></tr>)}</tbody></table>{!contracts.length && <p className="noRows">Δεν βρέθηκαν συμβάσεις.</p>}</div>}
+    {tab === "contracts" && <div className="tableScroll"><table><thead><tr><th>ΑΔΑΜ Σύμβασης</th><th>Τίτλος</th><th>Αναθέτουσα Αρχή</th><th>Ημ. υπογραφής</th><th>Αξία</th></tr></thead><tbody>{contractRows.map(({ row: item, repeats }) => <tr key={item.adam}><td><AdamCopy adam={item.adam} className="adam adamCopy" />{repeats > 0 && <small className="cellSub">+{repeats} επαναδημοσίευση</small>}</td><td>{item.title}{item.partners && <small className="cellSub">Ένωση με: {item.partners.join(", ")} - η αξία αφορά όλη τη σύμβαση</small>}</td><td>{item.authority}</td><td>{formatDate(item.signedDate)}</td><td>{euro.format(item.value)}</td></tr>)}</tbody></table>{!contracts.length && <p className="noRows">Δεν βρέθηκαν συμβάσεις.</p>}</div>}
     {tab === "distribution" && <div className="bars">{distribution.slice(0, 10).map(([label, value]) => <div className="barRow" key={label}><span title={label}>{label}</span><div><i className="teal" style={{ width: `${(value / distributionTotal) * 100}%` }} /></div><strong>{euro.format(value)}</strong></div>)}{!distribution.length && <p className="noRows">Δεν υπάρχουν δεδομένα κατανομής.</p>}</div>}
   </article>;
 }
