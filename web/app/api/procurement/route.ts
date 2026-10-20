@@ -553,6 +553,7 @@ export async function GET(request: Request) {
       const rows = contractorsForContract.length ? contractorsForContract : [null];
       return rows.map((contractor) => ({
         adam: contract.adam,
+        awardAdam: contract.award_adam ?? undefined,
         noticeAdam,
         noticeTitle: linkedNotice?.title,
         title: contract.title ?? linkedAward?.title ?? linkedNotice?.title ?? "—",

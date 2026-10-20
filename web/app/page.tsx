@@ -46,6 +46,7 @@ type Award = {
 };
 type Contract = {
   adam: string;
+  awardAdam?: string;
   noticeAdam?: string;
   noticeTitle?: string;
   title: string;
@@ -1218,6 +1219,9 @@ function MarketPanel({ awards, contracts, cpv, setCpv, contractor, authority, ye
     // identical contractor and amount - count each distinct one once.
     const seenAwards = new Set<string>();
     const seenContracts = new Set<string>();
+    // An award that already led to a signed contract is counted as a contract,
+    // not again as an award.
+    const contractedAwardAdams = new Set(relevantContracts.map((item) => item.awardAdam).filter((value): value is string => Boolean(value)));
     for (const item of relevantAwards) {
       if (!item.contractor || item.contractor === "Χωρίς ανάδοχο") continue;
       const row = ensure(item);
@@ -1225,7 +1229,7 @@ function MarketPanel({ awards, contracts, cpv, setCpv, contractor, authority, ye
       const duplicateKey = `${groupKeyFor(item)}|${tenderKey}|${item.value}`;
       if (!seenAwards.has(duplicateKey)) {
         seenAwards.add(duplicateKey);
-        row.awardCount += 1;
+        if (!contractedAwardAdams.has(item.adam)) row.awardCount += 1;
         row.awardSums.set(tenderKey, (row.awardSums.get(tenderKey) ?? 0) + item.value);
       }
       row.authorities.add(item.authority);
@@ -1396,7 +1400,8 @@ function ContractorProfile({ name, summary, awards, contracts, onClose }: {
     }
     return [...groups.values()].map(({ row, adams }) => ({ row, repeats: adams.size - 1 }));
   };
-  const awardRows = collapseRepeats([...awards].sort((a, b) => (b.awardDate ?? "").localeCompare(a.awardDate ?? "")));
+  const contractedAwardAdams = new Set(contracts.map((item) => item.awardAdam).filter((value): value is string => Boolean(value)));
+  const awardRows = collapseRepeats([...awards].filter((item) => !contractedAwardAdams.has(item.adam)).sort((a, b) => (b.awardDate ?? "").localeCompare(a.awardDate ?? "")));
   const contractRows = collapseRepeats(contracts);
 
   // Same rule as MarketPanel's per-contractor value: per tender, sum the
