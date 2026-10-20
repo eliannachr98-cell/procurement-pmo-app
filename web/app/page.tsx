@@ -648,7 +648,7 @@ export default function Home() {
           {page !== "market" && <label>Κατάσταση<select value={status} onChange={(event) => setStatus(event.target.value)}><option>Όλες</option>{Object.keys(statusTone).map((item) => <option key={item}>{item}</option>)}</select></label>}
           {page !== "market" && <label className="checkboxRow"><input type="checkbox" checked={hideDirectAwards} onChange={(event) => setHideDirectAwards(event.target.checked)} />Απόκρυψη απευθείας αναθέσεων</label>}
           <div className="filterNote"><span>i</span><p>{page === "market"
-            ? "Το CPV επιλέγεται μέσα στον πίνακα της Αγοράς. Τύπος εγγράφου και Κατάσταση δεν εφαρμόζονται εδώ - αφορούν το στάδιο της ίδιας της διακήρυξης, όχι τις αναθέσεις/συμβάσεις."
+            ? "Το CPV επιλέγεται μέσα στον πίνακα της Αγοράς. Τύπος εγγράφου και Κατάσταση δεν εφαρμόζονται εδώ - αφορούν το στάδιο της ίδιας της διακήρυξης, όχι τις αναθέσεις/συμβάσεις. Εμφανίζονται μόνο αναθέσεις και συμβάσεις που συνδέονται με διακήρυξη."
             : "Τα ίδια φίλτρα εφαρμόζονται στην Επισκόπηση και στους Διαγωνισμούς."}</p></div>
         </aside>}
       </div>
@@ -1190,8 +1190,12 @@ function MarketPanel({ awards, contracts, cpv, setCpv, contractor, authority, ye
       !contractorFilters.length || contractorFilters.some((filter) =>
         "vat" in filter ? item.contractorVat === filter.vat : item.contractor.toLocaleLowerCase("el").includes(filter.name),
       );
-    const relevantAwards = awards.filter((item) => matchesCpv(item) && matchesContractor(item));
-    const relevantContracts = contracts.filter((item) => matchesCpv(item) && matchesContractor(item));
+    // Only awards/contracts tied to a tender notice we actually have are shown:
+    // the rest can't be compared with a budget and made the totals depend on
+    // how much of the older notice history happens to be loaded.
+    const hasNotice = (item: { noticeAdam?: string; noticeTitle?: string }) => Boolean(item.noticeAdam && item.noticeTitle);
+    const relevantAwards = awards.filter((item) => hasNotice(item) && matchesCpv(item) && matchesContractor(item));
+    const relevantContracts = contracts.filter((item) => hasNotice(item) && matchesCpv(item) && matchesContractor(item));
 
     // The same legal entity is often typed differently across notices ("Α.Ε." vs
     // "AE" vs an alternate registered name in quotes) - the VAT number is the one
