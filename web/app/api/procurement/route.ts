@@ -97,6 +97,25 @@ function sumDistinct<T extends Parameters<typeof money>[0]>(
   return total;
 }
 
+// A consortium award lists one contractor row per member; this gives each
+// member the names of the others so the UI can show "with: ..." for it.
+function otherMembers(
+  current: { contractor_name: string; contractor_vat: string | null } | null,
+  all: { contractor_name: string; contractor_vat: string | null }[],
+) {
+  if (!current) return undefined;
+  const identity = (row: { contractor_name: string; contractor_vat: string | null }) => row.contractor_vat?.trim() || row.contractor_name;
+  const seen = new Set([identity(current)]);
+  const names: string[] = [];
+  for (const member of all) {
+    const key = identity(member);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    names.push(member.contractor_name);
+  }
+  return names.length ? names : undefined;
+}
+
 function money(row: {
   amount_inc_vat?: number | null;
   amount_ex_vat?: number | null;
@@ -512,6 +531,7 @@ export async function GET(request: Request) {
         cpvDescription: cpv?.cpv_description ?? marketNoticeCpvsByAdam.get(award.procurement_adam ?? "")?.[0]?.cpv_description ?? "",
         contractor: contractor?.contractor_name ?? "Χωρίς ανάδοχο",
         contractorVat: contractor?.contractor_vat ?? undefined,
+        partners: otherMembers(contractor, contractorsForAward),
         awardDate: award.award_date ?? undefined,
         value: money(award),
       }));
@@ -542,6 +562,7 @@ export async function GET(request: Request) {
         cpvDescription: cpv?.cpv_description ?? marketNoticeCpvsByAdam.get(noticeAdam ?? "")?.[0]?.cpv_description ?? "",
         contractor: contractor?.contractor_name ?? "Χωρίς ανάδοχο",
         contractorVat: contractor?.contractor_vat ?? undefined,
+        partners: otherMembers(contractor, contractorsForContract),
         signedDate: contract.signed_date ?? undefined,
         deliveryDate: contract.delivery_date ?? undefined,
         value: money(contract),

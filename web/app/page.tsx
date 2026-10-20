@@ -40,6 +40,7 @@ type Award = {
   cpvDescription?: string;
   contractor: string;
   contractorVat?: string;
+  partners?: string[];
   awardDate?: string;
   value: number;
 };
@@ -53,6 +54,7 @@ type Contract = {
   cpvDescription?: string;
   contractor: string;
   contractorVat?: string;
+  partners?: string[];
   signedDate?: string;
   deliveryDate?: string;
   value: number;
@@ -1430,14 +1432,14 @@ function ContractorProfile({ name, summary, awards, contracts, onClose }: {
       const hasNotice = Boolean(item.noticeAdam && item.noticeTitle);
       return <tr key={item.adam} className={hasNotice ? "clickableRow" : ""} onClick={hasNotice ? () => openTender(item.noticeAdam!) : undefined}>
         <td><AdamCopy adam={item.adam} className="adam adamCopy" /></td>
-        <td>{item.title}</td>
+        <td>{item.title}{item.partners && <small className="cellSub">Ένωση με: {item.partners.join(", ")} - η αξία αφορά όλη την ανάθεση</small>}</td>
         <td>{item.authority}</td>
         <td>{formatDate(item.awardDate)}</td>
         <td>{euro.format(item.value)}</td>
         <td>{hasNotice ? item.noticeTitle : <span className="cellSub">—</span>}</td>
       </tr>;
     })}</tbody></table>{!awardRows.length && <p className="noRows">Δεν βρέθηκαν αναθέσεις.</p>}{loadingTender && <p className="noRows">Φόρτωση στοιχείων διαγωνισμού…</p>}</div>}
-    {tab === "contracts" && <div className="tableScroll"><table><thead><tr><th>ΑΔΑΜ Σύμβασης</th><th>Τίτλος</th><th>Αναθέτουσα Αρχή</th><th>Ημ. υπογραφής</th><th>Αξία</th></tr></thead><tbody>{contracts.map((item) => <tr key={item.adam}><td><AdamCopy adam={item.adam} className="adam adamCopy" /></td><td>{item.title}</td><td>{item.authority}</td><td>{formatDate(item.signedDate)}</td><td>{euro.format(item.value)}</td></tr>)}</tbody></table>{!contracts.length && <p className="noRows">Δεν βρέθηκαν συμβάσεις.</p>}</div>}
+    {tab === "contracts" && <div className="tableScroll"><table><thead><tr><th>ΑΔΑΜ Σύμβασης</th><th>Τίτλος</th><th>Αναθέτουσα Αρχή</th><th>Ημ. υπογραφής</th><th>Αξία</th></tr></thead><tbody>{contracts.map((item) => <tr key={item.adam}><td><AdamCopy adam={item.adam} className="adam adamCopy" /></td><td>{item.title}{item.partners && <small className="cellSub">Ένωση με: {item.partners.join(", ")} - η αξία αφορά όλη τη σύμβαση</small>}</td><td>{item.authority}</td><td>{formatDate(item.signedDate)}</td><td>{euro.format(item.value)}</td></tr>)}</tbody></table>{!contracts.length && <p className="noRows">Δεν βρέθηκαν συμβάσεις.</p>}</div>}
     {tab === "distribution" && <div className="bars">{distribution.slice(0, 10).map(([label, value]) => <div className="barRow" key={label}><span title={label}>{label}</span><div><i className="teal" style={{ width: `${(value / distributionTotal) * 100}%` }} /></div><strong>{euro.format(value)}</strong></div>)}{!distribution.length && <p className="noRows">Δεν υπάρχουν δεδομένα κατανομής.</p>}</div>}
   </article>;
 }
