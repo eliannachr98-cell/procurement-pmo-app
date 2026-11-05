@@ -90,7 +90,17 @@ language sql stable as $$
       and not exists (select 1 from public.awards_compact a where a.procurement_adam = p.adam)
       and (p.opening_at is null or p.opening_at >= now())
       and (
-        p.document_category in ('declaration', 'announcement')
+        -- A brand-new Διακήρυξη/Προκήρυξη for a "Απευθείας ανάθεση"
+        -- (direct-award) procedure has no competitive bidding to join - the
+        -- authority already picked who gets it - so emailing it is pure
+        -- noise for a team watching CPVs to find tenders to bid on. An
+        -- extension/award on something the team already tracks is left
+        -- alone below regardless of the original procedure type: they
+        -- chose to track it themselves, procedure type is moot by then.
+        (
+          p.document_category in ('declaration', 'announcement')
+          and (p.procedure_type is null or p.procedure_type not ilike '%απευθείας%')
+        )
         or (p.document_category = 'extension' and p.adam in (select adam from tracked))
       )
   ),
