@@ -1414,7 +1414,7 @@ function MarketPanel({ awards, contracts, cpv, contractor, authority, year, cont
 function ContractorProfile({ name, summary, awards, contracts, onClose }: {
   name: string; summary: ContractorSummary; awards: Award[]; contracts: Contract[]; onClose: () => void;
 }) {
-  const [tab, setTab] = useState<"awards" | "contracts" | "distribution">("awards");
+  const [tab, setTab] = useState<"won" | "distribution">("won");
   const [selectedTender, setSelectedTender] = useState<Tender | null>(null);
   const [loadingTender, setLoadingTender] = useState(false);
 
@@ -1451,7 +1451,15 @@ function ContractorProfile({ name, summary, awards, contracts, onClose }: {
   const contractedAwardAdams = new Set(contracts.map((item) => item.awardAdam).filter((value): value is string => Boolean(value)));
   const awardRows = collapseRepeats([...awards].filter((item) => !contractedAwardAdams.has(item.adam)).sort((a, b) => (b.awardDate ?? "").localeCompare(a.awardDate ?? "")));
   const contractRows = collapseRepeats(contracts);
-
+  // One row per tender actually won, whatever lifecycle stage it's at right
+  // now - an award that already became a contract is the same win, not a
+  // second one, which is why awardRows above already excludes it. Shown as a
+  // single list with a status column instead of two tabs the user has to
+  // flip between to see everything this contractor has won.
+  const wonRows = [
+    ...awardRows.map(({ row, repeats }) => ({ row, repeats, status: "Ανάθεση" as const, date: row.awardDate })),
+    ...contractRows.map(({ row, repeats }) => ({ row, repeats, status: "Σύμβαση" as const, date: row.signedDate })),
+  ].sort((a, b) => (b.date ?? "").localeCompare(a.date ?? ""));
 
   // Same rule as MarketPanel's per-contractor value: the total is the
   // contracts plus the awards that have no contract yet (the two tabs'
@@ -1495,22 +1503,22 @@ function ContractorProfile({ name, summary, awards, contracts, onClose }: {
       <Metric label="Μέση έκπτωση" value={formatDiscount(summary.discount)} tone="sky" sub={summary.discount === null ? "Δεν υπάρχουν συγκρίσιμοι διαγωνισμοί" : `από ${summary.discountCount} ${summary.discountCount === 1 ? "διαγωνισμό" : "διαγωνισμούς"} με ίδια βάση ΦΠΑ`} />
     </div>
     <div className="tabRow">
-      <button type="button" className={tab === "awards" ? "active" : ""} onClick={() => setTab("awards")}>Αναθέσεις</button>
-      <button type="button" className={tab === "contracts" ? "active" : ""} onClick={() => setTab("contracts")}>Συμβάσεις</button>
+      <button type="button" className={tab === "won" ? "active" : ""} onClick={() => setTab("won")}>Διακηρύξεις</button>
       <button type="button" className={tab === "distribution" ? "active" : ""} onClick={() => setTab("distribution")}>Κατανομή</button>
     </div>
-    {tab === "awards" && <div className="tableScroll"><table><thead><tr><th>ΑΔΑΜ Ανάθεσης</th><th>Τίτλος</th><th>Αναθέτουσα Αρχή</th><th>Ημ. ανάθεσης</th><th>Αξία</th><th>Διακήρυξη</th></tr></thead><tbody>{awardRows.map(({ row: item, repeats }) => {
+    {tab === "won" && <div className="tableScroll"><table><thead><tr><th>ΑΔΑΜ</th><th>Τίτλος</th><th>Αναθέτουσα Αρχή</th><th>Κατάσταση</th><th>Ημερομηνία</th><th>Αξία</th><th>Διακήρυξη</th></tr></thead><tbody>{wonRows.map(({ row: item, repeats, status, date }) => {
       const hasNotice = Boolean(item.noticeAdam && item.noticeTitle);
-      return <tr key={item.adam} className={hasNotice ? "clickableRow" : ""} onClick={hasNotice ? () => openTender(item.noticeAdam!) : undefined}>
+      const unionNote = status === "Ανάθεση" ? "η αξία αφορά όλη την ανάθεση" : "η αξία αφορά όλη τη σύμβαση";
+      return <tr key={`${status}-${item.adam}`} className={hasNotice ? "clickableRow" : ""} onClick={hasNotice ? () => openTender(item.noticeAdam!) : undefined}>
         <td><AdamCopy adam={item.adam} className="adam adamCopy" />{repeats > 0 && <small className="cellSub">+{repeats} επαναδημοσίευση</small>}</td>
-        <td>{item.title}{item.partners && <small className="cellSub">Ένωση με: {item.partners.join(", ")} - η αξία αφορά όλη την ανάθεση</small>}</td>
+        <td>{item.title}{item.partners && <small className="cellSub">Ένωση με: {item.partners.join(", ")} - {unionNote}</small>}</td>
         <td>{item.authority}</td>
-        <td>{formatDate(item.awardDate)}</td>
+        <td><span className={`status ${status === "Σύμβαση" ? "green" : "purple"}`}>{status}</span></td>
+        <td>{formatDate(date)}</td>
         <td>{euro.format(item.value)}</td>
         <td>{hasNotice ? item.noticeTitle : <span className="cellSub">—</span>}</td>
       </tr>;
-    })}</tbody></table>{!awardRows.length && <p className="noRows">Δεν βρέθηκαν αναθέσεις.</p>}{loadingTender && <p className="noRows">Φόρτωση στοιχείων διαγωνισμού…</p>}</div>}
-    {tab === "contracts" && <div className="tableScroll"><table><thead><tr><th>ΑΔΑΜ Σύμβασης</th><th>Τίτλος</th><th>Αναθέτουσα Αρχή</th><th>Ημ. υπογραφής</th><th>Αξία</th></tr></thead><tbody>{contractRows.map(({ row: item, repeats }) => <tr key={item.adam}><td><AdamCopy adam={item.adam} className="adam adamCopy" />{repeats > 0 && <small className="cellSub">+{repeats} επαναδημοσίευση</small>}</td><td>{item.title}{item.partners && <small className="cellSub">Ένωση με: {item.partners.join(", ")} - η αξία αφορά όλη τη σύμβαση</small>}</td><td>{item.authority}</td><td>{formatDate(item.signedDate)}</td><td>{euro.format(item.value)}</td></tr>)}</tbody></table>{!contracts.length && <p className="noRows">Δεν βρέθηκαν συμβάσεις.</p>}</div>}
+    })}</tbody></table>{!wonRows.length && <p className="noRows">Δεν βρέθηκαν διακηρύξεις.</p>}{loadingTender && <p className="noRows">Φόρτωση στοιχείων διαγωνισμού…</p>}</div>}
     {tab === "distribution" && <div className="bars">{distribution.slice(0, 10).map(([label, value]) => <div className="barRow" key={label}><span title={label}>{label}</span><div><i className="teal" style={{ width: `${(value / distributionTotal) * 100}%` }} /></div><strong>{euro.format(value)}</strong></div>)}{!distribution.length && <p className="noRows">Δεν υπάρχουν δεδομένα κατανομής.</p>}</div>}
   </article>;
 }
