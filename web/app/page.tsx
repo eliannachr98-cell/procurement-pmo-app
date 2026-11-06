@@ -1499,7 +1499,6 @@ function ContractorProfile({ name, summary, awards, contracts, onClose }: {
       <Metric label="Αναθέσεις" value={number.format(summary.awards)} tone="sky" />
       <Metric label="Συμβάσεις" value={number.format(summary.contracts)} tone="mint" />
       <Metric label="Αναθέτουσες Αρχές" value={number.format(summary.authorities)} tone="sand" />
-      <Metric label="Συνολική αξία" value={euro.format(summary.value)} tone="lilac" />
       <Metric label="Μέση έκπτωση" value={formatDiscount(summary.discount)} tone="sky" sub={summary.discount === null ? "Δεν υπάρχουν συγκρίσιμοι διαγωνισμοί" : `από ${summary.discountCount} ${summary.discountCount === 1 ? "διαγωνισμό" : "διαγωνισμούς"} με ίδια βάση ΦΠΑ`} />
     </div>
     <div className="tabRow">
