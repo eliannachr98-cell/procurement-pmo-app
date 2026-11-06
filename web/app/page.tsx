@@ -1505,22 +1505,16 @@ function ContractorProfile({ name, summary, awards, contracts, onClose }: {
       <button type="button" className={tab === "won" ? "active" : ""} onClick={() => setTab("won")}>Διακηρύξεις</button>
       <button type="button" className={tab === "distribution" ? "active" : ""} onClick={() => setTab("distribution")}>Κατανομή</button>
     </div>
-    {tab === "won" && <div className="tableScroll"><table><thead><tr><th>ΑΔΑΜ Διακήρυξης</th><th>Τίτλος</th><th>Αναθέτουσα Αρχή</th><th>Κατάσταση</th><th>Ημερομηνία</th><th>Αξία</th><th>Διακήρυξη</th></tr></thead><tbody>{wonRows.map(({ row: item, repeats, status, date }) => {
+    {tab === "won" && <div className="tableScroll"><table><thead><tr><th>ΑΔΑΜ Διακήρυξης</th><th>Τίτλος</th><th>Αναθέτουσα Αρχή</th><th>Κατάσταση</th><th>Ημερομηνία</th><th>Αξία</th></tr></thead><tbody>{wonRows.map(({ row: item, repeats, status, date }) => {
       const hasNotice = Boolean(item.noticeAdam && item.noticeTitle);
       const unionNote = status === "Ανάθεση" ? "η αξία αφορά όλη την ανάθεση" : "η αξία αφορά όλη τη σύμβαση";
-      const recordAdamLabel = status === "Σύμβαση" ? "ΑΔΑΜ Σύμβασης" : "ΑΔΑΜ Ανάθεσης";
       return <tr key={`${status}-${item.adam}`} className={hasNotice ? "clickableRow" : ""} onClick={hasNotice ? () => openTender(item.noticeAdam!) : undefined}>
-        <td>
-          {hasNotice
-            ? <><AdamCopy adam={item.noticeAdam!} className="adam adamCopy" />{repeats > 0 && <small className="cellSub">+{repeats} επαναδημοσίευση</small>}<small className="cellSub">{recordAdamLabel}: {item.adam}</small></>
-            : <><AdamCopy adam={item.adam} className="adam adamCopy" />{repeats > 0 && <small className="cellSub">+{repeats} επαναδημοσίευση</small>}<small className="cellSub">{recordAdamLabel} - δεν βρέθηκε η αρχική Διακήρυξη</small></>}
-        </td>
-        <td>{item.title}{item.partners && <small className="cellSub">Ένωση με: {item.partners.join(", ")} - {unionNote}</small>}</td>
+        <td><AdamCopy adam={hasNotice ? item.noticeAdam! : item.adam} className="adam adamCopy" />{repeats > 0 && <small className="cellSub">+{repeats} επαναδημοσίευση</small>}</td>
+        <td>{hasNotice ? item.noticeTitle : item.title}{item.partners && <small className="cellSub">Ένωση με: {item.partners.join(", ")} - {unionNote}</small>}</td>
         <td>{item.authority}</td>
         <td><span className={`status ${status === "Σύμβαση" ? "green" : "purple"}`}>{status}</span></td>
         <td>{formatDate(date)}</td>
         <td>{euro.format(item.value)}</td>
-        <td>{hasNotice ? item.noticeTitle : <span className="cellSub">—</span>}</td>
       </tr>;
     })}</tbody></table>{!wonRows.length && <p className="noRows">Δεν βρέθηκαν διακηρύξεις.</p>}{loadingTender && <p className="noRows">Φόρτωση στοιχείων διαγωνισμού…</p>}</div>}
     {tab === "distribution" && <div className="bars">{distribution.slice(0, 10).map(([label, value]) => <div className="barRow" key={label}><span title={label}>{label}</span><div><i className="teal" style={{ width: `${(value / distributionTotal) * 100}%` }} /></div><strong>{euro.format(value)}</strong></div>)}{!distribution.length && <p className="noRows">Δεν υπάρχουν δεδομένα κατανομής.</p>}</div>}
