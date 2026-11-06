@@ -551,7 +551,7 @@ export default function Home() {
               {loading ? "Φόρτωση…" : `Φόρτωση περισσότερων (${number.format(tenders.length)} από ${number.format(totalTenders)})`}
             </button>}
           </>}
-          {page === "market" && <MarketPanel awards={awards} contracts={contracts} cpv={cpv} setCpv={setCpv} contractor={contractor} authority={authority} year={year} contractType={contractType} documentType={documentType} loadedCount={tenders.length} totalCount={totalTenders} stillLoading={hasMore && loading} locked={!team.code} selectedContractor={marketSelectedContractor} setSelectedContractor={setMarketSelectedContractor} contractorSearch={marketContractorSearch} setContractorSearch={setMarketContractorSearch} visibleCount={marketVisibleCount} setVisibleCount={setMarketVisibleCount} />}
+          {page === "market" && <MarketPanel awards={awards} contracts={contracts} cpv={cpv} contractor={contractor} authority={authority} year={year} contractType={contractType} documentType={documentType} loadedCount={tenders.length} totalCount={totalTenders} stillLoading={hasMore && loading} locked={!team.code} selectedContractor={marketSelectedContractor} setSelectedContractor={setMarketSelectedContractor} contractorSearch={marketContractorSearch} setContractorSearch={setMarketContractorSearch} visibleCount={marketVisibleCount} setVisibleCount={setMarketVisibleCount} />}
           {page === "alerts" && <AlertsPanelContent key={team.code ?? "free"} code={team.code ?? null} onUnauthorized={team.onUnauthorized} watchlist={alertsWatchlist} setWatchlist={setAlertsWatchlist} nutsFilter={alertsNutsFilter} setNutsFilter={setAlertsNutsFilter} />}
           {page === "profile" && <div className="profileGrid">
             <article className="panel profileCard profileAccountCard">
@@ -645,7 +645,7 @@ export default function Home() {
           <label>Έτος<select value={year} onChange={(event) => setYear(event.target.value)}><option>Όλα</option>{years.map((item) => <option key={item}>{item}</option>)}</select></label>
           <SingleSearchInput label="Αναθέτουσα Αρχή" type="authority" value={authority === "Όλες" ? "" : authority} onChange={setAuthority} placeholder="Γράψε ή επίλεξε αρχή" />
           <MultiSearchInput label="Ανάδοχος" type="contractor" values={contractor} onChange={setContractor} placeholder="Αναζήτησε και επίλεξε αναδόχους" />
-          {page !== "market" && <MultiSearchInput label="CPV" type="cpv" values={cpv} onChange={setCpv} placeholder="Αναζήτησε κωδικό ή περιγραφή CPV" />}
+          <MultiSearchInput label="CPV" type="cpv" values={cpv} onChange={setCpv} placeholder="Αναζήτησε κωδικό ή περιγραφή CPV" />
           <CheckboxDropdown label="Τύπος σύμβασης" options={contractTypeOptions} values={contractType} onChange={setContractType} />
           {/* A tender's document-type/status describe the notice's own lifecycle - awards and
               contracts always attach to the original declaration, never to a follow-up document
@@ -654,7 +654,7 @@ export default function Home() {
           {page !== "market" && <label>Κατάσταση<select value={status} onChange={(event) => setStatus(event.target.value)}><option>Όλες</option>{Object.keys(statusTone).map((item) => <option key={item}>{item}</option>)}</select></label>}
           {page !== "market" && <label className="checkboxRow"><input type="checkbox" checked={hideDirectAwards} onChange={(event) => setHideDirectAwards(event.target.checked)} />Απόκρυψη απευθείας αναθέσεων</label>}
           <div className="filterNote"><span>i</span><p>{page === "market"
-            ? "Το CPV επιλέγεται μέσα στον πίνακα της Αγοράς. Τύπος εγγράφου και Κατάσταση δεν εφαρμόζονται εδώ - αφορούν το στάδιο της ίδιας της διακήρυξης, όχι τις αναθέσεις/συμβάσεις. Εμφανίζονται μόνο αναθέσεις και συμβάσεις που συνδέονται με διακήρυξη."
+            ? "Τύπος εγγράφου και Κατάσταση δεν εφαρμόζονται εδώ - αφορούν το στάδιο της ίδιας της διακήρυξης, όχι τις αναθέσεις/συμβάσεις. Εμφανίζονται μόνο αναθέσεις και συμβάσεις που συνδέονται με διακήρυξη."
             : "Τα ίδια φίλτρα εφαρμόζονται στην Επισκόπηση και στους Διαγωνισμούς."}</p></div>
         </aside>}
       </div>
@@ -1186,8 +1186,8 @@ const formatDiscount = (value: number | null) => value === null ? "—" : `${val
 
 const CONTRACTOR_ALIASES: Record<string, string> = { PWC: "PRICEWATERHOUSECOOPERS", EY: "ERNST" };
 
-function MarketPanel({ awards, contracts, cpv, setCpv, contractor, authority, year, contractType, documentType, loadedCount, totalCount, stillLoading, locked, selectedContractor, setSelectedContractor, contractorSearch, setContractorSearch, visibleCount, setVisibleCount }: {
-  awards: Award[]; contracts: Contract[]; cpv: string[]; setCpv: (value: string[]) => void; contractor: string[]; authority: string;
+function MarketPanel({ awards, contracts, cpv, contractor, authority, year, contractType, documentType, loadedCount, totalCount, stillLoading, locked, selectedContractor, setSelectedContractor, contractorSearch, setContractorSearch, visibleCount, setVisibleCount }: {
+  awards: Award[]; contracts: Contract[]; cpv: string[]; contractor: string[]; authority: string;
   year: string; contractType: string[]; documentType: string; loadedCount: number; totalCount: number; stillLoading: boolean; locked: boolean;
   selectedContractor: string; setSelectedContractor: (value: string) => void;
   contractorSearch: string; setContractorSearch: (value: string) => void;
@@ -1366,8 +1366,7 @@ function MarketPanel({ awards, contracts, cpv, setCpv, contractor, authority, ye
 
   return <>
     <article className="panel marketHero">
-      <div><p className="eyebrow">COMPETITION MAPPING</p><h2>Ανάλυση ανταγωνισμού ανά CPV</h2><p>Επίλεξε ένα ή περισσότερα CPV για να δεις την αγορά, τους αναδόχους, και τις συνδεδεμένες συμβάσεις.</p></div>
-      <MultiSearchInput label="CPV" type="cpv" values={cpv} onChange={setCpv} placeholder="Αναζήτησε και επίλεξε CPV" />
+      <div><p className="eyebrow">COMPETITION MAPPING</p><h2>Ανάλυση ανταγωνισμού</h2><p>Επίλεξε CPV, ανάδοχο ή αναθέτουσα αρχή από το πλαϊνό φίλτρο για να δεις την αγορά, τους αναδόχους, και τις συνδεδεμένες συμβάσεις.</p></div>
     </article>
     {!hasSelection && <article className="panel empty marketStart"><span>⌕</span><h2>Επίλεξε CPV ή ανάδοχο</h2><p>Τα αποτελέσματα ανταγωνισμού θα εμφανιστούν μόνο μετά τη δική σου επιλογή.</p></article>}
     {hasSelection && <>
