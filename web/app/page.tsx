@@ -1186,6 +1186,27 @@ const formatDiscount = (value: number | null) => value === null ? "—" : `${val
 
 const CONTRACTOR_ALIASES: Record<string, string> = { PWC: "PRICEWATERHOUSECOOPERS", EY: "ERNST" };
 
+const awardGroupKey = (item: { noticeAdam?: string; adam: string; value: number }) => `${item.noticeAdam ?? item.adam}|${item.value}`;
+
+// A republished award can end up with a different ADAM than the one copy a
+// later contract actually cites as its award_adam, even though every
+// republished copy is the exact same real award (same notice, same amount) -
+// confirmed live (25PROC016185999: one copy correctly disappears once
+// contracted, the other, identical in everything but its own ADAM, kept
+// showing as a still-open Ανάθεση next to the real Σύμβαση). Matching by
+// (notice, value) instead of the individual award's own adam recognizes
+// every republished copy of an already-contracted award, not just the one a
+// contract happens to point at.
+function contractedAwardGroups(awards: Award[], contracts: Contract[]) {
+  const awardsByAdam = new Map(awards.map((item) => [item.adam, item]));
+  const groups = new Set<string>();
+  for (const contract of contracts) {
+    const award = contract.awardAdam ? awardsByAdam.get(contract.awardAdam) : undefined;
+    if (award) groups.add(awardGroupKey(award));
+  }
+  return groups;
+}
+
 function MarketPanel({ awards, contracts, cpv, contractor, authority, year, contractType, documentType, loadedCount, totalCount, stillLoading, locked, selectedContractor, setSelectedContractor, contractorSearch, setContractorSearch, visibleCount, setVisibleCount }: {
   awards: Award[]; contracts: Contract[]; cpv: string[]; contractor: string[]; authority: string;
   year: string; contractType: string[]; documentType: string; loadedCount: number; totalCount: number; stillLoading: boolean; locked: boolean;
@@ -1255,7 +1276,7 @@ function MarketPanel({ awards, contracts, cpv, contractor, authority, year, cont
     const seenContracts = new Set<string>();
     // An award that already led to a signed contract is counted as a contract,
     // not again as an award.
-    const contractedAwardAdams = new Set(relevantContracts.map((item) => item.awardAdam).filter((value): value is string => Boolean(value)));
+    const contractedGroups = contractedAwardGroups(relevantAwards, relevantContracts);
     for (const item of relevantAwards) {
       if (!item.contractor || item.contractor === "Χωρίς ανάδοχο") continue;
       const row = ensure(item);
@@ -1263,7 +1284,7 @@ function MarketPanel({ awards, contracts, cpv, contractor, authority, year, cont
       const duplicateKey = `${groupKeyFor(item)}|${tenderKey}|${item.value}`;
       if (!seenAwards.has(duplicateKey)) {
         seenAwards.add(duplicateKey);
-        if (!contractedAwardAdams.has(item.adam)) {
+        if (!contractedGroups.has(awardGroupKey(item))) {
           row.awardCount += 1;
           row.awardSums.set(tenderKey, (row.awardSums.get(tenderKey) ?? 0) + item.value);
         }
@@ -1323,7 +1344,7 @@ function MarketPanel({ awards, contracts, cpv, contractor, authority, year, cont
     }
 
     const discountRowsByRoot = new Map<string, (Award | Contract)[]>();
-    for (const item of [...relevantContracts, ...relevantAwards.filter((award) => !contractedAwardAdams.has(award.adam))]) {
+    for (const item of [...relevantContracts, ...relevantAwards.filter((award) => !contractedGroups.has(awardGroupKey(award)))]) {
       const root = resolvedKeyFor(item);
       const list = discountRowsByRoot.get(root);
       if (list) list.push(item);
@@ -1448,8 +1469,8 @@ function ContractorProfile({ name, summary, awards, contracts, onClose }: {
     }
     return [...groups.values()].map(({ row, adams }) => ({ row, repeats: adams.size - 1 }));
   };
-  const contractedAwardAdams = new Set(contracts.map((item) => item.awardAdam).filter((value): value is string => Boolean(value)));
-  const awardRows = collapseRepeats([...awards].filter((item) => !contractedAwardAdams.has(item.adam)).sort((a, b) => (b.awardDate ?? "").localeCompare(a.awardDate ?? "")));
+  const contractedGroups = contractedAwardGroups(awards, contracts);
+  const awardRows = collapseRepeats([...awards].filter((item) => !contractedGroups.has(awardGroupKey(item))).sort((a, b) => (b.awardDate ?? "").localeCompare(a.awardDate ?? "")));
   const contractRows = collapseRepeats(contracts);
   // One row per tender actually won, whatever lifecycle stage it's at right
   // now - an award that already became a contract is the same win, not a
@@ -1476,7 +1497,7 @@ function ContractorProfile({ name, summary, awards, contracts, onClose }: {
   };
   const seenAwardKeys = new Set<string>();
   const seenContractKeys = new Set<string>();
-  for (const item of awards) if (!contractedAwardAdams.has(item.adam)) addDistinct(awardSums, seenAwardKeys, item);
+  for (const item of awards) if (!contractedGroups.has(awardGroupKey(item))) addDistinct(awardSums, seenAwardKeys, item);
   for (const item of contracts) addDistinct(contractSums, seenContractKeys, item);
   const valueByTender = new Map<string, { value: number; label: string }>();
   for (const key of new Set([...awardSums.keys(), ...contractSums.keys()])) {
