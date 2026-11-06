@@ -1526,7 +1526,7 @@ function ContractorProfile({ name, summary, awards, contracts, onClose }: {
       <button type="button" className={tab === "won" ? "active" : ""} onClick={() => setTab("won")}>Διακηρύξεις</button>
       <button type="button" className={tab === "distribution" ? "active" : ""} onClick={() => setTab("distribution")}>Κατανομή</button>
     </div>
-    {tab === "won" && <div className="tableScroll"><table><thead><tr><th>ΑΔΑΜ Διακήρυξης</th><th>Τίτλος</th><th>Αναθέτουσα Αρχή</th><th>Κατάσταση</th><th>Ημερομηνία</th><th>Αξία</th></tr></thead><tbody>{wonRows.map(({ row: item, repeats, status, date }) => {
+    {tab === "won" && <><PanelHeader title="Διακηρύξεις" caption="Μία γραμμή ανά Ανάθεση/Σύμβαση - ένα tender με πολλά lots μπορεί να εμφανιστεί πάνω από μία φορά." onDownload={{ filename: "diakiryxeis", title: "Διακηρύξεις", headers: ["ΑΔΑΜ Διακήρυξης", "Τίτλος", "Αναθέτουσα Αρχή", "Κατάσταση", "Ημερομηνία", "Αξία"], rows: wonRows.map(({ row: item, status, date }) => [Boolean(item.noticeAdam && item.noticeTitle) ? item.noticeAdam! : item.adam, Boolean(item.noticeAdam && item.noticeTitle) ? item.noticeTitle! : item.title, item.authority, status, date ?? "", item.value]), columnTypes: ["text", "text", "text", "text", "date", "currency"] }} /><div className="tableScroll"><table><thead><tr><th>ΑΔΑΜ Διακήρυξης</th><th>Τίτλος</th><th>Αναθέτουσα Αρχή</th><th>Κατάσταση</th><th>Ημερομηνία</th><th>Αξία</th></tr></thead><tbody>{wonRows.map(({ row: item, repeats, status, date }) => {
       const hasNotice = Boolean(item.noticeAdam && item.noticeTitle);
       const unionNote = status === "Ανάθεση" ? "η αξία αφορά όλη την ανάθεση" : "η αξία αφορά όλη τη σύμβαση";
       return <tr key={`${status}-${item.adam}`} className={hasNotice ? "clickableRow" : ""} onClick={hasNotice ? () => openTender(item.noticeAdam!) : undefined}>
@@ -1537,7 +1537,7 @@ function ContractorProfile({ name, summary, awards, contracts, onClose }: {
         <td>{formatDate(date)}</td>
         <td>{euro.format(item.value)}</td>
       </tr>;
-    })}</tbody></table>{!wonRows.length && <p className="noRows">Δεν βρέθηκαν διακηρύξεις.</p>}{loadingTender && <p className="noRows">Φόρτωση στοιχείων διαγωνισμού…</p>}</div>}
+    })}</tbody></table>{!wonRows.length && <p className="noRows">Δεν βρέθηκαν διακηρύξεις.</p>}{loadingTender && <p className="noRows">Φόρτωση στοιχείων διαγωνισμού…</p>}</div></>}
     {tab === "distribution" && <div className="bars">{distribution.slice(0, 10).map(([label, value]) => <div className="barRow" key={label}><span title={label}>{label}</span><div><i className="teal" style={{ width: `${(value / distributionTotal) * 100}%` }} /></div><strong>{euro.format(value)}</strong></div>)}{!distribution.length && <p className="noRows">Δεν υπάρχουν δεδομένα κατανομής.</p>}</div>}
   </article>;
 }
