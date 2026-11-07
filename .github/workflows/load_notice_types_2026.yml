@@ -1,0 +1,83 @@
+name: Load 2026 notice types into quality flags
+
+# Records KHMDHS noticeType.key for 2026 notices in
+# public.procurement_quality_flags.notice_type_key (only that small table is
+# written). The thesis Excel keeps only noticeType "Διακήρυξη" (key 3), so the
+# stats flag needs the type for 2026, which the Excel does not cover. Run "test"
+# first (one week, dry run - nothing is written), then "full".
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: test = one week, dry run; full = all of 2026 and writes
+        required: true
+        type: choice
+        options:
+          - test
+          - full
+        default: test
+
+permissions:
+  contents: read
+
+concurrency:
+  group: compact-2026-notice-types
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+    steps:
+      - id: matrix
+        env:
+          MODE: ${{ inputs.mode }}
+        shell: python
+        run: |
+          import json, os
+          from datetime import date, timedelta
+
+          if os.environ["MODE"] == "test":
+              windows = [{"date_from": "2026-01-01", "date_to": "2026-01-07", "max_pages": 1}]
+          else:
+              windows = []
+              current, end = date(2026, 1, 1), date(2026, 11, 7)
+              while current <= end:
+                  window_end = min(current + timedelta(days=6), end)
+                  windows.append({"date_from": current.isoformat(), "date_to": window_end.isoformat(), "max_pages": 0})
+                  current = window_end + timedelta(days=1)
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              output.write("matrix=" + json.dumps({"include": windows}, separators=(",", ":")) + "\n")
+
+  load:
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix: ${{ fromJson(needs.prepare.outputs.matrix) }}
+    name: notice types ${{ matrix.date_from }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install pinned dependencies
+        run: pip install "requests>=2.32,<3" "psycopg[binary]>=3.2,<4"
+      - name: Fetch notice types (and write in full mode)
+        shell: bash
+        env:
+          DATABASE_URL: ${{ secrets.COMPACT_DATABASE_URL }}
+          EXPECTED_DB_REF: gunzsfttzijoxteppskb
+        run: |
+          args=(
+            --date-from "${{ matrix.date_from }}"
+            --date-to "${{ matrix.date_to }}"
+            --max-pages "${{ matrix.max_pages }}"
+          )
+          if [ "${{ inputs.mode }}" = "full" ]; then
+            args+=(--write)
+          fi
+          python -u load_notice_types.py "${args[@]}"
