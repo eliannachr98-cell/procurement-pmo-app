@@ -43,6 +43,11 @@ def main() -> None:
     parser.add_argument("--date-to", required=True)
     parser.add_argument("--max-pages", type=int, default=0)
     parser.add_argument("--write", action="store_true")
+    parser.add_argument(
+        "--insert-missing",
+        action="store_true",
+        help="Also create flag rows for ADAMs that have none yet (used when a year is loaded for the first time)",
+    )
     args = parser.parse_args()
 
     found = collect(args.date_from, args.date_to, args.max_pages or None)
@@ -66,11 +71,25 @@ def main() -> None:
         raise SystemExit("DATABASE_URL does not point at the expected Supabase project")
 
     with psycopg.connect(url) as conn, conn.cursor() as cursor:
-        cursor.executemany(
-            "update public.procurement_quality_flags "
-            "set notice_type_key = %s, has_award_ref = %s, cancelled_api = %s where adam = %s",
-            [(key, ref, cancel, adam) for adam, (key, ref, cancel) in found.items()],
-        )
+        if args.insert_missing:
+            # Only for ADAMs that exist in procurements_compact. The remaining
+            # flags (title/date/cancel rules, in_stats) are recomputed in SQL
+            # afterwards, so the placeholders here are all false.
+            cursor.executemany(
+                "insert into public.procurement_quality_flags "
+                "(adam, other_act, cancelled_no_award, date_issue, in_stats, notice_type_key, has_award_ref, cancelled_api) "
+                "select %s, false, false, false, false, %s, %s, %s "
+                "where exists (select 1 from public.procurements_compact where adam = %s) "
+                "on conflict (adam) do update set notice_type_key = excluded.notice_type_key, "
+                "has_award_ref = excluded.has_award_ref, cancelled_api = excluded.cancelled_api",
+                [(adam, key, ref, cancel, adam) for adam, (key, ref, cancel) in found.items()],
+            )
+        else:
+            cursor.executemany(
+                "update public.procurement_quality_flags "
+                "set notice_type_key = %s, has_award_ref = %s, cancelled_api = %s where adam = %s",
+                [(key, ref, cancel, adam) for adam, (key, ref, cancel) in found.items()],
+            )
         print(f"updated up to {len(found)} flag rows")
 
 

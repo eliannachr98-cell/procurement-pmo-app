@@ -15,7 +15,7 @@ from pathlib import Path
 
 import requests
 
-from compact_transform import transform
+from compact_transform import keyed, transform
 
 
 BASE_URL = "https://cerpp.eprocurement.gov.gr/khmdhs-opendata"
@@ -116,6 +116,7 @@ def prepare_source(
     contract_type: str | None = None,
     estimated_cost_from: int | None = None,
     estimated_cost_to: int | None = None,
+    notice_type_key: str | None = None,
 ) -> dict:
     output_dir.mkdir(parents=True, exist_ok=True)
     record_path = output_dir / f"{source}.ndjson"
@@ -137,6 +138,10 @@ def prepare_source(
                 estimated_cost_from=estimated_cost_from,
                 estimated_cost_to=estimated_cost_to,
             ):
+                # Optional: keep only one KHMDHS noticeType.key (e.g. "3" =
+                # Διακήρυξη), used to load only the notices the thesis Excel keeps.
+                if notice_type_key is not None and source == "notice" and keyed(raw.get("noticeType"))[0] != notice_type_key:
+                    continue
                 try:
                     compact = transform(source, raw)
                 except (TypeError, ValueError) as exc:
@@ -178,6 +183,7 @@ def main() -> None:
     parser.add_argument("--contract-type")
     parser.add_argument("--estimated-cost-from", type=int)
     parser.add_argument("--estimated-cost-to", type=int)
+    parser.add_argument("--notice-type-key", help="Keep only notices with this noticeType.key (notice source only)")
     parser.add_argument("--output-dir", type=Path, default=Path("staging/compact"))
     args = parser.parse_args()
 
@@ -193,6 +199,7 @@ def main() -> None:
             args.contract_type,
             args.estimated_cost_from,
             args.estimated_cost_to,
+            args.notice_type_key,
         )
         for source in sources
     }
