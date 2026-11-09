@@ -174,6 +174,11 @@ export default function Home() {
   // otherwise wipe free-mode watchlist picks (they're not persisted anywhere
   // else) exactly like a page refresh, just triggered by a tab click instead.
   const [alertsWatchlist, setAlertsWatchlist] = useState<WatchlistItem[]>([]);
+  // Επισκόπηση is scoped to the CPVs the signed-in profile watches; the
+  // visitor can switch to the whole market. watchlistReady avoids a first
+  // whole-market request while the watchlist is still being fetched.
+  const [overviewScope, setOverviewScope] = useState<"mine" | "all">("mine");
+  const [watchlistReady, setWatchlistReady] = useState(false);
   const [alertsNutsFilter, setAlertsNutsFilter] = useState<NutsFilterItem[]>([]);
   // Same reasoning for Αγορά & Ανταγωνισμός's own local state (drill-down
   // selection, contractor search box, "load more" count) - MarketPanel
@@ -225,6 +230,7 @@ export default function Home() {
     if (!team.code) {
       setAlertsWatchlist([]); setAlertsNutsFilter([]); setRecentAlertCount(0);
       setSubmittedCount(0); setInterestedCount(0); setProfileRecipients([]);
+      setWatchlistReady(false);
       return;
     }
     const code = team.code;
@@ -234,13 +240,14 @@ export default function Home() {
       .then((payload) => {
         setAlertsWatchlist(payload.watchlist ?? []);
         setAlertsNutsFilter(payload.nutsFilter ?? []);
+        setWatchlistReady(true);
         const sevenDaysAgo = Date.now() - 7 * 86400000;
         const count = (payload.alerts ?? []).filter((item: { hasAward: boolean; publicationDate: string | null }) =>
           !item.hasAward && item.publicationDate && new Date(item.publicationDate).getTime() >= sevenDaysAgo,
         ).length;
         setRecentAlertCount(count);
       })
-      .catch(() => {});
+      .catch(() => setWatchlistReady(true));
     // A single real tender is often published as BOTH a Διακήρυξη and a
     // Προκήρυξη (two separate ΑΔΑΜ, same authority+budget) - the tracked
     // list intentionally shows both (nothing gets hidden there), but a raw
@@ -390,12 +397,24 @@ export default function Home() {
       });
   }, [query, authority, contractor, cpv, year, contractType, documentType, hideDirectAwards]);
 
+  // CPV codes of the signed-in profile's watchlist, applied to the Επισκόπηση
+  // only while "Τα CPV μου" is selected. With an empty watchlist there is
+  // nothing to scope by, so the whole market is shown. scopeWaiting holds the
+  // requests back until the watchlist has loaded.
+  const scopeCodes = useMemo(
+    () => page === "overview" && overviewScope === "mine" && team.code ? alertsWatchlist.map((item) => item.cpv_code) : [],
+    [page, overviewScope, team.code, alertsWatchlist],
+  );
+  const scopeWaiting = page === "overview" && overviewScope === "mine" && Boolean(team.code) && !watchlistReady;
+
   const loadDashboard = useCallback(() => {
+    if (scopeWaiting) return;
     const requestId = ++latestDashboardRequest.current;
     const params = new URLSearchParams();
     if (authority.trim() && authority !== "Όλες") params.set("authority", authority.trim());
     contractor.forEach((item) => params.append("contractor", item));
     cpv.forEach((item) => params.append("cpv", item));
+    scopeCodes.forEach((item) => params.append("watchCpv", item));
     if (year !== "Όλα") params.set("year", year);
     contractType.forEach((item) => params.append("contractType", item));
     fetch(`/api/dashboard?${params.toString()}`)
@@ -413,14 +432,16 @@ export default function Home() {
         setDashboard(emptyDashboard);
         setDashboardError("Πολύ ευρύ φίλτρο για να υπολογιστεί - πρόσθεσε έτος ή άλλο φίλτρο για να στενέψει.");
       });
-  }, [authority, contractor, cpv, year, contractType]);
+  }, [authority, contractor, cpv, year, contractType, scopeCodes, scopeWaiting]);
 
   const loadMarketOverview = useCallback(() => {
+    if (scopeWaiting) return;
     const requestId = ++latestMarketOverviewRequest.current;
     const params = new URLSearchParams();
     if (authority.trim() && authority !== "Όλες") params.set("authority", authority.trim());
     contractor.forEach((item) => params.append("contractor", item));
     cpv.forEach((item) => params.append("cpv", item));
+    scopeCodes.forEach((item) => params.append("watchCpv", item));
     if (year !== "Όλα") params.set("year", year);
     contractType.forEach((item) => params.append("contractType", item));
     setMarketOverviewState("loading");
@@ -436,7 +457,7 @@ export default function Home() {
         setMarketOverview(null);
         setMarketOverviewState("error");
       });
-  }, [authority, contractor, cpv, year, contractType]);
+  }, [authority, contractor, cpv, year, contractType, scopeCodes, scopeWaiting]);
 
   // Only the Επισκόπηση shows these numbers, so they're fetched there only
   // (and again whenever its filters change).
@@ -575,6 +596,22 @@ export default function Home() {
           {page === "overview" && dashboardError && <div className="dataBanner error">{dashboardError}</div>}
 
           {page === "overview" && <>
+            {team.code && <div className="overviewScope">
+              <div className="overviewScopeToggle" role="group" aria-label="Εύρος Επισκόπησης">
+                <button type="button" className={overviewScope === "mine" ? "active" : ""} onClick={() => setOverviewScope("mine")}>Τα CPV μου{watchlistReady ? ` (${alertsWatchlist.length})` : ""}</button>
+                <button type="button" className={overviewScope === "all" ? "active" : ""} onClick={() => setOverviewScope("all")}>Όλη η αγορά</button>
+              </div>
+              {overviewScope === "mine" && watchlistReady && alertsWatchlist.length === 0 && <p className="overviewScopeNote">Δεν υπάρχουν CPV στην Παρακολούθηση, οπότε εμφανίζεται όλη η αγορά. <button type="button" className="profileLink" onClick={() => setPage("alerts")}>Πρόσθεσε CPV →</button></p>}
+            </div>}
+            <div className={team.code ? "overviewGate" : "overviewGate locked"}>
+            {!team.code && <div className="overviewLockCard">
+              <strong>Η Επισκόπηση δείχνει δεδομένα για τα CPV του προφίλ σου</strong>
+              <p>Συνδέσου ή εγγράψου για να τη δεις.</p>
+              <div className="overviewLockActions">
+                <button type="button" className="teamCodeToggle" onClick={() => team.setShowCodeBox(true)}>Σύνδεση</button>
+                <button type="button" className="teamCodeSignup" onClick={() => team.setShowSignupBox(true)}>Εγγραφή</button>
+              </div>
+            </div>}
             <div className="overviewWrap">
             <section className="overviewSection"><h2 className="overviewHeading">Διαγωνισμοί</h2>
             <div className="metrics">
@@ -592,6 +629,7 @@ export default function Home() {
             </section>
             <section className="overviewSection"><h2 className="overviewHeading">Αγορά</h2><OverviewMarket data={marketOverview} state={marketOverviewState} /></section>
             <section className="overviewSection"><h2 className="overviewHeading">Ανταγωνισμός</h2><OverviewCompetition data={marketOverview} state={marketOverviewState} /></section>
+            </div>
             </div>
           </>}
 
@@ -852,13 +890,14 @@ function OverviewCompetition({ data, state }: { data: MarketOverview | null; sta
       <Metric label="Με έκπτωση πάνω από 0%" value={percentText(discount.positiveShare)} tone="lilac" />
       <Metric label="Μερίδιο 5 κορυφαίων" value={data.concentrationTop5 === null ? "—" : percentText(data.concentrationTop5 * 100)} tone="sand" />
     </div>
-    {data.bigFour && <article className="panel overviewBigFour"><PanelHeader title="Big 4" caption="Αναθέσεις, συμβάσεις, αξία και μέση έκπτωση για τα τρέχοντα φίλτρα" />
-      <div className="tableScroll"><table><thead><tr><th>Εταιρεία</th><th>Αναθέσεις</th><th>Συμβάσεις</th><th>Αξία</th><th>Μέση έκπτωση</th></tr></thead>
-        <tbody>{data.bigFour.map((item) => <tr key={item.name}><td><b>{item.name}</b></td><td>{number.format(item.awards)}</td><td>{number.format(item.contracts)}</td><td>{euro.format(item.value)}</td><td>{percentText(item.discount)}</td></tr>)}</tbody></table></div></article>}
-    {data.consulting && <article className="panel overviewBigFour"><PanelHeader title="Μερίδιο Big 4 στις συμβουλευτικές" caption={`Διαγωνισμοί συμβουλευτικών υπηρεσιών (CPV 794… επιχειρηματικές και διοικητικές συμβουλές, 7921… λογιστικές και ελεγκτικές υπηρεσίες): ${number.format(data.consulting.tenders)} διαγωνισμοί, ${euro.format(data.consulting.value)}`} />
-      <div className="tableScroll"><table><thead><tr><th>Εταιρεία</th><th>Αναθέσεις / συμβάσεις</th><th>Αξία</th><th>Μερίδιο αξίας</th></tr></thead>
-        <tbody>{data.consulting.firms.map((item) => <tr key={item.name}><td><b>{item.name}</b></td><td>{number.format(item.docs)}</td><td>{euro.format(item.value)}</td><td>{data.consulting && data.consulting.value > 0 ? percentText(item.value / data.consulting.value * 100) : "—"}</td></tr>)}
-          <tr><td><b>Σύνολο Big 4</b></td><td><b>{number.format(data.consulting.big4Docs)}</b></td><td><b>{euro.format(data.consulting.big4Value)}</b></td><td><b>{data.consulting.value > 0 ? percentText(data.consulting.big4Value / data.consulting.value * 100) : "—"}</b></td></tr></tbody></table></div></article>}
+    {data.bigFour && <article className="panel overviewBigFour"><PanelHeader title="Big 4" caption="Αναθέσεις, συμβάσεις, αξία και μέση έκπτωση για τα τρέχοντα φίλτρα. Το μερίδιο αφορά μόνο διαγωνισμούς συμβουλευτικών υπηρεσιών (CPV 794… και 7921…)" />
+      <div className="tableScroll"><table><thead><tr><th>Εταιρεία</th><th>Αναθέσεις</th><th>Συμβάσεις</th><th>Αξία</th><th>Μέση έκπτωση</th><th>Μερίδιο στις συμβουλευτικές</th></tr></thead>
+        <tbody>{data.bigFour.map((item) => {
+          const consulting = data.consulting;
+          const firm = consulting?.firms.find((entry) => entry.name === item.name);
+          return <tr key={item.name}><td><b>{item.name}</b></td><td>{number.format(item.awards)}</td><td>{number.format(item.contracts)}</td><td>{euro.format(item.value)}</td><td>{percentText(item.discount)}</td><td>{consulting && firm && consulting.value > 0 ? percentText(firm.value / consulting.value * 100) : "—"}</td></tr>;
+        })}
+          {data.consulting && <tr><td><b>Σύνολο Big 4</b></td><td><b>{number.format(data.bigFour.reduce((sum, item) => sum + item.awards, 0))}</b></td><td><b>{number.format(data.bigFour.reduce((sum, item) => sum + item.contracts, 0))}</b></td><td><b>{euro.format(data.bigFour.reduce((sum, item) => sum + item.value, 0))}</b></td><td>—</td><td><b>{data.consulting.value > 0 ? percentText(data.consulting.big4Value / data.consulting.value * 100) : "—"}</b></td></tr>}</tbody></table></div></article>}
     {data.consulting && <article className="panel overviewBigFour"><PanelHeader title="Άλλες συμβουλευτικές" caption="Κορυφαίοι ανάδοχοι σε διαγωνισμούς συμβουλευτικών υπηρεσιών, εκτός Big 4, κατά σύνολο αναθέσεων και συμβάσεων" />
       <div className="tableScroll"><table><thead><tr><th>Ανάδοχος</th><th>Σύνολο</th><th>Αναθέσεις</th><th>Συμβάσεις</th><th>Αξία</th><th>Μέση έκπτωση</th></tr></thead>
         <tbody>{data.consulting.others.map((item) => <tr key={item.name}><td>{item.name}</td><td><b>{number.format(item.awards + item.contracts)}</b></td><td>{number.format(item.awards)}</td><td>{number.format(item.contracts)}</td><td>{euro.format(item.value)}</td><td>{percentText(item.discount)}</td></tr>)}</tbody></table>
