@@ -137,6 +137,7 @@ type MarketOverview = {
   concentrationTop5: number | null;
   discount: { count: number; average: number | null; median: number | null; positiveShare: number | null };
   discountByType: { type: string | null; count: number; average: number }[];
+  bigFour?: { name: string; awards: number; contracts: number; value: number; discount: number | null; discountCount: number }[];
 };
 
 export default function Home() {
@@ -562,7 +563,7 @@ export default function Home() {
         <section className="content">
           <div className="pageTitle">
             <div><p className="eyebrow">PROCUREMENT INTELLIGENCE</p><h1>{page === "overview" ? "Επισκόπηση" : page === "tenders" ? "Διαγωνισμοί" : page === "market" ? "Αγορά & Ανταγωνισμός" : page === "profile" ? "Προφίλ" : "Παρακολούθηση"}</h1></div>
-            {(page === "overview" || page === "tenders") && <label className="search"><span>⌕</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Αναζήτηση με ΑΔΑΜ ή τίτλο…" /></label>}
+            {page === "tenders" && <label className="search"><span>⌕</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Αναζήτηση με ΑΔΑΜ ή τίτλο…" /></label>}
           </div>
           {loading && tenders.length === 0 && <div className="dataBanner">Φόρτωση πραγματικών δεδομένων από Supabase…</div>}
           {dataError && <div className="dataBanner error">{dataError} · εμφανίζεται προσωρινό δείγμα.</div>}
@@ -846,6 +847,9 @@ function OverviewCompetition({ data, state }: { data: MarketOverview | null; sta
       <Metric label="Με έκπτωση πάνω από 0%" value={percentText(discount.positiveShare)} tone="lilac" />
       <Metric label="Μερίδιο 5 κορυφαίων" value={data.concentrationTop5 === null ? "—" : percentText(data.concentrationTop5 * 100)} tone="sand" />
     </div>
+    {data.bigFour && <article className="panel overviewBigFour"><PanelHeader title="Big 4" caption="Αναθέσεις, συμβάσεις, αξία και μέση έκπτωση για τα τρέχοντα φίλτρα" />
+      <div className="tableScroll"><table><thead><tr><th>Εταιρεία</th><th>Αναθέσεις</th><th>Συμβάσεις</th><th>Αξία</th><th>Μέση έκπτωση</th><th>Διαγωνισμοί με έκπτωση</th></tr></thead>
+        <tbody>{data.bigFour.map((item) => <tr key={item.name}><td><b>{item.name}</b></td><td>{number.format(item.awards)}</td><td>{number.format(item.contracts)}</td><td>{euro.format(item.value)}</td><td>{percentText(item.discount)}</td><td>{number.format(item.discountCount)}</td></tr>)}</tbody></table></div></article>}
     <div className="overviewTables">
       <article className="panel"><PanelHeader title="Έκπτωση ανά τύπο σύμβασης" caption="Μέσος όρος όπου η σύγκριση με τον Π/Υ είναι καθαρή" />
         <div className="tableScroll"><table><thead><tr><th>Τύπος σύμβασης</th><th>Διαγωνισμοί</th><th>Μέση έκπτωση</th></tr></thead>
