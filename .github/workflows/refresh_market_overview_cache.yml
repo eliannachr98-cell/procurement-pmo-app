@@ -1,0 +1,45 @@
+name: Refresh market overview cache
+
+# Recomputes public.market_overview_cache (the Αγορά / Ανταγωνισμός blocks of the
+# Overview for "all years" and each year). It is too heavy for the Supabase SQL
+# editor (upstream timeout) but runs fine here with the statement timeout off.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: market-overview-cache
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: pip install "psycopg[binary]>=3.2,<4"
+      - name: Refresh the cache
+        env:
+          DATABASE_URL: ${{ secrets.COMPACT_DATABASE_URL }}
+          EXPECTED_DB_REF: gunzsfttzijoxteppskb
+        shell: python
+        run: |
+          import os, time
+          import psycopg
+
+          url = os.environ["DATABASE_URL"]
+          if os.environ["EXPECTED_DB_REF"] not in url:
+              raise SystemExit("DATABASE_URL does not point at the expected Supabase project")
+          with psycopg.connect(url, prepare_threshold=None, autocommit=True) as connection, connection.cursor() as cursor:
+              cursor.execute("set statement_timeout = 0")
+              started = time.time()
+              cursor.execute("select public.refresh_market_overview_cache()")
+              print(f"refreshed in {time.time() - started:.0f}s")
+              cursor.execute("select cache_key, refreshed_at from public.market_overview_cache order by cache_key")
+              for key, refreshed_at in cursor.fetchall():
+                  print(key, refreshed_at)
