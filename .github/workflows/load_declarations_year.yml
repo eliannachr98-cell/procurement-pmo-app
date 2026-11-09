@@ -21,6 +21,11 @@ on:
         required: true
         type: string
         default: "2024"
+      start:
+        description: Optional first day (YYYY-MM-DD) to resume from, e.g. after a stuck window
+        required: false
+        type: string
+        default: ""
 
 permissions:
   contents: read
@@ -39,6 +44,7 @@ jobs:
         env:
           MODE: ${{ inputs.mode }}
           YEAR: ${{ inputs.year }}
+          START: ${{ inputs.start }}
         shell: python
         run: |
           import json, os
@@ -49,7 +55,8 @@ jobs:
               windows = [{"date_from": f"{year}-01-01", "date_to": f"{year}-01-07", "max_pages": 1}]
           else:
               windows = []
-              current, end = date(year, 1, 1), min(date(year, 12, 31), date.today())
+              first = date.fromisoformat(os.environ["START"]) if os.environ.get("START") else date(year, 1, 1)
+              current, end = first, min(date(year, 12, 31), date.today())
               while current <= end:
                   window_end = min(current + timedelta(days=6), end)
                   windows.append({"date_from": current.isoformat(), "date_to": window_end.isoformat(), "max_pages": 0})
