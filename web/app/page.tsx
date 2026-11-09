@@ -130,6 +130,8 @@ type MarketOverview = {
   awards: number;
   contracts: number;
   value: number;
+  awardsValue?: number;
+  contractsValue?: number;
   topContractors: { name: string; awards: number; contracts: number; total: number; value: number }[];
   topAuthorities: { authority: string; tenders: number; value: number }[];
   concentrationTop5: number | null;
@@ -815,9 +817,9 @@ function OverviewMarket({ data, state }: { data: MarketOverview | null; state: "
   return <>
     <div className="metrics">
       <Metric label="Ανάδοχοι" value={number.format(data.contractors)} tone="sky" />
-      <Metric label="Αναθέσεις" value={number.format(data.awards)} tone="mint" sub="χωρίς σύμβαση ακόμα" />
-      <Metric label="Συμβάσεις" value={number.format(data.contracts)} tone="lilac" />
-      <Metric label="Συνολική αξία" value={euro.format(data.value)} tone="sand" sub={`${number.format(data.tendersWithAwards)} διαγωνισμοί με ανάθεση`} />
+      <Metric label="Αναθέσεις" value={number.format(data.awards)} tone="mint" sub={data.awardsValue === undefined ? undefined : `Αξία: ${euro.format(data.awardsValue)}`} />
+      <Metric label="Συμβάσεις" value={number.format(data.contracts)} tone="lilac" sub={data.contractsValue === undefined ? undefined : `Αξία: ${euro.format(data.contractsValue)}`} />
+      <Metric label="Συνολική αξία" value={euro.format(data.value)} tone="sand" />
     </div>
     <div className="overviewTables">
       <article className="panel"><PanelHeader title="Κορυφαίοι ανάδοχοι" caption="Κατά σύνολο αναθέσεων και συμβάσεων" />
@@ -839,10 +841,10 @@ function OverviewCompetition({ data, state }: { data: MarketOverview | null; sta
   const discount = data.discount;
   return <>
     <div className="metrics">
-      <Metric label="Μέση έκπτωση" value={percentText(discount.average)} tone="sky" sub={`από ${number.format(discount.count)} διαγωνισμούς`} />
+      <Metric label="Μέση έκπτωση" value={percentText(discount.average)} tone="sky" />
       <Metric label="Διάμεση έκπτωση" value={percentText(discount.median)} tone="mint" />
       <Metric label="Με έκπτωση πάνω από 0%" value={percentText(discount.positiveShare)} tone="lilac" />
-      <Metric label="Μερίδιο 5 κορυφαίων" value={data.concentrationTop5 === null ? "—" : percentText(data.concentrationTop5 * 100)} tone="sand" sub="της αξίας ανάμεσα στους αναδόχους" />
+      <Metric label="Μερίδιο 5 κορυφαίων" value={data.concentrationTop5 === null ? "—" : percentText(data.concentrationTop5 * 100)} tone="sand" />
     </div>
     <div className="overviewTables">
       <article className="panel"><PanelHeader title="Έκπτωση ανά τύπο σύμβασης" caption="Μέσος όρος όπου η σύγκριση με τον Π/Υ είναι καθαρή" />
