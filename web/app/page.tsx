@@ -577,8 +577,10 @@ export default function Home() {
               <Metric label="Συμβασιοποιημένοι" value={number.format(statusCount("Συμβασιοποιημένος"))} sub={`Π/Υ: ${euro.format(statusBudget("Συμβασιοποιημένος"))}`} tone="sage" />
               <Metric label="Ακυρωμένοι" value={number.format(statusCount("Ακυρωμένος"))} sub={`Π/Υ: ${euro.format(statusBudget("Ακυρωμένος"))}`} tone="rose" />
             </div>
+            <div className="overviewSplit">
               <article className="panel monthlyTablePanel"><PanelHeader title="Διαγωνισμοί ανά μήνα" caption="Πλήθος, Π/Υ, CPV και αναθέτουσες αρχές ανά μήνα δημοσίευσης" onDownload={{ filename: "diagonismoi-ana-mina", title: "Διαγωνισμοί ανά μήνα", headers: ["Μήνας", "Διαγωνισμοί", "Συνολική αξία", "CPV", "Αναθέτουσες Αρχές"], rows: dashboard.monthly.map((item) => [`${item.month}-01`, item.count, item.budget, item.cpv, item.authorities]), columnTypes: ["month", "number", "currency", "number", "number"] }} /><MonthlyTable months={dashboard.monthly} /></article>
             <NutsMap counts={dashboard.nuts} />
+            </div>
             </section>
             <section className="overviewSection"><h2 className="overviewHeading">Αγορά</h2><OverviewMarket data={marketOverview} state={marketOverviewState} /></section>
             <section className="overviewSection"><h2 className="overviewHeading">Ανταγωνισμός</h2><OverviewCompetition data={marketOverview} state={marketOverviewState} /></section>
