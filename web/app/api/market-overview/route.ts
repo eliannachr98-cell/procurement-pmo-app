@@ -3,7 +3,6 @@ import {
   intersect,
   procurementAdamsForContractor,
   procurementAdamsForCpv,
-  procurementAdamsForCpvCodes,
   supabaseGet,
   supabaseRpc,
   union,
@@ -36,14 +35,12 @@ export async function GET(request: Request) {
       for (const item of cpvs) groups.push(await procurementAdamsForCpv(item));
       matchingAdams = intersect(matchingAdams, union(groups.map((item) => item.procurementAdams)));
     }
-    const watchCpvs = list("watchCpv");
-    if (watchCpvs.length) matchingAdams = intersect(matchingAdams, await procurementAdamsForCpvCodes(watchCpvs));
     if (matchingAdams?.length === 0) return NextResponse.json({ empty: true });
 
     // A year (or no filter at all) on its own is far too heavy to compute per
     // request, so it's precomputed into market_overview_cache (see
     // sql/market_overview.sql); anything narrower is computed live.
-    const cacheOnly = !authority && !contractors.length && !cpvs.length && !watchCpvs.length && !contractTypes.length;
+    const cacheOnly = !authority && !contractors.length && !cpvs.length && !contractTypes.length;
     if (cacheOnly) {
       const key = /^\d{4}$/.test(year) ? year : "all";
       const rows = await supabaseGet<{ payload: unknown }[]>(`market_overview_cache?select=payload&cache_key=eq.${key}`);

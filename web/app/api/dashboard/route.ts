@@ -3,7 +3,6 @@ import {
   intersect,
   procurementAdamsForContractor,
   procurementAdamsForCpv,
-  procurementAdamsForCpvCodes,
   supabaseRpc,
   union,
 } from "@/lib/matching";
@@ -54,9 +53,6 @@ export async function GET(request: Request) {
       for (const item of cpvs) groups.push(await procurementAdamsForCpv(item));
       matchingAdams = intersect(matchingAdams, union(groups.map((item) => item.procurementAdams)));
     }
-
-    const watchCpvs = searchParams.getAll("watchCpv").flatMap((value) => value.split(",")).map((value) => value.trim()).filter(Boolean);
-    if (watchCpvs.length) matchingAdams = intersect(matchingAdams, await procurementAdamsForCpvCodes(watchCpvs));
 
     if (matchingAdams?.length === 0) {
       return NextResponse.json({ total: 0, status: [], cpv: [], cpvTotal: 0, nuts: [], monthly: [] } satisfies Breakdown);
