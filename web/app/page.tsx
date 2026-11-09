@@ -312,10 +312,6 @@ export default function Home() {
   // effect below, only an actual filter change does.
   const pageRef = useRef(page);
   useEffect(() => { pageRef.current = page; }, [page]);
-  const statusChartRef = useRef<HTMLDivElement>(null);
-  const cpvChartRef = useRef<HTMLDivElement>(null);
-  const monthlyCountChartRef = useRef<HTMLDivElement>(null);
-  const monthlyBudgetChartRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     fetch("/api/last-sync")
@@ -530,17 +526,7 @@ export default function Home() {
               <Metric label="Συμβασιοποιημένοι" value={number.format(statusCount("Συμβασιοποιημένος"))} sub={`Π/Υ: ${euro.format(statusBudget("Συμβασιοποιημένος"))}`} tone="sage" />
               <Metric label="Ακυρωμένοι" value={number.format(statusCount("Ακυρωμένος"))} sub={`Π/Υ: ${euro.format(statusBudget("Ακυρωμένος"))}`} tone="rose" />
             </div>
-            <div className="chartGrid">
-              <article className="panel"><PanelHeader title="Διαγωνισμοί ανά στάδιο" caption={`Σύνολο ${number.format(dashboard.total)} διαγωνισμών`} chartRef={statusChartRef} onDownload={{ filename: "diagonismoi-ana-stadio", title: "Διαγωνισμοί ανά στάδιο", headers: ["Κατάσταση", "Πλήθος", "Προϋπολογισμός"], rows: dashboard.status.map((item) => [item.status, item.count, item.budget]), columnTypes: ["text", "number", "currency"] }} /><div ref={statusChartRef}><StatusBars counts={dashboard.status} /></div></article>
-              <article className="panel"><PanelHeader title="CPV Distribution" caption="Κορυφαίες κατηγορίες (σύνολο βάσης)" chartRef={cpvChartRef} onDownload={{ filename: "cpv-distribution", title: "CPV Distribution", headers: ["CPV", "Περιγραφή", "Πλήθος"], rows: dashboard.cpv.map((item) => [item.cpv_code, item.cpv_description ?? "", item.count]), columnTypes: ["text", "text", "number"] }} /><div ref={cpvChartRef}><CpvDonut counts={dashboard.cpv} total={dashboard.total} cpvTotal={dashboard.cpvTotal} /></div></article>
-            </div>
-            <div className="monthlyGrid">
               <article className="panel monthlyTablePanel"><PanelHeader title="Διαγωνισμοί ανά μήνα" caption="Πλήθος, Π/Υ, CPV και αναθέτουσες αρχές ανά μήνα δημοσίευσης" onDownload={{ filename: "diagonismoi-ana-mina", title: "Διαγωνισμοί ανά μήνα", headers: ["Μήνας", "Διαγωνισμοί", "Συνολική αξία", "CPV", "Αναθέτουσες Αρχές"], rows: dashboard.monthly.map((item) => [`${item.month}-01`, item.count, item.budget, item.cpv, item.authorities]), columnTypes: ["month", "number", "currency", "number", "number"] }} /><MonthlyTable months={dashboard.monthly} /></article>
-              <div className="monthlyChartsCol">
-                <article className="panel"><PanelHeader title="Πλήθος ανά μήνα" caption="Αριθμός διαγωνισμών ανά μήνα δημοσίευσης" chartRef={monthlyCountChartRef} onDownload={{ filename: "plithos-ana-mina", title: "Πλήθος ανά μήνα", headers: ["Μήνας", "Διαγωνισμοί"], rows: dashboard.monthly.map((item) => [`${item.month}-01`, item.count]), columnTypes: ["month", "number"] }} /><div ref={monthlyCountChartRef}><MonthlyBarChart months={dashboard.monthly} metric="count" formatValue={(value) => number.format(value)} unitLabel="διαγωνισμοί" /></div></article>
-                <article className="panel"><PanelHeader title="Π/Υ ανά μήνα" caption="Συνολικός προϋπολογισμός ανά μήνα δημοσίευσης" chartRef={monthlyBudgetChartRef} onDownload={{ filename: "proypologismos-ana-mina", title: "Π/Υ ανά μήνα", headers: ["Μήνας", "Προϋπολογισμός"], rows: dashboard.monthly.map((item) => [`${item.month}-01`, item.budget]), columnTypes: ["month", "currency"] }} /><div ref={monthlyBudgetChartRef}><MonthlyBarChart months={dashboard.monthly} metric="budget" formatValue={(value) => euro.format(value)} unitLabel="" /></div></article>
-              </div>
-            </div>
             <NutsMap counts={dashboard.nuts} />
             <TenderTable rows={[...filtered].sort((a,b) => (b.publicationDate || "").localeCompare(a.publicationDate || "")).slice(0,10)} title="Πρόσφατοι διαγωνισμοί" caption="Οι 10 πιο πρόσφατες εγγραφές" onViewAll={() => setPage("tenders")} />
           </>}
@@ -748,58 +734,6 @@ function PanelHeader({ title, caption, onDownload, chartRef }: { title: string; 
   </header>;
 }
 
-function StatusBars({ counts }: { counts: { status: string; count: number }[] }) {
-  const statuses: Status[] = ["Ενεργός", "Αξιολόγηση", "Ανατεθειμένος", "Συμβασιοποιημένος", "Ακυρωμένος"];
-  const byStatus = new Map(counts.map((item) => [item.status, item.count]));
-  const maximum = Math.max(1, ...statuses.map((item) => byStatus.get(item) ?? 0));
-  // Ανατεθειμένος/Αξιολόγηση dwarf Συμβασιοποιημένος/Ακυρωμένος by two orders of
-  // magnitude, so a plain linear width made the smaller categories an
-  // invisible sliver even though their real count is non-zero - give every
-  // non-zero bar a floor so it stays visible, the count text is the exact figure.
-  return <div className="bars">{statuses.map((item) => { const count = byStatus.get(item) ?? 0; const width = count === 0 ? 0 : Math.max((count / maximum) * 100, 3); return <div className="barRow" key={item}><span>{item}</span><div><i className={statusTone[item]} style={{ width: `${width}%` }} /></div><strong>{number.format(count)}</strong></div>; })}</div>;
-}
-
-function CpvDonut({ counts, total, cpvTotal }: { counts: { cpv_code: string; cpv_description: string | null; count: number }[]; total: number; cpvTotal: number }) {
-  const top = counts.slice(0, 3);
-  const topSum = top.reduce((sum, item) => sum + item.count, 0);
-  const denominator = Math.max(total, 1);
-  // "Λοιπά" is every CPV code outside the top 3, not just ranks 4-12 of the
-  // (already top-12-only) breakdown array - otherwise the slice understated
-  // how fragmented the real distribution is across thousands of codes.
-  const otherShare = Math.max(0, denominator - topSum) / denominator;
-  const colors = ["#0d4565", "#168c8c", "#dca54a"];
-  // SVG stroke-dasharray rings instead of a CSS conic-gradient background -
-  // html2canvas (used to rasterize this chart into the Excel/PDF export)
-  // doesn't render conic-gradient correctly, leaving the exported version
-  // blank. Plain SVG circles capture correctly on both paths.
-  const size = 148;
-  const strokeWidth = 33;
-  const radius = (size - strokeWidth) / 2;
-  const circumference = 2 * Math.PI * radius;
-  const segments = [
-    ...top.map((item, index) => ({ pct: (item.count / denominator) * 100, color: colors[index] })),
-    { pct: otherShare * 100, color: "#d6e2e7" },
-  ].filter((segment) => segment.pct > 0);
-  let cursor = 0;
-  return <div className="donutWrap"><div className="donut">
-    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
-      <g transform={`rotate(-90 ${size / 2} ${size / 2})`}>
-        {segments.map((segment, index) => {
-          const dash = (segment.pct / 100) * circumference;
-          const offset = -((cursor / 100) * circumference);
-          cursor += segment.pct;
-          return <circle key={index} cx={size / 2} cy={size / 2} r={radius} fill="none" stroke={segment.color} strokeWidth={strokeWidth} strokeDasharray={`${dash} ${circumference - dash}`} strokeDashoffset={offset} />;
-        })}
-      </g>
-    </svg>
-    <span><strong>{number.format(cpvTotal)}</strong><small>CPV</small></span>
-  </div><ul>{top.map((item, index) => <li key={item.cpv_code} title={item.cpv_description ?? undefined}><i className={["navy", "teal", "gold"][index]} /><span><b>{item.cpv_code}</b><small>{item.cpv_description || "Χωρίς περιγραφή"}</small></span><b>{Math.round(item.count / denominator * 100)}%</b></li>)}{otherShare > 0 && <li><i className="pale" />Λοιπά ({number.format(Math.max(0, cpvTotal - top.length))} κωδικοί) <b>{Math.round(otherShare * 100)}%</b></li>}</ul></div>;
-}
-
-// Generic small composition donut for Προφίλ (CPV/περιοχές/προβολές/
-// υποβεβλημένα κ.λπ.) - same SVG stroke-dasharray technique as CpvDonut,
-// just driven by an arbitrary flat list of labeled counts instead of a
-// top-3-plus-other breakdown.
 const MONTH_NAMES = ["Ιαν","Φεβ","Μαρ","Απρ","Μαϊ","Ιουν","Ιουλ","Αυγ","Σεπ","Οκτ","Νοε","Δεκ"];
 
 function monthLabel(ym: string) {
@@ -830,24 +764,6 @@ function MonthlyTable({ months }: { months: { month: string; count: number; budg
       <tr className="tableTotal"><td>Σύνολο</td><td>{number.format(totals.count)}</td><td>{euro.format(totals.budget)}</td><td>—</td><td>—</td></tr>
     </tbody>
   </table></div>;
-}
-
-function MonthlyBarChart({ months, metric, formatValue, unitLabel }: {
-  months: { month: string; count: number; budget: number }[];
-  metric: "count" | "budget";
-  formatValue: (value: number) => string;
-  unitLabel: string;
-}) {
-  if (!months.length) return <p className="noRows">Δεν υπάρχουν δεδομένα για τα τρέχοντα φίλτρα.</p>;
-  const maximum = Math.max(1, ...months.map((item) => item[metric]));
-  return <div className="monthlyBars">
-    {months.map((item) => <div className="monthlyBarCol" key={item.month}>
-      <div className="monthlyBarTrack">
-        <div className="monthlyBar" style={{ height: `${Math.max((item[metric] / maximum) * 100, 2)}%` }} title={`${monthLabel(item.month)}: ${formatValue(item[metric])} ${unitLabel}`} />
-      </div>
-      <span className="monthlyBarLabel">{shortMonthLabel(item.month)}</span>
-    </div>)}
-  </div>;
 }
 
 function TenderTable({ rows, expanded = false, title = "Λίστα διαγωνισμών", caption, onViewAll }: { rows: Tender[]; expanded?: boolean; title?: string; caption?: string; onViewAll?: () => void }) {
