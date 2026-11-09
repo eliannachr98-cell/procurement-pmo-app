@@ -138,7 +138,6 @@ type MarketOverview = {
   discount: { count: number; average: number | null; median: number | null; positiveShare: number | null };
   discountByType: { type: string | null; count: number; average: number }[];
   bigFour?: { name: string; awards: number; contracts: number; value: number; discount: number | null; discountCount: number }[];
-  bigFourCpv?: { name: string; cpvs: { code: string; description: string | null; tenders: number; value: number }[] }[];
   consulting?: {
     tenders: number; docs: number; value: number; big4Docs: number; big4Value: number;
     firms: { name: string; docs: number; value: number }[];
@@ -856,19 +855,14 @@ function OverviewCompetition({ data, state }: { data: MarketOverview | null; sta
     {data.bigFour && <article className="panel overviewBigFour"><PanelHeader title="Big 4" caption="Αναθέσεις, συμβάσεις, αξία και μέση έκπτωση για τα τρέχοντα φίλτρα" />
       <div className="tableScroll"><table><thead><tr><th>Εταιρεία</th><th>Αναθέσεις</th><th>Συμβάσεις</th><th>Αξία</th><th>Μέση έκπτωση</th></tr></thead>
         <tbody>{data.bigFour.map((item) => <tr key={item.name}><td><b>{item.name}</b></td><td>{number.format(item.awards)}</td><td>{number.format(item.contracts)}</td><td>{euro.format(item.value)}</td><td>{percentText(item.discount)}</td></tr>)}</tbody></table></div></article>}
-    {data.consulting && <article className="panel overviewBigFour"><PanelHeader title="Μερίδιο Big 4 στις συμβουλευτικές" caption={`Διαγωνισμοί με CPV 79 (επιχειρηματικές και διοικητικές υπηρεσίες): ${number.format(data.consulting.tenders)} διαγωνισμοί, ${euro.format(data.consulting.value)}`} />
+    {data.consulting && <article className="panel overviewBigFour"><PanelHeader title="Μερίδιο Big 4 στις συμβουλευτικές" caption={`Διαγωνισμοί συμβουλευτικών υπηρεσιών (CPV 794… επιχειρηματικές και διοικητικές συμβουλές, 7921… λογιστικές και ελεγκτικές υπηρεσίες): ${number.format(data.consulting.tenders)} διαγωνισμοί, ${euro.format(data.consulting.value)}`} />
       <div className="tableScroll"><table><thead><tr><th>Εταιρεία</th><th>Αναθέσεις / συμβάσεις</th><th>Αξία</th><th>Μερίδιο αξίας</th></tr></thead>
         <tbody>{data.consulting.firms.map((item) => <tr key={item.name}><td><b>{item.name}</b></td><td>{number.format(item.docs)}</td><td>{euro.format(item.value)}</td><td>{data.consulting && data.consulting.value > 0 ? percentText(item.value / data.consulting.value * 100) : "—"}</td></tr>)}
           <tr><td><b>Σύνολο Big 4</b></td><td><b>{number.format(data.consulting.big4Docs)}</b></td><td><b>{euro.format(data.consulting.big4Value)}</b></td><td><b>{data.consulting.value > 0 ? percentText(data.consulting.big4Value / data.consulting.value * 100) : "—"}</b></td></tr></tbody></table></div></article>}
-    {data.consulting && <article className="panel overviewBigFour"><PanelHeader title="Άλλες συμβουλευτικές" caption="Κορυφαίοι ανάδοχοι σε διαγωνισμούς CPV 79, εκτός Big 4, κατά σύνολο αναθέσεων και συμβάσεων" />
+    {data.consulting && <article className="panel overviewBigFour"><PanelHeader title="Άλλες συμβουλευτικές" caption="Κορυφαίοι ανάδοχοι σε διαγωνισμούς συμβουλευτικών υπηρεσιών, εκτός Big 4, κατά σύνολο αναθέσεων και συμβάσεων" />
       <div className="tableScroll"><table><thead><tr><th>Ανάδοχος</th><th>Σύνολο</th><th>Αναθέσεις</th><th>Συμβάσεις</th><th>Αξία</th><th>Μέση έκπτωση</th></tr></thead>
         <tbody>{data.consulting.others.map((item) => <tr key={item.name}><td>{item.name}</td><td><b>{number.format(item.awards + item.contracts)}</b></td><td>{number.format(item.awards)}</td><td>{number.format(item.contracts)}</td><td>{euro.format(item.value)}</td><td>{percentText(item.discount)}</td></tr>)}</tbody></table>
-        {!data.consulting.others.length && <p className="noRows">Δεν υπάρχουν άλλοι ανάδοχοι σε CPV 79.</p>}</div></article>}
-    {data.bigFourCpv && <article className="panel overviewBigFour"><PanelHeader title="Τι κερδίζουν οι Big 4" caption="Τα 5 συχνότερα CPV των διαγωνισμών που κέρδισε κάθε εταιρεία (η αξία ενός διαγωνισμού με πολλά CPV μετράει σε καθένα)" />
-      <div className="tableScroll"><table><thead><tr><th>Εταιρεία</th><th>CPV</th><th>Διαγωνισμοί</th><th>Αξία</th></tr></thead>
-        <tbody>{data.bigFourCpv.flatMap((firm) => firm.cpvs.length
-          ? firm.cpvs.map((cpv, index) => <tr key={`${firm.name}-${cpv.code}`}>{index === 0 && <td rowSpan={firm.cpvs.length}><b>{firm.name}</b></td>}<td>{cpv.code}{cpv.description ? ` · ${cpv.description}` : ""}</td><td>{number.format(cpv.tenders)}</td><td>{euro.format(cpv.value)}</td></tr>)
-          : [<tr key={firm.name}><td><b>{firm.name}</b></td><td colSpan={3}>—</td></tr>])}</tbody></table></div></article>}
+        {!data.consulting.others.length && <p className="noRows">Δεν υπάρχουν άλλοι ανάδοχοι συμβουλευτικών υπηρεσιών.</p>}</div></article>}
   </>;
 }
 
