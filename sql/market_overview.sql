@@ -138,7 +138,7 @@ begin
       select distinct c.record_adam as n
       from public.record_cpvs_compact c
       join matched m on m.adam = c.record_adam
-      where c.record_type = 'procurement' and left(c.cpv_code, 2) = '79'
+      where c.record_type = 'procurement' and (left(c.cpv_code, 3) = '794' or left(c.cpv_code, 4) = '7921')
     ),
     cons_rows as (
       select ckey, max(contractor_name) as name, n, amt, min(kind) as kind, bool_or(firm is not null) as is_big4
@@ -156,15 +156,6 @@ begin
     top_cons as (
       select t.*, (select avg(d.dsc) * 100 from (select distinct r.n from cons_rows r where r.ckey = t.ckey) q join disc d on d.adam = q.n) as discount
       from (select * from cons_totals order by (awards + contracts) desc, value desc limit 10) t
-    ),
-    firm_cpv as (
-      select fr.firm, c.cpv_code, max(c.cpv_description) as descr, count(distinct fr.n) as tenders, sum(fr.amt) as value
-      from firm_rows fr
-      join public.record_cpvs_compact c on c.record_type = 'procurement' and c.record_adam = fr.n
-      group by fr.firm, c.cpv_code
-    ),
-    firm_cpv_top as (
-      select *, row_number() over (partition by firm order by tenders desc, value desc) as rn from firm_cpv
     ),
     big4 as (
       select f.firm,
@@ -199,7 +190,6 @@ begin
         'firms', (select coalesce(json_agg(json_build_object('name', b.name, 'docs', coalesce(s.docs, 0), 'value', coalesce(s.value, 0)) order by b.ord), '[]'::json) from (values ('PwC', 1), ('Deloitte', 2), ('EY', 3), ('KPMG', 4)) as b(name, ord) left join (select firm, count(*) as docs, sum(amt) as value from firm_rows where n in (select n from cons) group by firm) s on s.firm = b.name),
         'others', (select coalesce(json_agg(json_build_object('name', name, 'awards', awards, 'contracts', contracts, 'value', value, 'discount', discount) order by (awards + contracts) desc, value desc), '[]'::json) from top_cons)
       ),
-      'bigFourCpv', (select coalesce(json_agg(json_build_object('name', b.name, 'cpvs', (select coalesce(json_agg(json_build_object('code', t.cpv_code, 'description', t.descr, 'tenders', t.tenders, 'value', t.value) order by t.rn), '[]'::json) from firm_cpv_top t where t.firm = b.name and t.rn <= 5)) order by b.ord), '[]'::json) from (values ('PwC', 1), ('Deloitte', 2), ('EY', 3), ('KPMG', 4)) as b(name, ord)),
       'discountByType', (select coalesce(json_agg(json_build_object('type', contract_type, 'count', cnt, 'average', avg_dsc) order by cnt desc), '[]'::json) from (select contract_type, count(*) as cnt, avg(dsc) * 100 as avg_dsc from disc group by contract_type) t)
     )
   $q$, join_flags, array_to_string(conditions, ' and ')) into result;
