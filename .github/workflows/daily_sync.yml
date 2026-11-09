@@ -98,6 +98,43 @@ jobs:
           print('dashboard caches refreshed')
           "
 
+      # New notices have no quality flags yet: record their noticeType / award
+      # reference / cancelled flag from KHMDHS, then apply the thesis Excel
+      # rules (sql/quality_flags.sql) so the Αγορά / Ανταγωνισμός numbers
+      # count them correctly.
+      - name: Record notice types and recompute quality flags
+        env:
+          DATABASE_URL: ${{ secrets.COMPACT_DATABASE_URL }}
+          EXPECTED_DB_REF: gunzsfttzijoxteppskb
+        run: |
+          python -u load_notice_types.py --date-from "${{ steps.window.outputs.date_from }}" --date-to "${{ steps.window.outputs.date_to }}" --write --insert-missing
+          python - <<'PY'
+          import os
+          import psycopg
+
+          with psycopg.connect(os.environ['DATABASE_URL'], connect_timeout=30, prepare_threshold=None) as conn:
+              with conn.cursor() as cur:
+                  cur.execute("set statement_timeout = '900000'")
+                  cur.execute("select public.recompute_quality_flags(%s::date)", ("${{ steps.window.outputs.date_from }}",))
+                  print('quality flags recomputed:', cur.fetchone()[0])
+              conn.commit()
+          PY
+
+      - name: Refresh market overview cache
+        env:
+          DATABASE_URL: ${{ secrets.COMPACT_DATABASE_URL }}
+        run: |
+          python - <<'PY'
+          import os
+          import psycopg
+
+          with psycopg.connect(os.environ['DATABASE_URL'], connect_timeout=30, prepare_threshold=None, autocommit=True) as conn:
+              with conn.cursor() as cur:
+                  cur.execute("set statement_timeout = 0")
+                  cur.execute("select public.refresh_market_overview_cache()")
+          print('market overview cache refreshed')
+          PY
+
       - name: Save failed batch for diagnosis
         if: failure()
         uses: actions/upload-artifact@v4
