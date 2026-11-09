@@ -22,10 +22,9 @@ on:
         type: string
         default: "2024"
       start:
-        description: Optional first day (YYYY-MM-DD) to resume from, e.g. after a stuck window
+        description: "Optional first day (YYYY-MM-DD) to resume from"
         required: false
         type: string
-        default: ""
 
 permissions:
   contents: read
