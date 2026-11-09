@@ -122,12 +122,29 @@ type DashboardBreakdown = {
 };
 const emptyDashboard: DashboardBreakdown = { total: 0, status: [], cpv: [], cpvTotal: 0, nuts: [], monthly: [] };
 
+type MarketOverview = {
+  empty?: boolean;
+  tenders: number;
+  tendersWithAwards: number;
+  contractors: number;
+  awards: number;
+  contracts: number;
+  value: number;
+  topContractors: { name: string; awards: number; contracts: number; value: number }[];
+  topAuthorities: { authority: string; tenders: number; value: number }[];
+  concentrationTop5: number | null;
+  discount: { count: number; average: number | null; median: number | null; positiveShare: number | null };
+  discountByType: { type: string | null; count: number; average: number }[];
+};
+
 export default function Home() {
   const [tenders, setTenders] = useState<Tender[]>(fallbackTenders);
   const [awards, setAwards] = useState<Award[]>([]);
   const [contracts, setContracts] = useState<Contract[]>([]);
   const [dashboard, setDashboard] = useState<DashboardBreakdown>(emptyDashboard);
   const [dashboardError, setDashboardError] = useState("");
+  const [marketOverview, setMarketOverview] = useState<MarketOverview | null>(null);
+  const [marketOverviewState, setMarketOverviewState] = useState<"idle" | "loading" | "error">("idle");
   const [years, setYears] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [dataError, setDataError] = useState("");
@@ -307,6 +324,7 @@ export default function Home() {
   const [lastSync, setLastSync] = useState<string | null>(null);
   const latestRequest = useRef(0);
   const latestDashboardRequest = useRef(0);
+  const latestMarketOverviewRequest = useRef(0);
   // Ειδοποιήσεις has no filters and its own independent data - read via a
   // ref (not a dependency) so a plain tab switch never re-triggers the fetch
   // effect below, only an actual filter change does.
@@ -388,6 +406,37 @@ export default function Home() {
         setDashboardError("Πολύ ευρύ φίλτρο για να υπολογιστεί - πρόσθεσε έτος ή άλλο φίλτρο για να στενέψει.");
       });
   }, [authority, contractor, cpv, year, contractType]);
+
+  const loadMarketOverview = useCallback(() => {
+    const requestId = ++latestMarketOverviewRequest.current;
+    const params = new URLSearchParams();
+    if (authority.trim() && authority !== "Όλες") params.set("authority", authority.trim());
+    contractor.forEach((item) => params.append("contractor", item));
+    cpv.forEach((item) => params.append("cpv", item));
+    if (year !== "Όλα") params.set("year", year);
+    contractType.forEach((item) => params.append("contractType", item));
+    setMarketOverviewState("loading");
+    fetch(`/api/market-overview?${params.toString()}`)
+      .then((response) => response.ok ? response.json() : Promise.reject(new Error("market overview request failed")))
+      .then((payload) => {
+        if (requestId !== latestMarketOverviewRequest.current) return;
+        setMarketOverview(payload);
+        setMarketOverviewState("idle");
+      })
+      .catch(() => {
+        if (requestId !== latestMarketOverviewRequest.current) return;
+        setMarketOverview(null);
+        setMarketOverviewState("error");
+      });
+  }, [authority, contractor, cpv, year, contractType]);
+
+  // Only the Επισκόπηση shows these numbers, so they're fetched there only
+  // (and again whenever its filters change).
+  useEffect(() => {
+    if (page !== "overview") return;
+    const timer = window.setTimeout(loadMarketOverview, 500);
+    return () => window.clearTimeout(timer);
+  }, [page, loadMarketOverview]);
 
   useEffect(() => {
     // Αναθέτουσα Αρχή applies on every keystroke (no "pick an option" step
@@ -519,6 +568,7 @@ export default function Home() {
 
           {page === "overview" && <>
             <div className="overviewWrap">
+            <section className="overviewSection"><h2 className="overviewHeading">Διαγωνισμοί</h2>
             <div className="metrics">
               <Metric label="Διαγωνισμοί" value={number.format(dashboard.total)} sub={`Π/Υ: ${euro.format(totalBudget)}`} tone="sky" />
               <Metric label="Ενεργοί" value={number.format(statusCount("Ενεργός"))} sub={`Π/Υ: ${euro.format(statusBudget("Ενεργός"))}`} tone="mint" />
@@ -529,6 +579,9 @@ export default function Home() {
             </div>
               <article className="panel monthlyTablePanel"><PanelHeader title="Διαγωνισμοί ανά μήνα" caption="Πλήθος, Π/Υ, CPV και αναθέτουσες αρχές ανά μήνα δημοσίευσης" onDownload={{ filename: "diagonismoi-ana-mina", title: "Διαγωνισμοί ανά μήνα", headers: ["Μήνας", "Διαγωνισμοί", "Συνολική αξία", "CPV", "Αναθέτουσες Αρχές"], rows: dashboard.monthly.map((item) => [`${item.month}-01`, item.count, item.budget, item.cpv, item.authorities]), columnTypes: ["month", "number", "currency", "number", "number"] }} /><MonthlyTable months={dashboard.monthly} /></article>
             <NutsMap counts={dashboard.nuts} />
+            </section>
+            <section className="overviewSection"><h2 className="overviewHeading">Αγορά</h2><OverviewMarket data={marketOverview} state={marketOverviewState} /></section>
+            <section className="overviewSection"><h2 className="overviewHeading">Ανταγωνισμός</h2><OverviewCompetition data={marketOverview} state={marketOverviewState} /></section>
             </div>
           </>}
 
@@ -749,6 +802,53 @@ function shortMonthLabel(ym: string) {
   const [year, month] = ym.split("-");
   const name = MONTH_NAMES[Number(month) - 1] ?? month;
   return month === "01" ? `${name} '${year.slice(2)}` : name;
+}
+
+const percentText = (value: number | null | undefined) => value === null || value === undefined ? "—" : `${value.toFixed(1).replace(".", ",")}%`;
+
+function OverviewMarket({ data, state }: { data: MarketOverview | null; state: "idle" | "loading" | "error" }) {
+  if (state === "error") return <p className="noRows">Δεν υπάρχουν ακόμα υπολογισμένα στοιχεία για αυτό το φίλτρο - δοκίμασε άλλο Έτος ή πρόσθεσε Αναθέτουσα Αρχή, CPV ή Ανάδοχο.</p>;
+  if (!data) return <p className="noRows">{state === "loading" ? "Υπολογισμός…" : "Δεν υπάρχουν δεδομένα."}</p>;
+  if (data.empty) return <p className="noRows">Δεν υπάρχουν δεδομένα για τα τρέχοντα φίλτρα.</p>;
+  return <>
+    <div className="metrics">
+      <Metric label="Ανάδοχοι" value={number.format(data.contractors)} tone="sky" />
+      <Metric label="Αναθέσεις" value={number.format(data.awards)} tone="mint" sub="χωρίς σύμβαση ακόμα" />
+      <Metric label="Συμβάσεις" value={number.format(data.contracts)} tone="lilac" />
+      <Metric label="Συνολική αξία" value={euro.format(data.value)} tone="sand" sub={`${number.format(data.tendersWithAwards)} διαγωνισμοί με ανάθεση`} />
+    </div>
+    <div className="overviewTables">
+      <article className="panel"><PanelHeader title="Κορυφαίοι ανάδοχοι" caption="Κατά συνολική αξία" />
+        <div className="tableScroll"><table><thead><tr><th>Ανάδοχος</th><th>Αναθέσεις</th><th>Συμβάσεις</th><th>Αξία</th></tr></thead>
+          <tbody>{data.topContractors.map((item) => <tr key={item.name}><td>{item.name}</td><td>{number.format(item.awards)}</td><td>{number.format(item.contracts)}</td><td>{euro.format(item.value)}</td></tr>)}</tbody></table>
+          {!data.topContractors.length && <p className="noRows">Δεν υπάρχουν αναθέσεις ή συμβάσεις.</p>}</div></article>
+      <article className="panel"><PanelHeader title="Κορυφαίες αναθέτουσες αρχές" caption="Κατά αξία αναθέσεων και συμβάσεων" />
+        <div className="tableScroll"><table><thead><tr><th>Αναθέτουσα Αρχή</th><th>Διαγωνισμοί</th><th>Αξία</th></tr></thead>
+          <tbody>{data.topAuthorities.map((item) => <tr key={item.authority}><td>{item.authority}</td><td>{number.format(item.tenders)}</td><td>{euro.format(item.value)}</td></tr>)}</tbody></table>
+          {!data.topAuthorities.length && <p className="noRows">Δεν υπάρχουν αναθέσεις ή συμβάσεις.</p>}</div></article>
+    </div>
+  </>;
+}
+
+function OverviewCompetition({ data, state }: { data: MarketOverview | null; state: "idle" | "loading" | "error" }) {
+  if (state === "error") return <p className="noRows">Δεν υπάρχουν ακόμα υπολογισμένα στοιχεία για αυτό το φίλτρο - δοκίμασε άλλο Έτος ή πρόσθεσε Αναθέτουσα Αρχή, CPV ή Ανάδοχο.</p>;
+  if (!data) return <p className="noRows">{state === "loading" ? "Υπολογισμός…" : "Δεν υπάρχουν δεδομένα."}</p>;
+  if (data.empty) return <p className="noRows">Δεν υπάρχουν δεδομένα για τα τρέχοντα φίλτρα.</p>;
+  const discount = data.discount;
+  return <>
+    <div className="metrics">
+      <Metric label="Μέση έκπτωση" value={percentText(discount.average)} tone="sky" sub={`από ${number.format(discount.count)} διαγωνισμούς`} />
+      <Metric label="Διάμεση έκπτωση" value={percentText(discount.median)} tone="mint" />
+      <Metric label="Με έκπτωση πάνω από 0%" value={percentText(discount.positiveShare)} tone="lilac" />
+      <Metric label="Μερίδιο 5 κορυφαίων" value={data.concentrationTop5 === null ? "—" : percentText(data.concentrationTop5 * 100)} tone="sand" sub="της αξίας ανάμεσα στους αναδόχους" />
+    </div>
+    <div className="overviewTables">
+      <article className="panel"><PanelHeader title="Έκπτωση ανά τύπο σύμβασης" caption="Μέσος όρος όπου η σύγκριση με τον Π/Υ είναι καθαρή" />
+        <div className="tableScroll"><table><thead><tr><th>Τύπος σύμβασης</th><th>Διαγωνισμοί</th><th>Μέση έκπτωση</th></tr></thead>
+          <tbody>{data.discountByType.map((item) => <tr key={item.type ?? "-"}><td>{item.type ?? "—"}</td><td>{number.format(item.count)}</td><td>{percentText(item.average)}</td></tr>)}</tbody></table>
+          {!data.discountByType.length && <p className="noRows">Δεν υπάρχουν συγκρίσιμοι διαγωνισμοί.</p>}</div></article>
+    </div>
+  </>;
 }
 
 function MonthlyTable({ months }: { months: { month: string; count: number; budget: number; authorities: number; cpv: number }[] }) {
