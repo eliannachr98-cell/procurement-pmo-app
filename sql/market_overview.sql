@@ -119,19 +119,52 @@ begin
       having count(distinct d.amt) = 1 and count(distinct d.basis) = 1 and min(d.amt) <= m.budget
     ),
     top5 as (select coalesce(sum(value), 0) as v from (select value from contractor_totals order by value desc limit 5) t),
+    dcf as (
+      select kind, n, amt, ckey, contractor_name,
+             case
+               when nm ~ 'PRICEWATER|PWC|ΠΡΑΙΣΓΟΥΟΤΕΡ' then 'PwC'
+               when nm ~ 'DELOITTE|ΝΤΕΛΟΙΤ' then 'Deloitte'
+               when nm ~ 'ERNST|ΕΡΝΣΤ' then 'EY'
+               when nm ~ 'KPMG' then 'KPMG'
+             end as firm
+      from (select dc.*, translate(upper(dc.contractor_name), 'ΆΈΉΊΌΎΏΪΫ', 'ΑΕΗΙΟΥΩΙΥ') as nm from dc) x
+    ),
     firm_rows as (
       select firm, n, amt, min(kind) as kind
-      from (
-        select case
-                 when nm ~ 'PRICEWATER|PWC|ΠΡΑΙΣΓΟΥΟΤΕΡ' then 'PwC'
-                 when nm ~ 'DELOITTE|ΝΤΕΛΟΙΤ' then 'Deloitte'
-                 when nm ~ 'ERNST|ΕΡΝΣΤ' then 'EY'
-                 when nm ~ 'KPMG' then 'KPMG'
-               end as firm, n, amt, kind
-        from (select translate(upper(contractor_name), 'ΆΈΉΊΌΎΏΪΫ', 'ΑΕΗΙΟΥΩΙΥ') as nm, n, amt, kind from dc) x
-      ) y
-      where firm is not null
+      from dcf where firm is not null
       group by firm, n, amt
+    ),
+    cons as (
+      select distinct c.record_adam as n
+      from public.record_cpvs_compact c
+      join matched m on m.adam = c.record_adam
+      where c.record_type = 'procurement' and left(c.cpv_code, 2) = '79'
+    ),
+    cons_rows as (
+      select ckey, max(contractor_name) as name, n, amt, min(kind) as kind, bool_or(firm is not null) as is_big4
+      from dcf where n in (select n from cons)
+      group by ckey, n, amt
+    ),
+    cons_totals as (
+      select ckey, max(name) as name,
+             count(*) filter (where kind = 'award') as awards,
+             count(*) filter (where kind = 'contract') as contracts,
+             sum(amt) as value
+      from cons_rows where not is_big4
+      group by ckey
+    ),
+    top_cons as (
+      select t.*, (select avg(d.dsc) * 100 from (select distinct r.n from cons_rows r where r.ckey = t.ckey) q join disc d on d.adam = q.n) as discount
+      from (select * from cons_totals order by (awards + contracts) desc, value desc limit 10) t
+    ),
+    firm_cpv as (
+      select fr.firm, c.cpv_code, max(c.cpv_description) as descr, count(distinct fr.n) as tenders, sum(fr.amt) as value
+      from firm_rows fr
+      join public.record_cpvs_compact c on c.record_type = 'procurement' and c.record_adam = fr.n
+      group by fr.firm, c.cpv_code
+    ),
+    firm_cpv_top as (
+      select *, row_number() over (partition by firm order by tenders desc, value desc) as rn from firm_cpv
     ),
     big4 as (
       select f.firm,
@@ -157,6 +190,16 @@ begin
       'concentrationTop5', (select case when (select sum(value) from contractor_totals) > 0 then (select v from top5) / (select sum(value) from contractor_totals) else null end),
       'discount', (select json_build_object('count', count(*), 'average', avg(dsc) * 100, 'median', percentile_cont(0.5) within group (order by dsc) * 100, 'positiveShare', case when count(*) > 0 then 100.0 * count(*) filter (where dsc > 0.0005) / count(*) else null end) from disc),
       'bigFour', (select coalesce(json_agg(json_build_object('name', b.name, 'awards', coalesce(x.awards, 0), 'contracts', coalesce(x.contracts, 0), 'value', coalesce(x.value, 0), 'discount', x.discount_avg, 'discountCount', coalesce(x.discount_count, 0)) order by b.ord), '[]'::json) from (values ('PwC', 1), ('Deloitte', 2), ('EY', 3), ('KPMG', 4)) as b(name, ord) left join big4 x on x.firm = b.name),
+      'consulting', json_build_object(
+        'tenders', (select count(distinct n) from doc_amounts where n in (select n from cons)),
+        'docs', (select count(*) from doc_amounts where n in (select n from cons)),
+        'value', (select coalesce(sum(amt), 0) from doc_amounts where n in (select n from cons)),
+        'big4Docs', (select count(*) from firm_rows where n in (select n from cons)),
+        'big4Value', (select coalesce(sum(amt), 0) from firm_rows where n in (select n from cons)),
+        'firms', (select coalesce(json_agg(json_build_object('name', b.name, 'docs', coalesce(s.docs, 0), 'value', coalesce(s.value, 0)) order by b.ord), '[]'::json) from (values ('PwC', 1), ('Deloitte', 2), ('EY', 3), ('KPMG', 4)) as b(name, ord) left join (select firm, count(*) as docs, sum(amt) as value from firm_rows where n in (select n from cons) group by firm) s on s.firm = b.name),
+        'others', (select coalesce(json_agg(json_build_object('name', name, 'awards', awards, 'contracts', contracts, 'value', value, 'discount', discount) order by (awards + contracts) desc, value desc), '[]'::json) from top_cons)
+      ),
+      'bigFourCpv', (select coalesce(json_agg(json_build_object('name', b.name, 'cpvs', (select coalesce(json_agg(json_build_object('code', t.cpv_code, 'description', t.descr, 'tenders', t.tenders, 'value', t.value) order by t.rn), '[]'::json) from firm_cpv_top t where t.firm = b.name and t.rn <= 5)) order by b.ord), '[]'::json) from (values ('PwC', 1), ('Deloitte', 2), ('EY', 3), ('KPMG', 4)) as b(name, ord)),
       'discountByType', (select coalesce(json_agg(json_build_object('type', contract_type, 'count', cnt, 'average', avg_dsc) order by cnt desc), '[]'::json) from (select contract_type, count(*) as cnt, avg(dsc) * 100 as avg_dsc from disc group by contract_type) t)
     )
   $q$, join_flags, array_to_string(conditions, ' and ')) into result;
