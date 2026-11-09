@@ -848,14 +848,8 @@ function OverviewCompetition({ data, state }: { data: MarketOverview | null; sta
       <Metric label="Μερίδιο 5 κορυφαίων" value={data.concentrationTop5 === null ? "—" : percentText(data.concentrationTop5 * 100)} tone="sand" />
     </div>
     {data.bigFour && <article className="panel overviewBigFour"><PanelHeader title="Big 4" caption="Αναθέσεις, συμβάσεις, αξία και μέση έκπτωση για τα τρέχοντα φίλτρα" />
-      <div className="tableScroll"><table><thead><tr><th>Εταιρεία</th><th>Αναθέσεις</th><th>Συμβάσεις</th><th>Αξία</th><th>Μέση έκπτωση</th><th>Διαγωνισμοί με έκπτωση</th></tr></thead>
-        <tbody>{data.bigFour.map((item) => <tr key={item.name}><td><b>{item.name}</b></td><td>{number.format(item.awards)}</td><td>{number.format(item.contracts)}</td><td>{euro.format(item.value)}</td><td>{percentText(item.discount)}</td><td>{number.format(item.discountCount)}</td></tr>)}</tbody></table></div></article>}
-    <div className="overviewTables">
-      <article className="panel"><PanelHeader title="Έκπτωση ανά τύπο σύμβασης" caption="Μέσος όρος όπου η σύγκριση με τον Π/Υ είναι καθαρή" />
-        <div className="tableScroll"><table><thead><tr><th>Τύπος σύμβασης</th><th>Διαγωνισμοί</th><th>Μέση έκπτωση</th></tr></thead>
-          <tbody>{data.discountByType.map((item) => <tr key={item.type ?? "-"}><td>{item.type ?? "—"}</td><td>{number.format(item.count)}</td><td>{percentText(item.average)}</td></tr>)}</tbody></table>
-          {!data.discountByType.length && <p className="noRows">Δεν υπάρχουν συγκρίσιμοι διαγωνισμοί.</p>}</div></article>
-    </div>
+      <div className="tableScroll"><table><thead><tr><th>Εταιρεία</th><th>Αναθέσεις</th><th>Συμβάσεις</th><th>Αξία</th><th>Μέση έκπτωση</th></tr></thead>
+        <tbody>{data.bigFour.map((item) => <tr key={item.name}><td><b>{item.name}</b></td><td>{number.format(item.awards)}</td><td>{number.format(item.contracts)}</td><td>{euro.format(item.value)}</td><td>{percentText(item.discount)}</td></tr>)}</tbody></table></div></article>}
   </>;
 }
 
