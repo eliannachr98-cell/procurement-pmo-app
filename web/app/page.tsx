@@ -130,7 +130,7 @@ type MarketOverview = {
   awards: number;
   contracts: number;
   value: number;
-  topContractors: { name: string; awards: number; contracts: number; value: number }[];
+  topContractors: { name: string; awards: number; contracts: number; total: number; value: number }[];
   topAuthorities: { authority: string; tenders: number; value: number }[];
   concentrationTop5: number | null;
   discount: { count: number; average: number | null; median: number | null; positiveShare: number | null };
@@ -820,11 +820,11 @@ function OverviewMarket({ data, state }: { data: MarketOverview | null; state: "
       <Metric label="Συνολική αξία" value={euro.format(data.value)} tone="sand" sub={`${number.format(data.tendersWithAwards)} διαγωνισμοί με ανάθεση`} />
     </div>
     <div className="overviewTables">
-      <article className="panel"><PanelHeader title="Κορυφαίοι ανάδοχοι" caption="Κατά συνολική αξία" />
-        <div className="tableScroll"><table><thead><tr><th>Ανάδοχος</th><th>Αναθέσεις</th><th>Συμβάσεις</th><th>Αξία</th></tr></thead>
-          <tbody>{data.topContractors.map((item) => <tr key={item.name}><td>{item.name}</td><td>{number.format(item.awards)}</td><td>{number.format(item.contracts)}</td><td>{euro.format(item.value)}</td></tr>)}</tbody></table>
+      <article className="panel"><PanelHeader title="Κορυφαίοι ανάδοχοι" caption="Κατά σύνολο αναθέσεων και συμβάσεων" />
+        <div className="tableScroll"><table><thead><tr><th>Ανάδοχος</th><th>Σύνολο</th><th>Αναθέσεις</th><th>Συμβάσεις</th><th>Αξία</th></tr></thead>
+          <tbody>{data.topContractors.map((item) => <tr key={item.name}><td>{item.name}</td><td><b>{number.format(item.total)}</b></td><td>{number.format(item.awards)}</td><td>{number.format(item.contracts)}</td><td>{euro.format(item.value)}</td></tr>)}</tbody></table>
           {!data.topContractors.length && <p className="noRows">Δεν υπάρχουν αναθέσεις ή συμβάσεις.</p>}</div></article>
-      <article className="panel"><PanelHeader title="Κορυφαίες αναθέτουσες αρχές" caption="Κατά αξία αναθέσεων και συμβάσεων" />
+      <article className="panel"><PanelHeader title="Κορυφαίες αναθέτουσες αρχές" caption="Κατά αριθμό διαγωνισμών" />
         <div className="tableScroll"><table><thead><tr><th>Αναθέτουσα Αρχή</th><th>Διαγωνισμοί</th><th>Αξία</th></tr></thead>
           <tbody>{data.topAuthorities.map((item) => <tr key={item.authority}><td>{item.authority}</td><td>{number.format(item.tenders)}</td><td>{euro.format(item.value)}</td></tr>)}</tbody></table>
           {!data.topAuthorities.length && <p className="noRows">Δεν υπάρχουν αναθέσεις ή συμβάσεις.</p>}</div></article>
