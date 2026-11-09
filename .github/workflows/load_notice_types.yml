@@ -1,27 +1,33 @@
-name: Load 2026 notice types into quality flags
+name: Load notice types into quality flags
 
-# Records KHMDHS noticeType.key for 2026 notices in
-# public.procurement_quality_flags.notice_type_key (only that small table is
-# written). The thesis Excel keeps only noticeType "Διακήρυξη" (key 3), so the
-# stats flag needs the type for 2026, which the Excel does not cover. Run "test"
-# first (one week, dry run - nothing is written), then "full".
+# Records KHMDHS noticeType.key, award-reference presence and the fresh
+# cancelled flag for a year's notices in public.procurement_quality_flags (only
+# that small table is written). The thesis Excel keeps only noticeType
+# "Διακήρυξη" (key 3) and drops cancelled notices without an award reference, so
+# the stats flag needs all three. Run "test" first (one week, dry run - nothing
+# is written), then "full".
 on:
   workflow_dispatch:
     inputs:
       mode:
-        description: test = one week, dry run; full = all of 2026 and writes
+        description: test = one week, dry run; full = the whole year and writes
         required: true
         type: choice
         options:
           - test
           - full
         default: test
+      year:
+        description: Year to read from KHMDHS (e.g. 2025 or 2026)
+        required: true
+        type: string
+        default: "2026"
 
 permissions:
   contents: read
 
 concurrency:
-  group: compact-2026-notice-types
+  group: compact-notice-types
   cancel-in-progress: false
 
 jobs:
@@ -33,16 +39,18 @@ jobs:
       - id: matrix
         env:
           MODE: ${{ inputs.mode }}
+          YEAR: ${{ inputs.year }}
         shell: python
         run: |
           import json, os
           from datetime import date, timedelta
 
+          year = int(os.environ["YEAR"])
           if os.environ["MODE"] == "test":
-              windows = [{"date_from": "2026-01-01", "date_to": "2026-01-07", "max_pages": 1}]
+              windows = [{"date_from": f"{year}-01-01", "date_to": f"{year}-01-07", "max_pages": 1}]
           else:
               windows = []
-              current, end = date(2026, 1, 1), date(2026, 11, 7)
+              current, end = date(year, 1, 1), min(date(year, 12, 31), date.today())
               while current <= end:
                   window_end = min(current + timedelta(days=6), end)
                   windows.append({"date_from": current.isoformat(), "date_to": window_end.isoformat(), "max_pages": 0})
