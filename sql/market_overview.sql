@@ -126,6 +126,8 @@ begin
       'awards', (select count(*) from doc_amounts where kind = 'award'),
       'contracts', (select count(*) from doc_amounts where kind = 'contract'),
       'value', (select coalesce(sum(amt), 0) from doc_amounts),
+      'awardsValue', (select coalesce(sum(amt), 0) from doc_amounts where kind = 'award'),
+      'contractsValue', (select coalesce(sum(amt), 0) from doc_amounts where kind = 'contract'),
       'topContractors', (select coalesce(json_agg(json_build_object('name', name, 'awards', awards, 'contracts', contracts, 'total', awards + contracts, 'value', value) order by (awards + contracts) desc, value desc), '[]'::json) from top_contractors),
       'topAuthorities', (select coalesce(json_agg(json_build_object('authority', authority_name, 'tenders', tenders, 'value', value) order by tenders desc, value desc), '[]'::json) from (select * from authority_totals order by tenders desc, value desc limit 10) t),
       'concentrationTop5', (select case when (select sum(value) from contractor_totals) > 0 then (select v from top5) / (select sum(value) from contractor_totals) else null end),
