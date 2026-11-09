@@ -70,7 +70,9 @@ def main() -> None:
     if expected_ref and expected_ref not in url:
         raise SystemExit("DATABASE_URL does not point at the expected Supabase project")
 
-    with psycopg.connect(url) as conn, conn.cursor() as cursor:
+    # Supabase's transaction pooler can't retain named prepared statements
+    # between pooled sessions (DuplicatePreparedStatement), so disable them.
+    with psycopg.connect(url, prepare_threshold=None) as conn, conn.cursor() as cursor:
         if args.insert_missing:
             # Only for ADAMs that exist in procurements_compact. The remaining
             # flags (title/date/cancel rules, in_stats) are recomputed in SQL
