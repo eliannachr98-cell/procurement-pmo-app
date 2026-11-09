@@ -118,7 +118,31 @@ begin
       group by m.adam, m.contract_type, m.budget
       having count(distinct d.amt) = 1 and count(distinct d.basis) = 1 and min(d.amt) <= m.budget
     ),
-    top5 as (select coalesce(sum(value), 0) as v from (select value from contractor_totals order by value desc limit 5) t)
+    top5 as (select coalesce(sum(value), 0) as v from (select value from contractor_totals order by value desc limit 5) t),
+    firm_rows as (
+      select firm, n, amt, min(kind) as kind
+      from (
+        select case
+                 when nm ~ 'PRICEWATER|PWC|ΠΡΑΙΣΓΟΥΟΤΕΡ' then 'PwC'
+                 when nm ~ 'DELOITTE|ΝΤΕΛΟΙΤ' then 'Deloitte'
+                 when nm ~ 'ERNST|ΕΡΝΣΤ' then 'EY'
+                 when nm ~ 'KPMG' then 'KPMG'
+               end as firm, n, amt, kind
+        from (select translate(upper(contractor_name), 'ΆΈΉΊΌΎΏΪΫ', 'ΑΕΗΙΟΥΩΙΥ') as nm, n, amt, kind from dc) x
+      ) y
+      where firm is not null
+      group by firm, n, amt
+    ),
+    big4 as (
+      select f.firm,
+             count(*) filter (where f.kind = 'award') as awards,
+             count(*) filter (where f.kind = 'contract') as contracts,
+             coalesce(sum(f.amt), 0) as value,
+             (select count(*) from (select distinct fr.n from firm_rows fr where fr.firm = f.firm) q join disc d on d.adam = q.n) as discount_count,
+             (select avg(d.dsc) * 100 from (select distinct fr.n from firm_rows fr where fr.firm = f.firm) q join disc d on d.adam = q.n) as discount_avg
+      from firm_rows f
+      group by f.firm
+    )
     select json_build_object(
       'tenders', (select count(*) from matched),
       'tendersWithAwards', (select count(distinct n) from doc_amounts),
@@ -132,6 +156,7 @@ begin
       'topAuthorities', (select coalesce(json_agg(json_build_object('authority', authority_name, 'tenders', tenders, 'value', value) order by tenders desc, value desc), '[]'::json) from (select * from authority_totals order by tenders desc, value desc limit 10) t),
       'concentrationTop5', (select case when (select sum(value) from contractor_totals) > 0 then (select v from top5) / (select sum(value) from contractor_totals) else null end),
       'discount', (select json_build_object('count', count(*), 'average', avg(dsc) * 100, 'median', percentile_cont(0.5) within group (order by dsc) * 100, 'positiveShare', case when count(*) > 0 then 100.0 * count(*) filter (where dsc > 0.0005) / count(*) else null end) from disc),
+      'bigFour', (select coalesce(json_agg(json_build_object('name', b.name, 'awards', coalesce(x.awards, 0), 'contracts', coalesce(x.contracts, 0), 'value', coalesce(x.value, 0), 'discount', x.discount_avg, 'discountCount', coalesce(x.discount_count, 0)) order by b.ord), '[]'::json) from (values ('PwC', 1), ('Deloitte', 2), ('EY', 3), ('KPMG', 4)) as b(name, ord) left join big4 x on x.firm = b.name),
       'discountByType', (select coalesce(json_agg(json_build_object('type', contract_type, 'count', cnt, 'average', avg_dsc) order by cnt desc), '[]'::json) from (select contract_type, count(*) as cnt, avg(dsc) * 100 as avg_dsc from disc group by contract_type) t)
     )
   $q$, join_flags, array_to_string(conditions, ' and ')) into result;
