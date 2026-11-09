@@ -18,3 +18,4 @@
 .overviewSplit{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;align-items:start}.overviewSplit .monthlyTable{max-height:430px;overflow:auto}@media(max-width:1000px){.overviewSplit{grid-template-columns:minmax(0,1fr)}}
 .overviewSplit .nutsPanel{margin-top:0}.overviewSplit .nutsMap{grid-template-columns:minmax(0,1fr)}
 .overviewSplit{align-items:stretch;margin-top:22px}.overviewSplit .monthlyTablePanel{display:flex;flex-direction:column}.overviewSplit .monthlyTablePanel .monthlyTable{flex:1 1 0;min-height:0;max-height:none;overflow:auto}
+.overviewSplit{grid-template-columns:minmax(0,.85fr) minmax(0,1.15fr)}@media(max-width:1000px){.overviewSplit{grid-template-columns:minmax(0,1fr)}}
