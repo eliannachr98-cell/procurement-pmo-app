@@ -6,7 +6,7 @@ import { LayoutGrid, ClipboardList, TrendingUp, Bell, CircleUserRound } from "lu
 import { captureChartImage, downloadExcel, downloadPdf, type ExportPayload } from "@/lib/exports";
 import type { Apodeltiosi } from "@/lib/apodeltiosi";
 
-type Status = "Ενεργός" | "Αξιολόγηση" | "Ανατεθειμένος" | "Ολοκληρωμένος" | "Ακυρωμένος";
+type Status = "Ενεργός" | "Αξιολόγηση" | "Ανατεθειμένος" | "Συμβασιοποιημένος" | "Ακυρωμένος";
 type Tender = {
   adam: string;
   title: string;
@@ -87,15 +87,15 @@ const navItems = [
 ] as const;
 
 // Matched to the same hue families as the pastel Metric cards in Επισκόπηση
-// (Ενεργός~mint, Αξιολόγηση~sand, Ανατεθειμένος~lilac, Ολοκληρωμένος~sage,
+// (Ενεργός~mint, Αξιολόγηση~sand, Ανατεθειμένος~lilac, Συμβασιοποιημένος~sage,
 // Ακυρωμένος~rose), just at full saturation instead of the pastel tint -
-// they'd drifted apart (Ολοκληρωμένος showed purple here vs green up there,
+// they'd drifted apart (Συμβασιοποιημένος showed purple here vs green up there,
 // Ανατεθειμένος showed blue here vs purple up there).
 const statusTone: Record<Status, string> = {
   "Ενεργός": "teal",
   "Αξιολόγηση": "amber",
   "Ανατεθειμένος": "purple",
-  "Ολοκληρωμένος": "green",
+  "Συμβασιοποιημένος": "green",
   "Ακυρωμένος": "red",
 };
 
@@ -527,7 +527,7 @@ export default function Home() {
               <Metric label="Ενεργοί" value={number.format(statusCount("Ενεργός"))} sub={`Π/Υ: ${euro.format(statusBudget("Ενεργός"))}`} tone="mint" />
               <Metric label="Σε αξιολόγηση" value={number.format(statusCount("Αξιολόγηση"))} sub={`Π/Υ: ${euro.format(statusBudget("Αξιολόγηση"))}`} tone="sand" />
               <Metric label="Ανατεθειμένοι" value={number.format(statusCount("Ανατεθειμένος"))} sub={`Π/Υ: ${euro.format(statusBudget("Ανατεθειμένος"))}`} tone="lilac" />
-              <Metric label="Ολοκληρωμένοι" value={number.format(statusCount("Ολοκληρωμένος"))} sub={`Π/Υ: ${euro.format(statusBudget("Ολοκληρωμένος"))}`} tone="sage" />
+              <Metric label="Συμβασιοποιημένοι" value={number.format(statusCount("Συμβασιοποιημένος"))} sub={`Π/Υ: ${euro.format(statusBudget("Συμβασιοποιημένος"))}`} tone="sage" />
               <Metric label="Ακυρωμένοι" value={number.format(statusCount("Ακυρωμένος"))} sub={`Π/Υ: ${euro.format(statusBudget("Ακυρωμένος"))}`} tone="rose" />
             </div>
             <div className="chartGrid">
@@ -749,10 +749,10 @@ function PanelHeader({ title, caption, onDownload, chartRef }: { title: string; 
 }
 
 function StatusBars({ counts }: { counts: { status: string; count: number }[] }) {
-  const statuses: Status[] = ["Ενεργός", "Αξιολόγηση", "Ανατεθειμένος", "Ολοκληρωμένος", "Ακυρωμένος"];
+  const statuses: Status[] = ["Ενεργός", "Αξιολόγηση", "Ανατεθειμένος", "Συμβασιοποιημένος", "Ακυρωμένος"];
   const byStatus = new Map(counts.map((item) => [item.status, item.count]));
   const maximum = Math.max(1, ...statuses.map((item) => byStatus.get(item) ?? 0));
-  // Ανατεθειμένος/Αξιολόγηση dwarf Ολοκληρωμένος/Ακυρωμένος by two orders of
+  // Ανατεθειμένος/Αξιολόγηση dwarf Συμβασιοποιημένος/Ακυρωμένος by two orders of
   // magnitude, so a plain linear width made the smaller categories an
   // invisible sliver even though their real count is non-zero - give every
   // non-zero bar a floor so it stays visible, the count text is the exact figure.

@@ -183,7 +183,7 @@ function groupBy<T>(rows: T[], key: (row: T) => string | null) {
 
 function statusFor(row: ProcurementRow, awards: AwardRow[], contracts: ContractRow[], validOpeningAt?: string) {
   if (row.cancelled_at || row.status === "cancelled") return "Ακυρωμένος";
-  if (contracts.length) return "Ολοκληρωμένος";
+  if (contracts.length) return "Συμβασιοποιημένος";
   if (awards.length) return "Ανατεθειμένος";
   // Must use the same validated opening date as the display value below -
   // a raw opening_at earlier than publication_date is bad source data, not

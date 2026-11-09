@@ -67,7 +67,13 @@ export async function GET(request: Request) {
       p_adams: matchingAdams,
     });
 
-    return NextResponse.json(breakdown, { headers: { "Cache-Control": "no-store, max-age=0" } });
+    // The SQL (and its cache) still names the status "Ολοκληρωμένος"; the app
+    // shows it as "Συμβασιοποιημένος".
+    const renamed = breakdown && {
+      ...breakdown,
+      status: (breakdown.status ?? []).map((item) => item.status === "Ολοκληρωμένος" ? { ...item, status: "Συμβασιοποιημένος" } : item),
+    };
+    return NextResponse.json(renamed, { headers: { "Cache-Control": "no-store, max-age=0" } });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown dashboard error";
     console.error(`[dashboard-api] ${message}`);
