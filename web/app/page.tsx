@@ -822,7 +822,7 @@ function OverviewMarket({ data, state }: { data: MarketOverview | null; state: "
     <div className="overviewTables">
       <article className="panel"><PanelHeader title="Κορυφαίοι ανάδοχοι" caption="Κατά σύνολο αναθέσεων και συμβάσεων" />
         <div className="tableScroll"><table><thead><tr><th>Ανάδοχος</th><th>Σύνολο</th><th>Αναθέσεις</th><th>Συμβάσεις</th><th>Αξία</th></tr></thead>
-          <tbody>{data.topContractors.map((item) => <tr key={item.name}><td>{item.name}</td><td><b>{number.format(item.total)}</b></td><td>{number.format(item.awards)}</td><td>{number.format(item.contracts)}</td><td>{euro.format(item.value)}</td></tr>)}</tbody></table>
+          <tbody>{data.topContractors.map((item) => <tr key={item.name}><td>{item.name}</td><td><b>{number.format(item.total ?? item.awards + item.contracts)}</b></td><td>{number.format(item.awards)}</td><td>{number.format(item.contracts)}</td><td>{euro.format(item.value)}</td></tr>)}</tbody></table>
           {!data.topContractors.length && <p className="noRows">Δεν υπάρχουν αναθέσεις ή συμβάσεις.</p>}</div></article>
       <article className="panel"><PanelHeader title="Κορυφαίες αναθέτουσες αρχές" caption="Κατά αριθμό διαγωνισμών" />
         <div className="tableScroll"><table><thead><tr><th>Αναθέτουσα Αρχή</th><th>Διαγωνισμοί</th><th>Αξία</th></tr></thead>
