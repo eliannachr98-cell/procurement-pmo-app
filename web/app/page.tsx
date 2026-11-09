@@ -518,6 +518,7 @@ export default function Home() {
           {page === "overview" && dashboardError && <div className="dataBanner error">{dashboardError}</div>}
 
           {page === "overview" && <>
+            <div className="overviewWrap">
             <div className="metrics">
               <Metric label="Διαγωνισμοί" value={number.format(dashboard.total)} sub={`Π/Υ: ${euro.format(totalBudget)}`} tone="sky" />
               <Metric label="Ενεργοί" value={number.format(statusCount("Ενεργός"))} sub={`Π/Υ: ${euro.format(statusBudget("Ενεργός"))}`} tone="mint" />
@@ -528,7 +529,7 @@ export default function Home() {
             </div>
               <article className="panel monthlyTablePanel"><PanelHeader title="Διαγωνισμοί ανά μήνα" caption="Πλήθος, Π/Υ, CPV και αναθέτουσες αρχές ανά μήνα δημοσίευσης" onDownload={{ filename: "diagonismoi-ana-mina", title: "Διαγωνισμοί ανά μήνα", headers: ["Μήνας", "Διαγωνισμοί", "Συνολική αξία", "CPV", "Αναθέτουσες Αρχές"], rows: dashboard.monthly.map((item) => [`${item.month}-01`, item.count, item.budget, item.cpv, item.authorities]), columnTypes: ["month", "number", "currency", "number", "number"] }} /><MonthlyTable months={dashboard.monthly} /></article>
             <NutsMap counts={dashboard.nuts} />
-            <TenderTable rows={[...filtered].sort((a,b) => (b.publicationDate || "").localeCompare(a.publicationDate || "")).slice(0,10)} title="Πρόσφατοι διαγωνισμοί" caption="Οι 10 πιο πρόσφατες εγγραφές" onViewAll={() => setPage("tenders")} />
+            </div>
           </>}
 
           {page === "tenders" && <>
