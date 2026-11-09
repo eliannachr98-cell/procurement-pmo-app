@@ -235,10 +235,16 @@ export default function Home() {
     }
     const code = team.code;
     const headers = { "x-alert-code": code };
+    // The watchlist alone is quick; the alerts feed below is not, and the
+    // Επισκόπηση scope must not wait for it.
+    fetch("/api/watchlist", { headers })
+      .then((response) => response.ok ? response.json() : { items: [] })
+      .then((payload) => { setAlertsWatchlist(payload.items ?? []); setWatchlistReady(true); })
+      .catch(() => setWatchlistReady(true));
     fetch("/api/alerts", { headers })
       .then((response) => response.ok ? response.json() : { watchlist: [], nutsFilter: [], alerts: [] })
       .then((payload) => {
-        setAlertsWatchlist(payload.watchlist ?? []);
+        if (payload.watchlist?.length) setAlertsWatchlist(payload.watchlist);
         setAlertsNutsFilter(payload.nutsFilter ?? []);
         setWatchlistReady(true);
         const sevenDaysAgo = Date.now() - 7 * 86400000;
