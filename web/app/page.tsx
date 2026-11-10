@@ -175,6 +175,13 @@ export default function Home() {
   // otherwise wipe free-mode watchlist picks (they're not persisted anywhere
   // else) exactly like a page refresh, just triggered by a tab click instead.
   const [alertsWatchlist, setAlertsWatchlist] = useState<WatchlistItem[]>([]);
+  // Επισκόπηση: Διαγωνισμοί and Αγορά follow the "Όλη η αγορά / Τα ενδιαφέροντά μου"
+  // switch; Ανταγωνισμός is always about the interests (CPV) of the profile.
+  // watchlistReady holds the first requests back until the interests have loaded.
+  const [overviewScope, setOverviewScope] = useState<"mine" | "all">("mine");
+  const [watchlistReady, setWatchlistReady] = useState(false);
+  const [competition, setCompetition] = useState<MarketOverview | null>(null);
+  const [competitionState, setCompetitionState] = useState<"idle" | "loading" | "error">("idle");
   const [alertsNutsFilter, setAlertsNutsFilter] = useState<NutsFilterItem[]>([]);
   // Same reasoning for Αγορά & Ανταγωνισμός's own local state (drill-down
   // selection, contractor search box, "load more" count) - MarketPanel
@@ -226,14 +233,21 @@ export default function Home() {
     if (!team.code) {
       setAlertsWatchlist([]); setAlertsNutsFilter([]); setRecentAlertCount(0);
       setSubmittedCount(0); setInterestedCount(0); setProfileRecipients([]);
+      setWatchlistReady(false);
       return;
     }
     const code = team.code;
     const headers = { "x-alert-code": code };
+    // The interests alone load quickly; the alerts feed below does not, and
+    // the Επισκόπηση must not wait for it.
+    fetch("/api/watchlist", { headers })
+      .then((response) => response.ok ? response.json() : { items: [] })
+      .then((payload) => { setAlertsWatchlist(payload.items ?? []); setWatchlistReady(true); })
+      .catch(() => setWatchlistReady(true));
     fetch("/api/alerts", { headers })
       .then((response) => response.ok ? response.json() : { watchlist: [], nutsFilter: [], alerts: [] })
       .then((payload) => {
-        setAlertsWatchlist(payload.watchlist ?? []);
+        if (payload.watchlist?.length) setAlertsWatchlist(payload.watchlist);
         setAlertsNutsFilter(payload.nutsFilter ?? []);
         const sevenDaysAgo = Date.now() - 7 * 86400000;
         const count = (payload.alerts ?? []).filter((item: { hasAward: boolean; publicationDate: string | null }) =>
@@ -334,6 +348,7 @@ export default function Home() {
   const latestRequest = useRef(0);
   const latestDashboardRequest = useRef(0);
   const latestMarketOverviewRequest = useRef(0);
+  const latestCompetitionRequest = useRef(0);
   // Ειδοποιήσεις has no filters and its own independent data - read via a
   // ref (not a dependency) so a plain tab switch never re-triggers the fetch
   // effect below, only an actual filter change does.
@@ -391,12 +406,21 @@ export default function Home() {
       });
   }, [query, authority, contractor, cpv, year, contractType, documentType, hideDirectAwards]);
 
+  // CPV codes of the profile's interests. Applied to Διαγωνισμοί/Αγορά only
+  // while "Τα ενδιαφέροντά μου" is selected; with no interests there is nothing
+  // to scope by and the whole market is shown.
+  const mineCodes = useMemo(() => team.code ? alertsWatchlist.map((item) => item.cpv_code) : [], [team.code, alertsWatchlist]);
+  const scopeCodes = useMemo(() => page === "overview" && overviewScope === "mine" ? mineCodes : [], [page, overviewScope, mineCodes]);
+  const scopeWaiting = page === "overview" && overviewScope === "mine" && Boolean(team.code) && !watchlistReady;
+
   const loadDashboard = useCallback(() => {
+    if (scopeWaiting) return;
     const requestId = ++latestDashboardRequest.current;
     const params = new URLSearchParams();
     if (authority.trim() && authority !== "Όλες") params.set("authority", authority.trim());
     contractor.forEach((item) => params.append("contractor", item));
     cpv.forEach((item) => params.append("cpv", item));
+    scopeCodes.forEach((item) => params.append("watchCpv", item));
     if (year !== "Όλα") params.set("year", year);
     contractType.forEach((item) => params.append("contractType", item));
     fetch(`/api/dashboard?${params.toString()}`)
@@ -414,14 +438,16 @@ export default function Home() {
         setDashboard(emptyDashboard);
         setDashboardError("Πολύ ευρύ φίλτρο για να υπολογιστεί - πρόσθεσε έτος ή άλλο φίλτρο για να στενέψει.");
       });
-  }, [authority, contractor, cpv, year, contractType]);
+  }, [authority, contractor, cpv, year, contractType, scopeCodes, scopeWaiting]);
 
   const loadMarketOverview = useCallback(() => {
+    if (scopeWaiting) return;
     const requestId = ++latestMarketOverviewRequest.current;
     const params = new URLSearchParams();
     if (authority.trim() && authority !== "Όλες") params.set("authority", authority.trim());
     contractor.forEach((item) => params.append("contractor", item));
     cpv.forEach((item) => params.append("cpv", item));
+    scopeCodes.forEach((item) => params.append("watchCpv", item));
     if (year !== "Όλα") params.set("year", year);
     contractType.forEach((item) => params.append("contractType", item));
     setMarketOverviewState("loading");
@@ -437,7 +463,66 @@ export default function Home() {
         setMarketOverview(null);
         setMarketOverviewState("error");
       });
-  }, [authority, contractor, cpv, year, contractType]);
+  }, [authority, contractor, cpv, year, contractType, scopeCodes, scopeWaiting]);
+
+  // Ανταγωνισμός is always about the interests. When the switch is on "Τα
+  // ενδιαφέροντά μου" it reuses the Αγορά data; otherwise it fetches its own.
+  const competitionNeedsOwnFetch = page === "overview" && Boolean(team.code) && watchlistReady && mineCodes.length > 0 && overviewScope === "all";
+  const loadCompetition = useCallback(() => {
+    const requestId = ++latestCompetitionRequest.current;
+    const params = new URLSearchParams();
+    if (authority.trim() && authority !== "Όλες") params.set("authority", authority.trim());
+    contractor.forEach((item) => params.append("contractor", item));
+    cpv.forEach((item) => params.append("cpv", item));
+    mineCodes.forEach((item) => params.append("watchCpv", item));
+    if (year !== "Όλα") params.set("year", year);
+    contractType.forEach((item) => params.append("contractType", item));
+    setCompetitionState("loading");
+    fetch(`/api/market-overview?${params.toString()}`)
+      .then((response) => response.ok ? response.json() : Promise.reject(new Error("competition request failed")))
+      .then((payload) => {
+        if (requestId !== latestCompetitionRequest.current) return;
+        setCompetition(payload);
+        setCompetitionState("idle");
+      })
+      .catch(() => {
+        if (requestId !== latestCompetitionRequest.current) return;
+        setCompetition(null);
+        setCompetitionState("error");
+      });
+  }, [authority, contractor, cpv, year, contractType, mineCodes]);
+  useEffect(() => {
+    if (!competitionNeedsOwnFetch) return;
+    const timer = window.setTimeout(loadCompetition, 500);
+    return () => window.clearTimeout(timer);
+  }, [competitionNeedsOwnFetch, loadCompetition]);
+
+  // The CPV and region interests are managed from Προφίλ. Same endpoints as
+  // the Παρακολούθηση used; the shared state keeps every page in sync.
+  const interestFetch = (path: string, method: "POST" | "DELETE", body?: unknown) => fetch(path, {
+    method,
+    headers: { "x-alert-code": team.code ?? "", ...(body ? { "Content-Type": "application/json" } : {}) },
+    body: body ? JSON.stringify(body) : undefined,
+  }).then((response) => { if (response.status === 401) team.onUnauthorized(); return response.ok; });
+  const addInterestCpv = (option: { value: string; label: string }) => {
+    if (alertsWatchlist.some((item) => item.cpv_code === option.value)) return;
+    interestFetch("/api/watchlist", "POST", { cpv_code: option.value, cpv_label: option.label })
+      .then((ok) => { if (ok) setAlertsWatchlist((current) => [...current, { cpv_code: option.value, cpv_label: option.label }]); });
+  };
+  const removeInterestCpv = (cpvCode: string) => {
+    interestFetch(`/api/watchlist?cpv_code=${encodeURIComponent(cpvCode)}`, "DELETE")
+      .then((ok) => { if (ok) setAlertsWatchlist((current) => current.filter((item) => item.cpv_code !== cpvCode)); });
+  };
+  const addInterestNuts = (option: { value: string; label: string }) => {
+    if (alertsNutsFilter.some((item) => item.nuts_code === option.value)) return;
+    interestFetch("/api/alert-nuts-filter", "POST", { nuts_code: option.value, nuts_name: option.label })
+      .then((ok) => { if (ok) setAlertsNutsFilter((current) => [...current, { nuts_code: option.value, nuts_name: option.label }]); });
+  };
+  const removeInterestNuts = (nutsCode: string) => {
+    interestFetch(`/api/alert-nuts-filter?nuts_code=${encodeURIComponent(nutsCode)}`, "DELETE")
+      .then((ok) => { if (ok) setAlertsNutsFilter((current) => current.filter((item) => item.nuts_code !== nutsCode)); });
+  };
+
 
   // Only the Επισκόπηση shows these numbers, so they're fetched there only
   // (and again whenever its filters change).
@@ -576,6 +661,13 @@ export default function Home() {
           {page === "overview" && dashboardError && <div className="dataBanner error">{dashboardError}</div>}
 
           {page === "overview" && <>
+            {team.code && <div className="overviewScope">
+              <div className="overviewScopeToggle" role="group" aria-label="Εύρος Διαγωνισμών και Αγοράς">
+                <button type="button" className={overviewScope === "mine" ? "active" : ""} onClick={() => setOverviewScope("mine")}>Τα ενδιαφέροντά μου{watchlistReady ? ` (${alertsWatchlist.length})` : ""}</button>
+                <button type="button" className={overviewScope === "all" ? "active" : ""} onClick={() => setOverviewScope("all")}>Όλη η αγορά</button>
+              </div>
+              <p className="overviewScopeNote">Ισχύει για τους Διαγωνισμούς και την Αγορά. Ο Ανταγωνισμός δείχνει πάντα τα CPV που ακολουθείς.{overviewScope === "mine" && watchlistReady && alertsWatchlist.length === 0 ? " Δεν έχεις ορίσει CPV, οπότε εμφανίζεται όλη η αγορά." : ""}</p>
+            </div>}
             <div className="overviewWrap">
             <section className="overviewSection"><h2 className="overviewHeading">Διαγωνισμοί</h2>
             <div className="metrics">
@@ -592,7 +684,23 @@ export default function Home() {
             </div>
             </section>
             <section className="overviewSection"><h2 className="overviewHeading">Αγορά</h2><OverviewMarket data={marketOverview} state={marketOverviewState} /></section>
-            <section className="overviewSection"><h2 className="overviewHeading">Ανταγωνισμός</h2><OverviewCompetition data={marketOverview} state={marketOverviewState} /></section>
+            <section className="overviewSection"><h2 className="overviewHeading">Ανταγωνισμός <span className="overviewHeadingNote">στα CPV που ακολουθείς</span></h2>
+              {!team.code
+                ? <div className="overviewGate locked">
+                    <div className="overviewLockCard">
+                      <strong>Ο Ανταγωνισμός δείχνει δεδομένα για τα CPV του προφίλ σου</strong>
+                      <p>Συνδέσου ή εγγράψου για να τον δεις.</p>
+                      <div className="overviewLockActions">
+                        <button type="button" className="teamCodeToggle" onClick={() => team.setShowCodeBox(true)}>Σύνδεση</button>
+                        <button type="button" className="teamCodeSignup" onClick={() => team.setShowSignupBox(true)}>Εγγραφή</button>
+                      </div>
+                    </div>
+                    <div className="overviewWrap" aria-hidden="true"><OverviewCompetition data={marketOverview} state={marketOverviewState} /></div>
+                  </div>
+                : watchlistReady && mineCodes.length === 0
+                  ? <p className="noRows">Δεν έχεις ορίσει CPV. Πρόσθεσέ τα στο Προφίλ για να δεις τον ανταγωνισμό. <button type="button" className="profileLink" onClick={() => setPage("profile")}>Πήγαινε στο Προφίλ →</button></p>
+                  : <OverviewCompetition data={overviewScope === "mine" ? marketOverview : competition} state={overviewScope === "mine" ? marketOverviewState : competitionState} />}
+            </section>
             </div>
           </>}
 
@@ -603,7 +711,7 @@ export default function Home() {
             </button>}
           </>}
           {page === "market" && <MarketPanel awards={awards} contracts={contracts} cpv={cpv} contractor={contractor} authority={authority} year={year} contractType={contractType} documentType={documentType} loadedCount={tenders.length} totalCount={totalTenders} stillLoading={hasMore && loading} locked={!team.code} selectedContractor={marketSelectedContractor} setSelectedContractor={setMarketSelectedContractor} contractorSearch={marketContractorSearch} setContractorSearch={setMarketContractorSearch} visibleCount={marketVisibleCount} setVisibleCount={setMarketVisibleCount} />}
-          {page === "alerts" && <AlertsPanelContent key={team.code ?? "free"} code={team.code ?? null} onUnauthorized={team.onUnauthorized} watchlist={alertsWatchlist} setWatchlist={setAlertsWatchlist} nutsFilter={alertsNutsFilter} setNutsFilter={setAlertsNutsFilter} />}
+          {page === "alerts" && <AlertsPanelContent key={team.code ?? "free"} code={team.code ?? null} onEditInterests={() => setPage("profile")} onUnauthorized={team.onUnauthorized} watchlist={alertsWatchlist} setWatchlist={setAlertsWatchlist} nutsFilter={alertsNutsFilter} setNutsFilter={setAlertsNutsFilter} />}
           {page === "profile" && <div className="profileGrid">
             <article className="panel profileCard profileAccountCard">
               <p className="eyebrow">ΛΟΓΑΡΙΑΣΜΟΣ</p>
@@ -648,17 +756,44 @@ export default function Home() {
               </> : <p className="watchlistCaption">Συνδέσου για να δεις τις αποθηκευμένες προβολές σου.</p>}
             </article>
             <article className="panel profileCard profileWatchCard">
-              <p className="eyebrow">ΠΑΡΑΚΟΛΟΥΘΗΣΗ</p>
-              <h2>Τι παρακολουθείς</h2>
+              <p className="eyebrow">ΕΝΔΙΑΦΕΡΟΝΤΑ</p>
+              <h2>Τι ακολουθείς</h2>
               {team.code ? <>
+                <p className="watchlistCaption">Τα CPV και οι περιοχές ορίζονται εδώ. Η Επισκόπηση, ο Ανταγωνισμός και οι ειδοποιήσεις τα χρησιμοποιούν.</p>
+                <div className="cpvNutsRow">
+                  <MultiSearchInput
+                    label="CPV"
+                    type="cpv"
+                    values={alertsWatchlist.map((item) => item.cpv_code)}
+                    initialLabels={Object.fromEntries(alertsWatchlist.map((item) => [item.cpv_code, item.cpv_label ?? item.cpv_code]))}
+                    onChange={(nextValues) => {
+                      const removed = alertsWatchlist.map((item) => item.cpv_code).find((code) => !nextValues.includes(code));
+                      if (removed) removeInterestCpv(removed);
+                    }}
+                    onSelectOption={addInterestCpv}
+                    placeholder="Αναζήτησε κωδικό ή περιγραφή CPV"
+                  />
+                  <MultiSearchInput
+                    label="Περιοχή"
+                    type="nuts"
+                    values={alertsNutsFilter.map((item) => item.nuts_code)}
+                    initialLabels={Object.fromEntries(alertsNutsFilter.map((item) => [item.nuts_code, item.nuts_name ?? item.nuts_code]))}
+                    onChange={(nextValues) => {
+                      const removed = alertsNutsFilter.map((item) => item.nuts_code).find((code) => !nextValues.includes(code));
+                      if (removed) removeInterestNuts(removed);
+                    }}
+                    onSelectOption={addInterestNuts}
+                    placeholder="π.χ. Αττική - άφησέ το κενό για όλη τη χώρα"
+                  />
+                </div>
                 <div className="metrics profileMetrics">
-                  <Metric label="CPV υπό παρακολούθηση" value={number.format(alertsWatchlist.length)} tone="sky" />
-                  <Metric label="Περιοχές υπό παρακολούθηση" value={number.format(alertsNutsFilter.length)} tone="mint" />
+                  <Metric label="CPV" value={number.format(alertsWatchlist.length)} tone="sky" />
+                  <Metric label="Περιοχές" value={number.format(alertsNutsFilter.length)} tone="mint" />
                   <Metric label="Υποβεβλημένες προσφορές" value={number.format(submittedCount)} tone="sand" />
                   <Metric label="Ενδιαφέρον συμμετοχής" value={number.format(interestedCount)} tone="lilac" />
                 </div>
                 <button type="button" className="profileLink" onClick={() => setPage("alerts")}>Πήγαινε στην Παρακολούθηση →</button>
-              </> : <p className="watchlistCaption">Συνδέσου για να δεις τι παρακολουθείς.</p>}
+              </> : <p className="watchlistCaption">Συνδέσου για να ορίσεις τι ακολουθείς.</p>}
             </article>
             <article className="panel profileCard profileEmailCard">
               <p className="eyebrow">EMAIL</p>
@@ -1820,7 +1955,8 @@ function TeamCodeBar({ team }: { team: ReturnType<typeof useTeamCode> }) {
 // instead of being cleared. watchlist/nutsFilter are passed in from Home
 // instead, so they're unaffected by this remount and by switching tabs away
 // and back.
-function AlertsPanelContent({ code, onUnauthorized, watchlist, setWatchlist, nutsFilter, setNutsFilter }: {
+function AlertsPanelContent({ code, onUnauthorized, watchlist, setWatchlist, nutsFilter, setNutsFilter, onEditInterests }: {
+  onEditInterests?: () => void;
   code: string | null; onUnauthorized: () => void;
   watchlist: WatchlistItem[]; setWatchlist: (value: WatchlistItem[] | ((current: WatchlistItem[]) => WatchlistItem[])) => void;
   nutsFilter: NutsFilterItem[]; setNutsFilter: (value: NutsFilterItem[] | ((current: NutsFilterItem[]) => NutsFilterItem[])) => void;
@@ -2068,7 +2204,12 @@ function AlertsPanelContent({ code, onUnauthorized, watchlist, setWatchlist, nut
     <article className="panel watchlistPanel">
       <div className="watchlistRow cpvWatchRow">
         <div className="filterHeading"><div><p className="eyebrow">CPV ALERTS</p><h2>Παρακολούθηση CPV</h2></div><button type="button" title={loading ? "Φόρτωση…" : "Ανανέωση ειδοποιήσεων"} onClick={refresh}><span className={loading ? "spinIcon" : ""}>↻</span></button></div>
-        <div className="cpvNutsRow">
+        {code && <div className="interestsReadonly">
+          <p>{watchlist.length ? watchlist.map((item) => item.cpv_label ? `${item.cpv_code} · ${item.cpv_label}` : item.cpv_code).join("  |  ") : "Δεν έχεις ορίσει CPV."}</p>
+          {nutsFilter.length > 0 && <p>Περιοχές: {nutsFilter.map((item) => item.nuts_name ?? item.nuts_code).join(", ")}</p>}
+          <button type="button" className="profileLink" onClick={() => onEditInterests?.()}>Αλλαγή στο Προφίλ →</button>
+        </div>}
+        {!code && <div className="cpvNutsRow">
           <MultiSearchInput
             label="CPV"
             type="cpv"
@@ -2111,7 +2252,7 @@ function AlertsPanelContent({ code, onUnauthorized, watchlist, setWatchlist, nut
             }}
             placeholder="π.χ. Αττική - αφήστε κενό για όλη τη χώρα"
           />
-        </div>
+        </div>}
       </div>
       <p className="watchlistCaption">Οι νέοι διαγωνισμοί που δημοσιεύονται σε αυτά τα CPV εμφανίζονται παρακάτω, με αποδελτίωση των βασικών στοιχείων{nutsFilter.length > 0 && ", περιορισμένοι στην περιοχή που επέλεξες"}.</p>
     </article>

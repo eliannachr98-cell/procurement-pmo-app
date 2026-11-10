@@ -202,3 +202,14 @@ export async function procurementAdamsForCpv(term: string) {
     contractAdams: [...new Set([...directContractAdams, ...contractsFromAwards.map((row) => row.adam)])],
   };
 }
+
+// Notices whose own CPV list contains one of the given exact codes - used by
+// the Επισκόπηση to scope everything to the CPVs a profile watches.
+export async function procurementAdamsForCpvCodes(codes: string[]) {
+  if (!codes.length) return [] as string[];
+  const list = codes.map((code) => encodeURIComponent(code)).join(",");
+  const rows = await allRows<{ record_adam: string }>(
+    `record_cpvs_compact?select=record_adam&record_type=eq.procurement&cpv_code=in.(${list})&order=record_adam.asc`,
+  );
+  return [...new Set(rows.map((row) => row.record_adam))];
+}
