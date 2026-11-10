@@ -29,7 +29,7 @@ declare
   affected integer;
 begin
   update public.procurement_quality_flags f
-  set in_stats = (f.notice_type_key = '3'),
+  set in_stats = coalesce(f.notice_type_key = '3', false),
       exclusion_reason = case when f.notice_type_key is distinct from '3' then 'type' end,
       rule_version = 'type3_v3',
       computed_at = now()
