@@ -182,9 +182,11 @@ function groupBy<T>(rows: T[], key: (row: T) => string | null) {
 }
 
 function statusFor(row: ProcurementRow, awards: AwardRow[], contracts: ContractRow[], validOpeningAt?: string) {
-  if (row.cancelled_at || row.status === "cancelled") return "Ακυρωμένος";
+  // A cancelled notice that still has a contract or award counts as that;
+  // only a cancelled notice with neither is "Ακυρωμένος".
   if (contracts.length) return "Συμβασιοποιημένος";
   if (awards.length) return "Ανατεθειμένος";
+  if (row.cancelled_at || row.status === "cancelled") return "Ακυρωμένος";
   // Must use the same validated opening date as the display value below -
   // a raw opening_at earlier than publication_date is bad source data, not
   // a real passed deadline, and was otherwise pushing those notices into
@@ -515,6 +517,7 @@ export async function GET(request: Request) {
         publicationDate: notice.publication_date,
         deadline: submissionDeadline,
         openingDate: submissionDeadline,
+        dateIssue: Boolean(notice.opening_at && notice.publication_date && (notice.opening_at.slice(0, 10) < notice.publication_date || (new Date(notice.opening_at.slice(0, 10)).getTime() - new Date(notice.publication_date).getTime()) / 86400000 > 365)),
         awardDate: linkedAwards.map((row) => row.award_date).filter(Boolean).sort()[0],
         contractDates: linkedContracts.map((row) => row.signed_date).filter(Boolean),
         deliveryDates: linkedContracts.map((row) => row.delivery_date).filter(Boolean),
