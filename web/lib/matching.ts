@@ -218,7 +218,7 @@ export async function procurementAdamsForCpvCodes(codes: string[]) {
 // by the Επισκόπηση to scope to the authorities a profile follows.
 export async function procurementAdamsForAuthorities(names: string[]) {
   if (!names.length) return [] as string[];
-  const list = names.map((name) => `"${name.replace(/\/g, "\\\\").replace(/"/g, '\\"')}"`).join(",");
+  const list = names.map((name) => `"${name.split("\\").join("\\\\").split('"').join('\\"')}"`).join(",");
   const rows = await allRows<{ adam: string }>(
     `procurements_compact?select=adam&document_category=eq.declaration&authority_name=in.(${encodeURIComponent(list)})&order=adam.asc`,
   );
