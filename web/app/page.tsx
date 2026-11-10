@@ -355,6 +355,12 @@ export default function Home() {
       .catch((error) => setSavedViewsError(error instanceof Error ? error.message : "Άγνωστο σφάλμα διαγραφής προβολής"));
   };
   const [lastSync, setLastSync] = useState<string | null>(null);
+  // What is new in the followed CPVs/authorities/contractors since the previous
+  // visit (kept per browser: sessionStorage holds the baseline for this
+  // session, localStorage the time of the latest visit).
+  const [interestNews, setInterestNews] = useState<{ cpv: number; authorities: number; contractors: number } | null>(null);
+  const syncShort = lastSync ? new Intl.DateTimeFormat("el-GR", { day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit" }).format(new Date(lastSync)) : null;
+  const newsLabel = (count?: number) => count === undefined ? "…" : count === 0 ? "Χωρίς νέα" : `${new Intl.NumberFormat("el-GR").format(count)} νέα`;
   const latestRequest = useRef(0);
   const latestDashboardRequest = useRef(0);
   const latestMarketOverviewRequest = useRef(0);
@@ -518,6 +524,28 @@ export default function Home() {
     const timer = window.setTimeout(loadCompetition, 500);
     return () => window.clearTimeout(timer);
   }, [competitionNeedsOwnFetch, loadCompetition]);
+
+  useEffect(() => {
+    if (page !== "profile" || !team.code || !watchlistReady) return;
+    let baseline = new Date(Date.now() - 7 * 86400000).toISOString();
+    try {
+      const stored = sessionStorage.getItem("tenderscope_visit_baseline");
+      if (stored) {
+        baseline = stored;
+      } else {
+        baseline = localStorage.getItem("tenderscope_last_visit") ?? baseline;
+        sessionStorage.setItem("tenderscope_visit_baseline", baseline);
+        localStorage.setItem("tenderscope_last_visit", new Date().toISOString());
+      }
+    } catch {
+      // storage unavailable (private window): fall back to the last 7 days
+    }
+    setInterestNews(null);
+    fetch(`/api/interest-news?since=${baseline.slice(0, 10)}`, { headers: { "x-alert-code": team.code } })
+      .then((response) => response.ok ? response.json() : null)
+      .then((payload) => setInterestNews(payload && typeof payload.cpv === "number" ? payload : null))
+      .catch(() => setInterestNews(null));
+  }, [page, team.code, watchlistReady, alertsWatchlist.length, authorityWatch.length, contractorWatch.length]);
 
   // The CPV and region interests are managed from Προφίλ. Same endpoints as
   // the Παρακολούθηση used; the shared state keeps every page in sync.
@@ -787,7 +815,7 @@ export default function Home() {
                 <p className="watchlistCaption">Όσα ορίσεις εδώ καθορίζουν την Επισκόπηση («Η αγορά μου», Ανταγωνισμός) και τις ειδοποιήσεις.</p>
                 <div className="interestGrid">
                   <section className="interestBox">
-                    <header className="interestBoxHead"><span className="interestIcon"><Tags size={18} /></span><div><h3>CPV</h3><p>Κατηγορίες διαγωνισμών</p></div><b className="interestCount">{number.format(alertsWatchlist.length)}</b></header>
+                    <header className="interestBoxHead"><span className="interestIcon"><Tags size={18} /></span><div><h3>CPV</h3><p>Κατηγορίες διαγωνισμών</p></div><span className="interestMeta"><em>{newsLabel(interestNews?.cpv)}</em>{syncShort && <small>Ενημ. {syncShort}</small>}</span><b className="interestCount">{number.format(alertsWatchlist.length)}</b></header>
                     <MultiSearchInput
                       label="Προσθήκη"
                       type="cpv"
@@ -802,7 +830,7 @@ export default function Home() {
                     />
                   </section>
                   <section className="interestBox">
-                    <header className="interestBoxHead"><span className="interestIcon"><MapPin size={18} /></span><div><h3>Περιοχές</h3><p>Για τις ειδοποιήσεις</p></div><b className="interestCount">{number.format(alertsNutsFilter.length)}</b></header>
+                    <header className="interestBoxHead"><span className="interestIcon"><MapPin size={18} /></span><div><h3>Περιοχές</h3><p>Για τις ειδοποιήσεις</p></div><span className="interestMeta">{syncShort && <small>Ενημ. {syncShort}</small>}</span><b className="interestCount">{number.format(alertsNutsFilter.length)}</b></header>
                     <MultiSearchInput
                       label="Προσθήκη"
                       type="nuts"
@@ -817,7 +845,7 @@ export default function Home() {
                     />
                   </section>
                   <section className="interestBox">
-                    <header className="interestBoxHead"><span className="interestIcon"><Building2 size={18} /></span><div><h3>Αναθέτουσες αρχές</h3><p>Οι διαγωνισμοί τους μπαίνουν στην αγορά μου</p></div><b className="interestCount">{number.format(authorityWatch.length)}</b></header>
+                    <header className="interestBoxHead"><span className="interestIcon"><Building2 size={18} /></span><div><h3>Αναθέτουσες αρχές</h3><p>Οι διαγωνισμοί τους μπαίνουν στην αγορά μου</p></div><span className="interestMeta"><em>{newsLabel(interestNews?.authorities)}</em>{syncShort && <small>Ενημ. {syncShort}</small>}</span><b className="interestCount">{number.format(authorityWatch.length)}</b></header>
                     <MultiSearchInput
                       label="Προσθήκη"
                       type="authority"
@@ -831,7 +859,7 @@ export default function Home() {
                     />
                   </section>
                   <section className="interestBox">
-                    <header className="interestBoxHead"><span className="interestIcon"><Trophy size={18} /></span><div><h3>Ανάδοχοι</h3><p>Ανταγωνιστές που παρακολουθείς</p></div><b className="interestCount">{number.format(contractorWatch.length)}</b></header>
+                    <header className="interestBoxHead"><span className="interestIcon"><Trophy size={18} /></span><div><h3>Ανάδοχοι</h3><p>Ανταγωνιστές που παρακολουθείς</p></div><span className="interestMeta"><em>{newsLabel(interestNews?.contractors)}</em>{syncShort && <small>Ενημ. {syncShort}</small>}</span><b className="interestCount">{number.format(contractorWatch.length)}</b></header>
                     <MultiSearchInput
                       label="Προσθήκη"
                       type="contractor"
