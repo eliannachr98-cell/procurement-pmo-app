@@ -10,11 +10,12 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: report | apply-sql | recompute
+        description: report | compare | apply-sql | recompute
         required: true
         type: choice
         options:
           - report
+          - compare
           - apply-sql
           - recompute
         default: report
@@ -75,6 +76,43 @@ jobs:
                   show(cur, "stored flags: notice_type_key | in_stats | rule_version | count", """
                     select coalesce(notice_type_key, 'NULL'), in_stats, rule_version, count(*)
                     from public.procurement_quality_flags group by 1, 2, 3 order by 4 desc""")
+              elif mode == "compare":
+                  cur.execute("select column_name from information_schema.columns where table_name = 'excel_final_notices' order by ordinal_position")
+                  cols = [r[0] for r in cur.fetchall()]
+                  print("excel_final_notices columns:", cols)
+                  adam_col = next(c for c in cols if "adam" in c.lower())
+                  year_col = next(c for c in cols if "year" in c.lower() or c.lower() in ("yr", "etos"))
+                  KW = "ΑΠΟΦΑΣ|ΤΡΟΠΟΠ|ΠΑΡΑΤΑΣ|ΔΙΕΥΚΡ|ΜΑΤΑΙΩ|ΔΙΟΡΘΩ|ΑΝΑΡΤΗΣ|ΠΕΡΙΛΗΨ|ΜΕΤΑΘΕΣ|ΠΡΟΣΦΥΓ|ΑΕΠΠ"
+                  cur.execute("create temp table cmp_excel as select distinct " + adam_col + "::text as adam, " + year_col + "::int as y from public.excel_final_notices")
+                  cur.execute(f"""
+                    create temp table cmp_db as
+                    select p.adam, extract(year from p.publication_date)::int as y, p.document_category as cat, g.notice_type_key as tk,
+                           translate(upper(p.title), 'ΆΈΉΊΌΎΏΪΫ', 'ΑΕΗΙΟΥΩΙΥ') ~ '{KW}' as kw,
+                           coalesce(g.cancelled_api, p.status = 'cancelled', false) as canc,
+                           coalesce(g.has_award_ref, exists (select 1 from public.awards_compact a where a.procurement_adam = p.adam)) as has_award,
+                           coalesce((p.opening_at at time zone 'Europe/Athens')::date < p.publication_date
+                                    or (p.opening_at at time zone 'Europe/Athens')::date - p.publication_date > 365, false) as di
+                    from public.procurements_compact p
+                    join public.procurement_quality_flags g on g.adam = p.adam
+                    where p.publication_date >= '2024-01-01' and p.publication_date < '2026-01-01'""")
+                  show(cur, "year | excel | db(type3+declaration) | in both | only excel | only db", """
+                    select y, (select count(*) from cmp_excel e where e.y = y2.y),
+                           (select count(*) from cmp_db d where d.y = y2.y and d.tk = '3' and d.cat = 'declaration'),
+                           (select count(*) from cmp_db d join cmp_excel e on e.adam = d.adam and e.y = d.y where d.y = y2.y and d.tk = '3' and d.cat = 'declaration'),
+                           (select count(*) from cmp_excel e where e.y = y2.y and not exists (select 1 from cmp_db d where d.adam = e.adam and d.tk = '3' and d.cat = 'declaration')),
+                           (select count(*) from cmp_db d where d.y = y2.y and d.tk = '3' and d.cat = 'declaration' and not exists (select 1 from cmp_excel e where e.adam = d.adam))
+                    from (select 2024 as y union all select 2025) y2 order by 1""")
+                  show(cur, "only in DB (type3+declaration, not in excel): year | title_kw | cancelled_no_award | date_issue | none_of_them", """
+                    select d.y, count(*) filter (where d.kw), count(*) filter (where d.canc and not d.has_award),
+                           count(*) filter (where d.di), count(*) filter (where not d.kw and not (d.canc and not d.has_award) and not d.di)
+                    from cmp_db d where d.tk = '3' and d.cat = 'declaration' and not exists (select 1 from cmp_excel e where e.adam = d.adam)
+                    group by d.y order by d.y""")
+                  show(cur, "only in Excel: year | not in db at all | other type | type3 but other category", """
+                    select e.y, count(*) filter (where d.adam is null), count(*) filter (where d.adam is not null and d.tk is distinct from '3'),
+                           count(*) filter (where d.tk = '3' and d.cat <> 'declaration')
+                    from cmp_excel e left join cmp_db d on d.adam = e.adam
+                    where e.y in (2024, 2025) and not exists (select 1 from cmp_db x where x.adam = e.adam and x.tk = '3' and x.cat = 'declaration')
+                    group by e.y order by e.y""")
               elif mode == "apply-sql":
                   for name in ("quality_flags.sql", "dashboard_aggregates.sql", "market_overview.sql"):
                       cur.execute(Path("sql", name).read_text(encoding="utf-8"))
