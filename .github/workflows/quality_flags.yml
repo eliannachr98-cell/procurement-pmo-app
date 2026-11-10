@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: report | compare | apply-sql | reclassify | recompute
+        description: report | compare | apply-sql | reclassify | export | recompute
         required: true
         type: choice
         options:
@@ -18,6 +18,7 @@ on:
           - compare
           - apply-sql
           - reclassify
+          - export
           - recompute
         default: report
 
@@ -118,6 +119,23 @@ jobs:
                   for name in ("quality_flags.sql", "dashboard_aggregates.sql", "market_overview.sql", "reclassify_documents.sql"):
                       cur.execute(Path("sql", name).read_text(encoding="utf-8"))
                       print("applied", name)
+              elif mode == "export":
+                  import csv
+                  cur.execute("""
+                    select p.adam, extract(year from p.publication_date)::int, p.publication_date, p.document_category, g.notice_type_key,
+                           p.status, g.cancelled_api, p.title
+                    from public.procurements_compact p
+                    join public.procurement_quality_flags g on g.adam = p.adam
+                    where g.notice_type_key = '3' and p.publication_date >= '2024-01-01'
+                    order by p.publication_date, p.adam""")
+                  with open("app_adams.csv", "w", newline="", encoding="utf-8") as handle:
+                      writer = csv.writer(handle)
+                      writer.writerow(["adam", "year", "publication_date", "document_category", "notice_type_key", "status", "cancelled_api", "title"])
+                      count = 0
+                      for row in cur:
+                          writer.writerow(row)
+                          count += 1
+                  print("rows exported:", count)
               elif mode == "reclassify":
                   cur.execute(Path("sql", "reclassify_documents.sql").read_text(encoding="utf-8"))
                   cur.execute("select public.reclassify_document_categories()")
@@ -134,3 +152,10 @@ jobs:
                   print("dashboard caches refreshed")
                   cur.execute("select public.refresh_market_overview_cache()")
                   print("market overview cache refreshed")
+      - name: Upload export
+        if: ${{ inputs.mode == 'export' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-adams
+          path: app_adams.csv
+          retention-days: 3
