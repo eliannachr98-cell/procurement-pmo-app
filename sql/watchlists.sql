@@ -1,7 +1,7 @@
 -- Contractors ("ανταγωνιστές") and authorities a profile follows, next to the
 -- CPV list (cpv_watchlist) and regions (alert_nuts_filter). Same access pattern
 -- as those tables: team-scoped rows read and written through the API.
-create table if not exists public.contractor_watchlist (
+create table if not exists public.followed_contractors (
   team_id uuid not null references public.teams(id) on delete cascade,
   contractor_key text not null,
   contractor_label text,
