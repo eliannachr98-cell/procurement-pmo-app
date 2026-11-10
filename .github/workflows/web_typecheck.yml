@@ -5,7 +5,6 @@ name: Web typecheck
 on:
   push:
     branches: [agent/tenderscope-nextjs]
-    paths: ["web/**"]
   workflow_dispatch:
 
 permissions:
