@@ -40,10 +40,8 @@ begin
     conditions := conditions || format('p.contract_type = any(%L::text[])', p_contract_type);
   end if;
   if p_stats_only then
-    -- The thesis Excel rules: only noticeType "Διακήρυξη", no amendment/
-    -- extension/... titles (accent-insensitive, like the Excel), not a
-    -- cancelled notice without an award, and a sane opening date.
-    join_flags := 'join public.procurement_quality_flags f on f.adam = p.adam and f.notice_type_key = ''3'' and not f.cancelled_no_award and not f.date_issue and not (translate(upper(p.title), ''ΆΈΉΊΌΎΏΪΫ'', ''ΑΕΗΙΟΥΩΙΥ'') ~ ''ΑΠΟΦΑΣ|ΤΡΟΠΟΠ|ΠΑΡΑΤΑΣ|ΔΙΕΥΚΡ|ΜΑΤΑΙΩ|ΔΙΟΡΘΩ|ΑΝΑΡΤΗΣ|ΠΕΡΙΛΗΨ|ΜΕΤΑΘΕΣ|ΠΡΟΣΦΥΓ|ΑΕΠΠ'')';
+    -- The only rule: noticeType "Διακήρυξη" (key 3).
+    join_flags := 'join public.procurement_quality_flags f on f.adam = p.adam and f.notice_type_key = ''3''';
   end if;
 
   execute format($q$
