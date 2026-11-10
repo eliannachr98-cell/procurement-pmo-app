@@ -4,6 +4,7 @@ import {
   procurementAdamsForContractor,
   procurementAdamsForCpv,
   procurementAdamsForCpvCodes,
+  procurementAdamsForAuthorities,
   supabaseRpc,
   union,
 } from "@/lib/matching";
@@ -56,7 +57,14 @@ export async function GET(request: Request) {
     }
 
     const watchCpvs = searchParams.getAll("watchCpv").flatMap((value) => value.split(",")).map((value) => value.trim()).filter(Boolean);
-    if (watchCpvs.length) matchingAdams = intersect(matchingAdams, await procurementAdamsForCpvCodes(watchCpvs));
+    const watchAuthorities = searchParams.getAll("watchAuthority").map((value) => value.trim()).filter(Boolean);
+    if (watchCpvs.length || watchAuthorities.length) {
+      const scoped = union([
+        watchCpvs.length ? await procurementAdamsForCpvCodes(watchCpvs) : [],
+        watchAuthorities.length ? await procurementAdamsForAuthorities(watchAuthorities) : [],
+      ]);
+      matchingAdams = intersect(matchingAdams, scoped);
+    }
 
     if (matchingAdams?.length === 0) {
       return NextResponse.json({ total: 0, status: [], cpv: [], cpvTotal: 0, nuts: [], monthly: [] } satisfies Breakdown);

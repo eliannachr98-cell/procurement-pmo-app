@@ -213,3 +213,14 @@ export async function procurementAdamsForCpvCodes(codes: string[]) {
   );
   return [...new Set(rows.map((row) => row.record_adam))];
 }
+
+// Declarations published by any of the given authorities (exact names), used
+// by the Επισκόπηση to scope to the authorities a profile follows.
+export async function procurementAdamsForAuthorities(names: string[]) {
+  if (!names.length) return [] as string[];
+  const list = names.map((name) => `"${name.replace(/\/g, "\\\\").replace(/"/g, '\\"')}"`).join(",");
+  const rows = await allRows<{ adam: string }>(
+    `procurements_compact?select=adam&document_category=eq.declaration&authority_name=in.(${encodeURIComponent(list)})&order=adam.asc`,
+  );
+  return rows.map((row) => row.adam);
+}

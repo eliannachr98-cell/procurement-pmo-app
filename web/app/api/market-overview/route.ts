@@ -4,6 +4,7 @@ import {
   procurementAdamsForContractor,
   procurementAdamsForCpv,
   procurementAdamsForCpvCodes,
+  procurementAdamsForAuthorities,
   supabaseGet,
   supabaseRpc,
   union,
@@ -37,13 +38,27 @@ export async function GET(request: Request) {
       matchingAdams = intersect(matchingAdams, union(groups.map((item) => item.procurementAdams)));
     }
     const watchCpvs = list("watchCpv");
-    if (watchCpvs.length) matchingAdams = intersect(matchingAdams, await procurementAdamsForCpvCodes(watchCpvs));
+    const watchAuthorities = list("watchAuthority");
+    const track = list("track");
+    if (watchCpvs.length || watchAuthorities.length) {
+      const scoped = union([
+        watchCpvs.length ? await procurementAdamsForCpvCodes(watchCpvs) : [],
+        watchAuthorities.length ? await procurementAdamsForAuthorities(watchAuthorities) : [],
+      ]);
+      matchingAdams = intersect(matchingAdams, scoped);
+    }
+    if (track.length && !watchCpvs.length && !watchAuthorities.length) {
+      // Only competitors followed: describe the tenders they took part in.
+      const groups: Awaited<ReturnType<typeof procurementAdamsForContractor>>[] = [];
+      for (const item of track) groups.push(await procurementAdamsForContractor(item));
+      matchingAdams = intersect(matchingAdams, union(groups.map((item) => item.procurementAdams)));
+    }
     if (matchingAdams?.length === 0) return NextResponse.json({ empty: true });
 
     // A year (or no filter at all) on its own is far too heavy to compute per
     // request, so it's precomputed into market_overview_cache (see
     // sql/market_overview.sql); anything narrower is computed live.
-    const cacheOnly = !authority && !contractors.length && !cpvs.length && !watchCpvs.length && !contractTypes.length;
+    const cacheOnly = !authority && !contractors.length && !cpvs.length && !watchCpvs.length && !watchAuthorities.length && !track.length && !contractTypes.length;
     if (cacheOnly) {
       const key = /^\d{4}$/.test(year) ? year : "all";
       const rows = await supabaseGet<{ payload: unknown }[]>(`market_overview_cache?select=payload&cache_key=eq.${key}`);
@@ -57,6 +72,7 @@ export async function GET(request: Request) {
       p_contract_type: contractTypes.length ? contractTypes : null,
       p_adams: matchingAdams,
       p_stats_only: true,
+      p_track: track.length ? track : null,
     });
     return NextResponse.json(summary, { headers: { "Cache-Control": "no-store, max-age=0" } });
   } catch (error) {

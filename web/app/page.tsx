@@ -138,7 +138,7 @@ type MarketOverview = {
   concentrationTop5: number | null;
   discount: { count: number; average: number | null; median: number | null; positiveShare: number | null };
   discountByType: { type: string | null; count: number; average: number }[];
-  bigFour?: { name: string; awards: number; contracts: number; value: number; discount: number | null; discountCount: number }[];
+  tracked?: { key: string; name: string; awards: number; contracts: number; value: number; discount: number | null }[];
   consulting?: {
     tenders: number; docs: number; value: number; big4Docs: number; big4Value: number;
     firms: { name: string; docs: number; value: number }[];
@@ -180,6 +180,8 @@ export default function Home() {
   // watchlistReady holds the first requests back until the interests have loaded.
   const [overviewScope, setOverviewScope] = useState<"mine" | "all">("mine");
   const [watchlistReady, setWatchlistReady] = useState(false);
+  const [contractorWatch, setContractorWatch] = useState<{ contractor_key: string; contractor_label: string | null }[]>([]);
+  const [authorityWatch, setAuthorityWatch] = useState<{ authority_name: string }[]>([]);
   const [competition, setCompetition] = useState<MarketOverview | null>(null);
   const [competitionState, setCompetitionState] = useState<"idle" | "loading" | "error">("idle");
   const [alertsNutsFilter, setAlertsNutsFilter] = useState<NutsFilterItem[]>([]);
@@ -233,7 +235,7 @@ export default function Home() {
     if (!team.code) {
       setAlertsWatchlist([]); setAlertsNutsFilter([]); setRecentAlertCount(0);
       setSubmittedCount(0); setInterestedCount(0); setProfileRecipients([]);
-      setWatchlistReady(false);
+      setWatchlistReady(false); setContractorWatch([]); setAuthorityWatch([]);
       return;
     }
     const code = team.code;
@@ -244,6 +246,14 @@ export default function Home() {
       .then((response) => response.ok ? response.json() : { items: [] })
       .then((payload) => { setAlertsWatchlist(payload.items ?? []); setWatchlistReady(true); })
       .catch(() => setWatchlistReady(true));
+    fetch("/api/contractor-watchlist", { headers })
+      .then((response) => response.ok ? response.json() : { items: [] })
+      .then((payload) => setContractorWatch(payload.items ?? []))
+      .catch(() => {});
+    fetch("/api/authority-watchlist", { headers })
+      .then((response) => response.ok ? response.json() : { items: [] })
+      .then((payload) => setAuthorityWatch(payload.items ?? []))
+      .catch(() => {});
     fetch("/api/alerts", { headers })
       .then((response) => response.ok ? response.json() : { watchlist: [], nutsFilter: [], alerts: [] })
       .then((payload) => {
@@ -410,7 +420,10 @@ export default function Home() {
   // while "Τα ενδιαφέροντά μου" is selected; with no interests there is nothing
   // to scope by and the whole market is shown.
   const mineCodes = useMemo(() => team.code ? alertsWatchlist.map((item) => item.cpv_code) : [], [team.code, alertsWatchlist]);
+  const mineAuthorities = useMemo(() => team.code ? authorityWatch.map((item) => item.authority_name) : [], [team.code, authorityWatch]);
+  const trackKeys = useMemo(() => team.code ? contractorWatch.map((item) => item.contractor_key) : [], [team.code, contractorWatch]);
   const scopeCodes = useMemo(() => page === "overview" && overviewScope === "mine" ? mineCodes : [], [page, overviewScope, mineCodes]);
+  const scopeAuthorities = useMemo(() => page === "overview" && overviewScope === "mine" ? mineAuthorities : [], [page, overviewScope, mineAuthorities]);
   const scopeWaiting = page === "overview" && overviewScope === "mine" && Boolean(team.code) && !watchlistReady;
 
   const loadDashboard = useCallback(() => {
@@ -421,6 +434,7 @@ export default function Home() {
     contractor.forEach((item) => params.append("contractor", item));
     cpv.forEach((item) => params.append("cpv", item));
     scopeCodes.forEach((item) => params.append("watchCpv", item));
+    scopeAuthorities.forEach((item) => params.append("watchAuthority", item));
     if (year !== "Όλα") params.set("year", year);
     contractType.forEach((item) => params.append("contractType", item));
     fetch(`/api/dashboard?${params.toString()}`)
@@ -438,7 +452,7 @@ export default function Home() {
         setDashboard(emptyDashboard);
         setDashboardError("Πολύ ευρύ φίλτρο για να υπολογιστεί - πρόσθεσε έτος ή άλλο φίλτρο για να στενέψει.");
       });
-  }, [authority, contractor, cpv, year, contractType, scopeCodes, scopeWaiting]);
+  }, [authority, contractor, cpv, year, contractType, scopeCodes, scopeAuthorities, scopeWaiting]);
 
   const loadMarketOverview = useCallback(() => {
     if (scopeWaiting) return;
@@ -448,6 +462,7 @@ export default function Home() {
     contractor.forEach((item) => params.append("contractor", item));
     cpv.forEach((item) => params.append("cpv", item));
     scopeCodes.forEach((item) => params.append("watchCpv", item));
+    scopeAuthorities.forEach((item) => params.append("watchAuthority", item));
     if (year !== "Όλα") params.set("year", year);
     contractType.forEach((item) => params.append("contractType", item));
     setMarketOverviewState("loading");
@@ -463,11 +478,12 @@ export default function Home() {
         setMarketOverview(null);
         setMarketOverviewState("error");
       });
-  }, [authority, contractor, cpv, year, contractType, scopeCodes, scopeWaiting]);
+  }, [authority, contractor, cpv, year, contractType, scopeCodes, scopeAuthorities, scopeWaiting]);
 
   // Ανταγωνισμός is always about the interests. When the switch is on "Τα
   // ενδιαφέροντά μου" it reuses the Αγορά data; otherwise it fetches its own.
-  const competitionNeedsOwnFetch = page === "overview" && Boolean(team.code) && watchlistReady && mineCodes.length > 0 && overviewScope === "all";
+  const hasInterests = mineCodes.length > 0 || mineAuthorities.length > 0 || trackKeys.length > 0;
+  const competitionNeedsOwnFetch = page === "overview" && Boolean(team.code) && watchlistReady && hasInterests;
   const loadCompetition = useCallback(() => {
     const requestId = ++latestCompetitionRequest.current;
     const params = new URLSearchParams();
@@ -475,6 +491,8 @@ export default function Home() {
     contractor.forEach((item) => params.append("contractor", item));
     cpv.forEach((item) => params.append("cpv", item));
     mineCodes.forEach((item) => params.append("watchCpv", item));
+    mineAuthorities.forEach((item) => params.append("watchAuthority", item));
+    trackKeys.forEach((item) => params.append("track", item));
     if (year !== "Όλα") params.set("year", year);
     contractType.forEach((item) => params.append("contractType", item));
     setCompetitionState("loading");
@@ -490,7 +508,7 @@ export default function Home() {
         setCompetition(null);
         setCompetitionState("error");
       });
-  }, [authority, contractor, cpv, year, contractType, mineCodes]);
+  }, [authority, contractor, cpv, year, contractType, mineCodes, mineAuthorities, trackKeys]);
   useEffect(() => {
     if (!competitionNeedsOwnFetch) return;
     const timer = window.setTimeout(loadCompetition, 500);
@@ -517,6 +535,24 @@ export default function Home() {
     if (alertsNutsFilter.some((item) => item.nuts_code === option.value)) return;
     interestFetch("/api/alert-nuts-filter", "POST", { nuts_code: option.value, nuts_name: option.label })
       .then((ok) => { if (ok) setAlertsNutsFilter((current) => [...current, { nuts_code: option.value, nuts_name: option.label }]); });
+  };
+  const addInterestContractor = (option: { value: string; label: string }) => {
+    if (contractorWatch.some((item) => item.contractor_key === option.value)) return;
+    interestFetch("/api/contractor-watchlist", "POST", { contractor_key: option.value, contractor_label: option.label })
+      .then((ok) => { if (ok) setContractorWatch((current) => [...current, { contractor_key: option.value, contractor_label: option.label }]); });
+  };
+  const removeInterestContractor = (key: string) => {
+    interestFetch(`/api/contractor-watchlist?contractor_key=${encodeURIComponent(key)}`, "DELETE")
+      .then((ok) => { if (ok) setContractorWatch((current) => current.filter((item) => item.contractor_key !== key)); });
+  };
+  const addInterestAuthority = (option: { value: string; label: string }) => {
+    if (authorityWatch.some((item) => item.authority_name === option.value)) return;
+    interestFetch("/api/authority-watchlist", "POST", { authority_name: option.value })
+      .then((ok) => { if (ok) setAuthorityWatch((current) => [...current, { authority_name: option.value }]); });
+  };
+  const removeInterestAuthority = (name: string) => {
+    interestFetch(`/api/authority-watchlist?authority_name=${encodeURIComponent(name)}`, "DELETE")
+      .then((ok) => { if (ok) setAuthorityWatch((current) => current.filter((item) => item.authority_name !== name)); });
   };
   const removeInterestNuts = (nutsCode: string) => {
     interestFetch(`/api/alert-nuts-filter?nuts_code=${encodeURIComponent(nutsCode)}`, "DELETE")
@@ -663,10 +699,10 @@ export default function Home() {
           {page === "overview" && <>
             {team.code && <div className="overviewScope">
               <div className="overviewScopeToggle" role="group" aria-label="Εύρος Διαγωνισμών και Αγοράς">
-                <button type="button" className={overviewScope === "mine" ? "active" : ""} onClick={() => setOverviewScope("mine")}>Τα ενδιαφέροντά μου{watchlistReady ? ` (${alertsWatchlist.length})` : ""}</button>
+                <button type="button" className={overviewScope === "mine" ? "active" : ""} onClick={() => setOverviewScope("mine")}>Τα ενδιαφέροντά μου{watchlistReady ? ` (${alertsWatchlist.length + authorityWatch.length})` : ""}</button>
                 <button type="button" className={overviewScope === "all" ? "active" : ""} onClick={() => setOverviewScope("all")}>Όλη η αγορά</button>
               </div>
-              <p className="overviewScopeNote">Ισχύει για τους Διαγωνισμούς και την Αγορά. Ο Ανταγωνισμός δείχνει πάντα τα CPV που ακολουθείς.{overviewScope === "mine" && watchlistReady && alertsWatchlist.length === 0 ? " Δεν έχεις ορίσει CPV, οπότε εμφανίζεται όλη η αγορά." : ""}</p>
+              <p className="overviewScopeNote">Ισχύει για τους Διαγωνισμούς και την Αγορά (CPV και αρχές που ακολουθείς). Ο Ανταγωνισμός δείχνει πάντα όσα ακολουθείς.{overviewScope === "mine" && watchlistReady && alertsWatchlist.length === 0 && authorityWatch.length === 0 ? " Δεν έχεις ορίσει CPV ή αρχές, οπότε εμφανίζεται όλη η αγορά." : ""}</p>
             </div>}
             <div className="overviewWrap">
             <section className="overviewSection"><h2 className="overviewHeading">Διαγωνισμοί</h2>
@@ -684,11 +720,11 @@ export default function Home() {
             </div>
             </section>
             <section className="overviewSection"><h2 className="overviewHeading">Αγορά</h2><OverviewMarket data={marketOverview} state={marketOverviewState} /></section>
-            <section className="overviewSection"><h2 className="overviewHeading">Ανταγωνισμός <span className="overviewHeadingNote">στα CPV που ακολουθείς</span></h2>
+            <section className="overviewSection"><h2 className="overviewHeading">Ανταγωνισμός <span className="overviewHeadingNote">για όσα ακολουθείς</span></h2>
               {!team.code
                 ? <div className="overviewGate locked">
                     <div className="overviewLockCard">
-                      <strong>Ο Ανταγωνισμός δείχνει δεδομένα για τα CPV του προφίλ σου</strong>
+                      <strong>Ο Ανταγωνισμός δείχνει δεδομένα για όσα ακολουθείς στο προφίλ σου</strong>
                       <p>Συνδέσου ή εγγράψου για να τον δεις.</p>
                       <div className="overviewLockActions">
                         <button type="button" className="teamCodeToggle" onClick={() => team.setShowCodeBox(true)}>Σύνδεση</button>
@@ -697,9 +733,9 @@ export default function Home() {
                     </div>
                     <div className="overviewWrap" aria-hidden="true"><OverviewCompetition data={marketOverview} state={marketOverviewState} /></div>
                   </div>
-                : watchlistReady && mineCodes.length === 0
-                  ? <p className="noRows">Δεν έχεις ορίσει CPV. Πρόσθεσέ τα στο Προφίλ για να δεις τον ανταγωνισμό. <button type="button" className="profileLink" onClick={() => setPage("profile")}>Πήγαινε στο Προφίλ →</button></p>
-                  : <OverviewCompetition data={overviewScope === "mine" ? marketOverview : competition} state={overviewScope === "mine" ? marketOverviewState : competitionState} />}
+                : watchlistReady && !hasInterests
+                  ? <p className="noRows">Δεν ακολουθείς ακόμα CPV, αναθέτουσες αρχές ή αναδόχους. Πρόσθεσέ τα στο Προφίλ για να δεις τον ανταγωνισμό. <button type="button" className="profileLink" onClick={() => setPage("profile")}>Πήγαινε στο Προφίλ →</button></p>
+                  : <OverviewCompetition data={competition} state={competitionState} />}
             </section>
             </div>
           </>}
@@ -740,26 +776,11 @@ export default function Home() {
               </>}
               {lastSync && <p className="profileHeaderSync">Ενημέρωση δεδομένων<strong>{new Intl.DateTimeFormat("el-GR", { dateStyle: "short", timeStyle: "short" }).format(new Date(lastSync))}</strong></p>}
             </article>
-            <article className="panel profileCard profileViewsCard">
-              <p className="eyebrow">ΠΡΟΒΟΛΕΣ</p>
-              <h2>Αποθηκευμένες προβολές</h2>
-              {team.code ? <>
-                {savedViewsError && <p className="recipientError">{savedViewsError}</p>}
-                {savedViews.length > 0 ? <ul className="savedViewsList">
-                  {savedViews.map((view) => (
-                    <li key={view.id}>
-                      <button type="button" className="savedViewApply" onClick={() => { applyView(view); setPage("overview"); }}>{view.name}</button>
-                      <button type="button" className="savedViewDelete" onClick={() => deleteView(view.id)} aria-label={`Διαγραφή ${view.name}`}>×</button>
-                    </li>
-                  ))}
-                </ul> : <p className="noRows">Δεν έχεις αποθηκεύσει καμία προβολή ακόμη.</p>}
-              </> : <p className="watchlistCaption">Συνδέσου για να δεις τις αποθηκευμένες προβολές σου.</p>}
-            </article>
             <article className="panel profileCard profileWatchCard">
               <p className="eyebrow">ΕΝΔΙΑΦΕΡΟΝΤΑ</p>
               <h2>Τι ακολουθείς</h2>
               {team.code ? <>
-                <p className="watchlistCaption">Τα CPV και οι περιοχές ορίζονται εδώ. Η Επισκόπηση, ο Ανταγωνισμός και οι ειδοποιήσεις τα χρησιμοποιούν.</p>
+                <p className="watchlistCaption">Εδώ ορίζεις CPV, περιοχές, ανταγωνιστές και αναθέτουσες αρχές. Η Επισκόπηση και οι ειδοποιήσεις τα χρησιμοποιούν.</p>
                 <div className="cpvNutsRow">
                   <MultiSearchInput
                     label="CPV"
@@ -786,6 +807,31 @@ export default function Home() {
                     placeholder="π.χ. Αττική - άφησέ το κενό για όλη τη χώρα"
                   />
                 </div>
+                <div className="cpvNutsRow">
+                  <MultiSearchInput
+                    label="Ανάδοχοι (ανταγωνιστές)"
+                    type="contractor"
+                    values={contractorWatch.map((item) => item.contractor_key)}
+                    initialLabels={Object.fromEntries(contractorWatch.map((item) => [item.contractor_key, item.contractor_label ?? item.contractor_key]))}
+                    onChange={(nextValues) => {
+                      const removed = contractorWatch.map((item) => item.contractor_key).find((key) => !nextValues.includes(key));
+                      if (removed) removeInterestContractor(removed);
+                    }}
+                    onSelectOption={addInterestContractor}
+                    placeholder="Αναζήτησε ανάδοχο, π.χ. PwC"
+                  />
+                  <MultiSearchInput
+                    label="Αναθέτουσες αρχές"
+                    type="authority"
+                    values={authorityWatch.map((item) => item.authority_name)}
+                    onChange={(nextValues) => {
+                      const removed = authorityWatch.map((item) => item.authority_name).find((name) => !nextValues.includes(name));
+                      if (removed) removeInterestAuthority(removed);
+                    }}
+                    onSelectOption={addInterestAuthority}
+                    placeholder="Αναζήτησε αναθέτουσα αρχή"
+                  />
+                </div>
                 <div className="metrics profileMetrics">
                   <Metric label="CPV" value={number.format(alertsWatchlist.length)} tone="sky" />
                   <Metric label="Περιοχές" value={number.format(alertsNutsFilter.length)} tone="mint" />
@@ -810,24 +856,6 @@ export default function Home() {
             database - the regular filters don't apply to it at all. */}
         {page !== "alerts" && page !== "profile" && <aside className="filters">
           <div className="filterHeading"><div><span>Φίλτρα</span><small>{number.format(tenders.length)} φορτωμένα · {number.format(dashboard.total || totalTenders)} συνολικά</small></div><button title={loading ? "Φόρτωση…" : "Επαναφορά φίλτρων"} onClick={() => { setStatus("Όλες"); setAuthority(""); setContractor([]); setCpv([]); setQuery(""); setYear("Όλα"); setContractType([]); setDocumentType("Όλοι"); setHideDirectAwards(false); }}><span className={loading ? "spinIcon" : ""}>↻</span></button></div>
-          <div className="savedViews">
-            <p className="eyebrow">ΠΡΟΒΟΛΕΣ</p>
-            {team.code ? <>
-              <div className="recipientInput">
-                <input value={newViewName} onChange={(event) => setNewViewName(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") saveCurrentView(); }} placeholder="Όνομα προβολής" />
-                <button type="button" onClick={saveCurrentView} disabled={!newViewName.trim()}>Αποθήκευση</button>
-              </div>
-              {savedViewsError && <p className="recipientError">{savedViewsError}</p>}
-              {savedViews.length > 0 && <ul className="savedViewsList">
-                {savedViews.map((view) => (
-                  <li key={view.id}>
-                    <button type="button" className="savedViewApply" onClick={() => applyView(view)}>{view.name}</button>
-                    <button type="button" className="savedViewDelete" onClick={() => deleteView(view.id)} aria-label={`Διαγραφή ${view.name}`}>×</button>
-                  </li>
-                ))}
-              </ul>}
-            </> : <p className="watchlistCaption">Αποθήκευσε συνδυασμούς φίλτρων που χρησιμοποιείς συχνά — συνδέσου ή εγγράψου.</p>}
-          </div>
           <label>Έτος<select value={year} onChange={(event) => setYear(event.target.value)}><option>Όλα</option>{years.map((item) => <option key={item}>{item}</option>)}</select></label>
           <SingleSearchInput label="Αναθέτουσα Αρχή" type="authority" value={authority === "Όλες" ? "" : authority} onChange={setAuthority} placeholder="Γράψε ή επίλεξε αρχή" />
           <MultiSearchInput label="Ανάδοχος" type="contractor" values={contractor} onChange={setContractor} placeholder="Αναζήτησε και επίλεξε αναδόχους" />
@@ -988,18 +1016,12 @@ function OverviewCompetition({ data, state }: { data: MarketOverview | null; sta
       <Metric label="Με έκπτωση πάνω από 0%" value={percentText(discount.positiveShare)} tone="lilac" />
       <Metric label="Μερίδιο 5 κορυφαίων" value={data.concentrationTop5 === null ? "—" : percentText(data.concentrationTop5 * 100)} tone="sand" />
     </div>
-    {data.bigFour && <article className="panel overviewBigFour"><PanelHeader title="Big 4" caption="Αναθέσεις, συμβάσεις, αξία και μέση έκπτωση για τα τρέχοντα φίλτρα. Το μερίδιο αφορά μόνο διαγωνισμούς συμβουλευτικών υπηρεσιών (CPV 794… και 7921…)" />
-      <div className="tableScroll"><table><thead><tr><th>Εταιρεία</th><th>Αναθέσεις</th><th>Συμβάσεις</th><th>Αξία</th><th>Μέση έκπτωση</th><th>Μερίδιο στις συμβουλευτικές</th></tr></thead>
-        <tbody>{data.bigFour.map((item) => {
-          const consulting = data.consulting;
-          const firm = consulting?.firms.find((entry) => entry.name === item.name);
-          return <tr key={item.name}><td><b>{item.name}</b></td><td>{number.format(item.awards)}</td><td>{number.format(item.contracts)}</td><td>{euro.format(item.value)}</td><td>{percentText(item.discount)}</td><td>{consulting && firm && consulting.value > 0 ? percentText(firm.value / consulting.value * 100) : "—"}</td></tr>;
-        })}
-          {data.consulting && <tr><td><b>Σύνολο Big 4</b></td><td><b>{number.format(data.bigFour.reduce((sum, item) => sum + item.awards, 0))}</b></td><td><b>{number.format(data.bigFour.reduce((sum, item) => sum + item.contracts, 0))}</b></td><td><b>{euro.format(data.bigFour.reduce((sum, item) => sum + item.value, 0))}</b></td><td>—</td><td><b>{data.consulting.value > 0 ? percentText(data.consulting.big4Value / data.consulting.value * 100) : "—"}</b></td></tr>}</tbody></table></div></article>}
-    {data.consulting && <article className="panel overviewBigFour"><PanelHeader title="Άλλες συμβουλευτικές" caption="Κορυφαίοι ανάδοχοι σε διαγωνισμούς συμβουλευτικών υπηρεσιών, εκτός Big 4, κατά σύνολο αναθέσεων και συμβάσεων" />
-      <div className="tableScroll"><table><thead><tr><th>Ανάδοχος</th><th>Σύνολο</th><th>Αναθέσεις</th><th>Συμβάσεις</th><th>Αξία</th><th>Μέση έκπτωση</th></tr></thead>
-        <tbody>{data.consulting.others.map((item) => <tr key={item.name}><td>{item.name}</td><td><b>{number.format(item.awards + item.contracts)}</b></td><td>{number.format(item.awards)}</td><td>{number.format(item.contracts)}</td><td>{euro.format(item.value)}</td><td>{percentText(item.discount)}</td></tr>)}</tbody></table>
-        {!data.consulting.others.length && <p className="noRows">Δεν υπάρχουν άλλοι ανάδοχοι συμβουλευτικών υπηρεσιών.</p>}</div></article>}
+    {data.tracked !== undefined && <article className="panel overviewBigFour"><PanelHeader title="Ανταγωνιστές που ακολουθείς" caption="Αναθέσεις, συμβάσεις, αξία και μέση έκπτωση για τα τρέχοντα φίλτρα και τα CPV/αρχές σου" />
+      {data.tracked.length === 0
+        ? <p className="noRows">Δεν ακολουθείς κάποιον ανάδοχο ακόμα. Πρόσθεσέ τους στο Προφίλ.</p>
+        : <div className="tableScroll"><table><thead><tr><th>Ανάδοχος</th><th>Αναθέσεις</th><th>Συμβάσεις</th><th>Αξία</th><th>Μέση έκπτωση</th></tr></thead>
+          <tbody>{data.tracked.map((item) => <tr key={item.key}><td><b>{item.name}</b></td><td>{number.format(item.awards)}</td><td>{number.format(item.contracts)}</td><td>{euro.format(item.value)}</td><td>{percentText(item.discount)}</td></tr>)}</tbody></table></div>}
+    </article>}
   </>;
 }
 
