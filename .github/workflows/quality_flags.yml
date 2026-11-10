@@ -10,13 +10,14 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: report | compare | apply-sql | recompute
+        description: report | compare | apply-sql | reclassify | recompute
         required: true
         type: choice
         options:
           - report
           - compare
           - apply-sql
+          - reclassify
           - recompute
         default: report
 
@@ -114,9 +115,17 @@ jobs:
                     where e.y in (2024, 2025) and not exists (select 1 from cmp_db x where x.adam = e.adam and x.tk = '3' and x.cat = 'declaration')
                     group by e.y order by e.y""")
               elif mode == "apply-sql":
-                  for name in ("quality_flags.sql", "dashboard_aggregates.sql", "market_overview.sql"):
+                  for name in ("quality_flags.sql", "dashboard_aggregates.sql", "market_overview.sql", "reclassify_documents.sql"):
                       cur.execute(Path("sql", name).read_text(encoding="utf-8"))
                       print("applied", name)
+              elif mode == "reclassify":
+                  cur.execute(Path("sql", "reclassify_documents.sql").read_text(encoding="utf-8"))
+                  cur.execute("select public.reclassify_document_categories()")
+                  print("document categories changed:", cur.fetchone()[0])
+                  cur.execute("select public.refresh_dashboard_caches()")
+                  print("dashboard caches refreshed")
+                  cur.execute("select public.refresh_market_overview_cache()")
+                  print("market overview cache refreshed")
               else:
                   started = time.time()
                   cur.execute("select public.recompute_quality_flags(null)")

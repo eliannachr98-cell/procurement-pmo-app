@@ -59,16 +59,15 @@ class CompactTransformTests(unittest.TestCase):
         self.assertEqual(classify_document("\u03a4\u03b5\u03cd\u03c7\u03bf\u03c2 \u03b4\u03b9\u03b5\u03c5\u03ba\u03c1\u03b9\u03bd\u03af\u03c3\u03b5\u03c9\u03bd"), "clarification")
         self.assertEqual(classify_document("\u0394\u03b9\u03b1\u03ba\u03ae\u03c1\u03c5\u03be\u03b7 \u03b1\u03bd\u03bf\u03b9\u03ba\u03c4\u03bf\u03cd \u03b4\u03b9\u03b1\u03b3\u03c9\u03bd\u03b9\u03c3\u03bc\u03bf\u03cd"), "declaration")
 
-    def test_document_classification_repair_is_not_amendment(self):
-        # "\u03b4\u03b9\u03cc\u03c1\u03b8\u03c9" is a substring of "\u03b5\u03c0\u03b9\u03b4\u03b9\u03cc\u03c1\u03b8\u03c9\u03c3\u03b7" (repair) and appears
-        # alongside "\u03c3\u03c5\u03bd\u03c4\u03ae\u03c1\u03b7\u03c3\u03b7" in "\u03b4\u03b9\u03bf\u03c1\u03b8\u03c9\u03c4\u03b9\u03ba\u03ae \u03c3\u03c5\u03bd\u03c4\u03ae\u03c1\u03b7\u03c3\u03b7" (corrective
-        # maintenance) - a brand-new repair/maintenance tender is not a
-        # correction to a previous notice, so it must stay a declaration.
-        self.assertEqual(classify_document("\u0395\u03c0\u03b9\u03b4\u03b9\u03cc\u03c1\u03b8\u03c9\u03c3\u03b7 \u03c3\u03c4\u03ad\u03b3\u03b7\u03c2 \u03c3\u03c7\u03bf\u03bb\u03b9\u03ba\u03bf\u03cd \u03ba\u03c4\u03b9\u03c1\u03af\u03bf\u03c5"), "declaration")
-        self.assertEqual(classify_document("\u03a0\u03c1\u03bf\u03bb\u03b7\u03c0\u03c4\u03b9\u03ba\u03ae \u03ba\u03b1\u03b9 \u03b4\u03b9\u03bf\u03c1\u03b8\u03c9\u03c4\u03b9\u03ba\u03ae \u03c3\u03c5\u03bd\u03c4\u03ae\u03c1\u03b7\u03c3\u03b7 \u03b1\u03bb\u03b5\u03be\u03b9\u03ba\u03ad\u03c1\u03b1\u03c5\u03bd\u03bf\u03c5"), "declaration")
-        # A real correction notice (no repair/maintenance subject) must
-        # still classify as amendment.
-        self.assertEqual(classify_document("\u0394\u03b9\u03cc\u03c1\u03b8\u03c9\u03c3\u03b7 \u03c3\u03c6\u03ac\u03bb\u03bc\u03b1\u03c4\u03bf\u03c2 \u03c3\u03c4\u03b7 \u0394\u03b9\u03b1\u03ba\u03ae\u03c1\u03c5\u03be\u03b7 12/2026"), "amendment")
+    def test_document_classification_uses_excel_title_keywords(self):
+        # The keyword list is the thesis Excel one (accents ignored). Repair
+        # titles that contain "ΔΙΟΡΘΩ" are treated like the Excel treats them.
+        self.assertEqual(classify_document("Επιδιόρθωση στέγης σχολικού κτιρίου"), "amendment")
+        self.assertEqual(classify_document("Ανάρτηση στοιχείων διαγωνισμού"), "decision")
+        self.assertEqual(classify_document("Προσφυγή ΑΕΠΠ κατά της διακήρυξης"), "decision")
+        # "έγκριση" alone is not an Excel keyword any more.
+        self.assertEqual(classify_document("Έγκριση δαπάνης προμήθειας"), "declaration")
+
 
     def test_document_classification_uses_khmdhs_notice_type(self):
         # noticeType only distinguishes \u03a0\u03c1\u03bf\u03ba\u03ae\u03c1\u03c5\u03be\u03b7 from everything else -- a
@@ -117,7 +116,7 @@ class CompactTransformTests(unittest.TestCase):
         # has its own status field, so this falls through to declaration.
         self.assertEqual(
             classify_document("\u039c\u03b1\u03c4\u03b1\u03af\u03c9\u03c3\u03b7 \u03b4\u03b9\u03b1\u03b3\u03c9\u03bd\u03b9\u03c3\u03bc\u03bf\u03cd", {"key": "3"}),
-            "declaration",
+            "decision",
         )
         self.assertEqual(
             classify_document("\u0391\u03c0\u03cc\u03c6\u03b1\u03c3\u03b7 \u03ad\u03b3\u03ba\u03c1\u03b9\u03c3\u03b7\u03c2 \u03c0\u03c1\u03b1\u03ba\u03c4\u03b9\u03ba\u03bf\u03cd", {"key": "3"}),
