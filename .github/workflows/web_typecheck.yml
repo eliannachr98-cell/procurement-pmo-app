@@ -1,0 +1,28 @@
+name: Web typecheck
+
+# Runs the TypeScript compiler on web/ so a failing Vercel build can be diagnosed
+# from the log here.
+on:
+  push:
+    branches: [agent/tenderscope-nextjs]
+    paths: ["web/**"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  tsc:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install
+        working-directory: web
+        run: npm install --no-audit --no-fund
+      - name: Typecheck
+        working-directory: web
+        run: npx tsc --noEmit
