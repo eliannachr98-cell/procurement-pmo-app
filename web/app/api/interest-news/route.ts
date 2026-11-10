@@ -15,7 +15,7 @@ export async function GET(request: Request) {
     const [cpvs, authorities, contractors] = await Promise.all([
       supabaseGet<{ cpv_code: string }[]>(`cpv_watchlist?select=cpv_code&team_id=eq.${team.id}`),
       supabaseGet<{ authority_name: string }[]>(`authority_watchlist?select=authority_name&team_id=eq.${team.id}`),
-      supabaseGet<{ contractor_key: string }[]>(`contractor_watchlist?select=contractor_key&team_id=eq.${team.id}`),
+      supabaseGet<{ contractor_key: string }[]>(`followed_contractors?select=contractor_key&team_id=eq.${team.id}`),
     ]);
     const news = await supabaseRpc<{ cpv: number; authorities: number; contractors: number; since: string }>("interest_news", {
       p_since: since,

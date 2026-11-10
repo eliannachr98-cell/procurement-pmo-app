@@ -152,6 +152,7 @@ export default function Home() {
   const [contracts, setContracts] = useState<Contract[]>([]);
   const [dashboard, setDashboard] = useState<DashboardBreakdown>(emptyDashboard);
   const [dashboardError, setDashboardError] = useState("");
+  const [dashboardLoading, setDashboardLoading] = useState(false);
   const [marketOverview, setMarketOverview] = useState<MarketOverview | null>(null);
   const [marketOverviewState, setMarketOverviewState] = useState<"idle" | "loading" | "error">("idle");
   const [years, setYears] = useState<string[]>([]);
@@ -445,12 +446,14 @@ export default function Home() {
     scopeContractors.forEach((item) => params.append("watchContractor", item));
     if (year !== "Όλα") params.set("year", year);
     contractType.forEach((item) => params.append("contractType", item));
+    setDashboardLoading(true);
     fetch(`/api/dashboard?${params.toString()}`)
       .then((response) => response.ok ? response.json() : Promise.reject(new Error("dashboard request failed")))
       .then((payload) => {
         if (requestId !== latestDashboardRequest.current) return;
         setDashboard(payload);
         setDashboardError("");
+        setDashboardLoading(false);
       })
       .catch(() => {
         // A very broad, unfiltered-by-year combination can still time out
@@ -459,6 +462,7 @@ export default function Home() {
         if (requestId !== latestDashboardRequest.current) return;
         setDashboard(emptyDashboard);
         setDashboardError("Πολύ ευρύ φίλτρο για να υπολογιστεί - πρόσθεσε έτος ή άλλο φίλτρο για να στενέψει.");
+        setDashboardLoading(false);
       });
   }, [authority, contractor, cpv, year, contractType, scopeCodes, scopeAuthorities, scopeContractors, scopeWaiting]);
 
@@ -734,9 +738,10 @@ export default function Home() {
                 <button type="button" className={overviewScope === "all" ? "active" : ""} onClick={() => setOverviewScope("all")}>Όλη η αγορά</button>
                 <button type="button" className={overviewScope === "mine" ? "active" : ""} onClick={() => setOverviewScope("mine")}>Η αγορά μου</button>
               </div>
+              {(dashboardLoading || marketOverviewState === "loading" || competitionState === "loading") && <span className="overviewBusy">Υπολογισμός…</span>}
               <p className="overviewScopeNote">Η αγορά μου: διαγωνισμοί στα CPV σου, από τις αρχές σου ή που πήραν οι ανάδοχοι που ακολουθείς. Ισχύει για τους Διαγωνισμούς και την Αγορά. Ο Ανταγωνισμός δείχνει πάντα όσα ακολουθείς.{overviewScope === "mine" && watchlistReady && alertsWatchlist.length === 0 && authorityWatch.length === 0 && contractorWatch.length === 0 ? " Δεν ακολουθείς ακόμα τίποτα, οπότε εμφανίζεται όλη η αγορά." : ""}</p>
             </div>}
-            <div className="overviewWrap">
+            <div className={`overviewWrap${dashboardLoading ? " isLoading" : ""}`}>
             <section className="overviewSection"><h2 className="overviewHeading">Διαγωνισμοί</h2>
             <div className="metrics">
               <Metric label="Διαγωνισμοί" value={number.format(dashboard.total)} sub={`Π/Υ: ${euro.format(totalBudget)}`} tone="sky" />

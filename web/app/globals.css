@@ -36,3 +36,4 @@
 .profileDivider{height:1px;background:var(--line,#d9e2ec);margin:20px 0 14px}
 .interestBox .multiBox{max-height:132px;overflow-y:auto}.interestBox .multiSearchLabel{display:none}
 .interestMeta{margin-left:auto;display:flex;flex-direction:column;align-items:flex-end;gap:2px;text-align:right}.interestMeta em{font-style:normal;font-size:12px;font-weight:700;color:#16897f}.interestMeta small{font-size:11px;color:var(--muted,#5f7183)}.interestCount{margin-left:0}
+.overviewWrap.isLoading{opacity:.55;transition:opacity .2s}.overviewBusy{font-size:13px;font-weight:700;color:#16897f}
