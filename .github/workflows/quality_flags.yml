@@ -1,0 +1,99 @@
+name: Quality flags report / recompute
+
+# report    = read-only: how many notices of type "Διακήρυξη" each Excel rule
+#             would exclude per year (computed live, not from the stored flags).
+# recompute = runs public.recompute_quality_flags(null) over every notice so all
+#             flags follow the final rules (sql/quality_flags.sql), then
+#             refreshes the dashboard and market overview caches.
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: report = read-only counts; recompute = update all flags and caches
+        required: true
+        type: choice
+        options:
+          - report
+          - recompute
+        default: report
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quality-flags
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: pip install "psycopg[binary]>=3.2,<4"
+      - name: Run
+        env:
+          DATABASE_URL: ${{ secrets.COMPACT_DATABASE_URL }}
+          EXPECTED_DB_REF: gunzsfttzijoxteppskb
+          MODE: ${{ inputs.mode }}
+        shell: python
+        run: |
+          import os, time
+          import psycopg
+
+          url = os.environ["DATABASE_URL"]
+          if os.environ["EXPECTED_DB_REF"] not in url:
+              raise SystemExit("DATABASE_URL does not point at the expected Supabase project")
+
+          KW = "ΑΠΟΦΑΣ|ΤΡΟΠΟΠ|ΠΑΡΑΤΑΣ|ΔΙΕΥΚΡ|ΜΑΤΑΙΩ|ΔΙΟΡΘΩ|ΑΝΑΡΤΗΣ|ΠΕΡΙΛΗΨ|ΜΕΤΑΘΕΣ|ΠΡΟΣΦΥΓ|ΑΕΠΠ"
+          BASE = f"""
+          select extract(year from p.publication_date)::int as y,
+                 p.document_category as cat,
+                 translate(upper(p.title), 'ΆΈΉΊΌΎΏΪΫ', 'ΑΕΗΙΟΥΩΙΥ') ~ '{KW}' as kw,
+                 coalesce(g.cancelled_api, p.status = 'cancelled', false) as canc,
+                 coalesce(g.has_award_ref, exists (select 1 from public.awards_compact a where a.procurement_adam = p.adam)) as has_award,
+                 coalesce((p.opening_at at time zone 'Europe/Athens')::date < p.publication_date
+                          or (p.opening_at at time zone 'Europe/Athens')::date - p.publication_date > 365, false) as di
+          from public.procurements_compact p
+          join public.procurement_quality_flags g on g.adam = p.adam
+          where g.notice_type_key = '3' and p.publication_date >= '2024-01-01'
+          """
+
+          with psycopg.connect(url, prepare_threshold=None, autocommit=True) as conn, conn.cursor() as cur:
+              cur.execute("set statement_timeout = 0")
+              if os.environ["MODE"] == "report":
+                  cur.execute(f"""
+                    select y, count(*) as notices_type3,
+                           count(*) filter (where kw) as title_keywords,
+                           count(*) filter (where not kw and canc and not has_award) as cancelled_no_award,
+                           count(*) filter (where not kw and not (canc and not has_award) and di) as date_issue,
+                           count(*) filter (where not kw and not (canc and not has_award) and not di) as kept,
+                           count(*) filter (where not kw and canc and has_award) as cancelled_with_award_kept
+                    from ({BASE}) t group by y order by y""")
+                  print("year | type3 | title_keywords | cancelled_no_award | date_issue | kept | cancelled_with_award_(kept)")
+                  for row in cur.fetchall():
+                      print(" | ".join(str(v) for v in row))
+                  print()
+                  cur.execute(f"""
+                    select y, cat, count(*) from ({BASE}) t where kw group by y, cat order by y, 3 desc""")
+                  print("title-keyword notices by document_category (year | category | count)")
+                  for row in cur.fetchall():
+                      print(" | ".join(str(v) for v in row))
+                  print()
+                  cur.execute("""
+                    select coalesce(notice_type_key, 'NULL') as type_key, rule_version, count(*)
+                    from public.procurement_quality_flags group by 1, 2 order by 3 desc""")
+                  print("stored flags: notice_type_key | rule_version | count")
+                  for row in cur.fetchall():
+                      print(" | ".join(str(v) for v in row))
+              else:
+                  started = time.time()
+                  cur.execute("select public.recompute_quality_flags(null)")
+                  print("flags recomputed:", cur.fetchone()[0], f"in {time.time() - started:.0f}s")
+                  cur.execute("select public.refresh_dashboard_caches()")
+                  print("dashboard caches refreshed")
+                  cur.execute("select public.refresh_market_overview_cache()")
+                  print("market overview cache refreshed")
