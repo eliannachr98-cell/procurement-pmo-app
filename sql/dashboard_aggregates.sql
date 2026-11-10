@@ -69,7 +69,7 @@ begin
       -- summary/decision) about the same tender - otherwise one tender
       -- inflates into several "διαγωνισμοί", or counts a notice type the
       -- user doesn't consider a real tender in the first place.
-      where exists (select 1 from public.procurement_quality_flags f where f.adam = p.adam and f.notice_type_key = '3')
+      where p.document_category = 'declaration' and exists (select 1 from public.procurement_quality_flags f where f.adam = p.adam and f.notice_type_key = '3')
         and (target_year is null
          or (p.publication_date >= (target_year || '-01-01')::date and p.publication_date <= (target_year || '-12-31')::date))
         and (target_contract_type is null or p.contract_type = target_contract_type)
@@ -92,9 +92,9 @@ begin
     status_calc as (
       select m.adam, m.nuts_name, m.nuts_code, m.budget, m.publication_date, m.authority_name,
         case
-          when m.cancelled_at is not null or m.raw_status = 'cancelled' then 'Ακυρωμένος'
           when hc.adam is not null then 'Ολοκληρωμένος'
           when ha.adam is not null then 'Ανατεθειμένος'
+          when m.cancelled_at is not null or m.raw_status = 'cancelled' then 'Ακυρωμένος'
           -- A raw opening_at earlier than publication_date is bad source
           -- data, not a real passed deadline (the app-side route applies
           -- the same guard before showing/using this date) - without it, a
@@ -263,7 +263,7 @@ begin
   else
     -- No explicit document-type filter: default to real tenders only, same
     -- as the cached (unfiltered / year-only) path -- see refresh_dashboard_caches().
-    conditions := conditions || $q$exists (select 1 from public.procurement_quality_flags f where f.adam = p.adam and f.notice_type_key = '3')$q$::text;
+    conditions := conditions || $q$p.document_category = 'declaration' and exists (select 1 from public.procurement_quality_flags f where f.adam = p.adam and f.notice_type_key = '3')$q$::text;
   end if;
 
   if array_length(conditions, 1) > 0 then
@@ -303,9 +303,9 @@ begin
     status_calc as (
       select m.adam, m.nuts_name, m.nuts_code, m.budget, m.publication_date, m.authority_name,
         case
-          when m.cancelled_at is not null or m.raw_status = 'cancelled' then 'Ακυρωμένος'
           when hc.adam is not null then 'Ολοκληρωμένος'
           when ha.adam is not null then 'Ανατεθειμένος'
+          when m.cancelled_at is not null or m.raw_status = 'cancelled' then 'Ακυρωμένος'
           -- A raw opening_at earlier than publication_date is bad source
           -- data, not a real passed deadline (the app-side route applies
           -- the same guard before showing/using this date) - without it, a
