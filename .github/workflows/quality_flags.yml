@@ -139,6 +139,9 @@ jobs:
                   print("rows exported:", count)
               elif mode == "health":
                   show(cur, "database size (GB)", "select round(pg_database_size(current_database()) / 1073741824.0, 2)")
+                  show(cur, "watchlists: cpv_watchlist rows | authority rows | contractor rows", "select (select count(*) from public.cpv_watchlist), (select count(*) from public.authority_watchlist), (select count(*) from public.contractor_watchlist)")
+                  show(cur, "authorities followed", "select authority_name from public.authority_watchlist")
+                  show(cur, "contractors followed", "select contractor_key, contractor_label from public.contractor_watchlist")
                   show(cur, "tables: name | live rows | dead rows | last autovacuum | last autoanalyze | total size (MB)", """
                     select relname, n_live_tup, n_dead_tup, last_autovacuum, last_autoanalyze, round(pg_total_relation_size(relid) / 1048576.0)
                     from pg_stat_user_tables order by pg_total_relation_size(relid) desc limit 12""")
