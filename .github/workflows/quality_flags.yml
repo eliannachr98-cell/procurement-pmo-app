@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: report | compare | apply-sql | reclassify | export | recompute
+        description: report | compare | apply-sql | reclassify | export | health | recompute
         required: true
         type: choice
         options:
@@ -19,6 +19,7 @@ on:
           - apply-sql
           - reclassify
           - export
+          - health
           - recompute
         default: report
 
@@ -136,6 +137,14 @@ jobs:
                           writer.writerow(row)
                           count += 1
                   print("rows exported:", count)
+              elif mode == "health":
+                  show(cur, "database size (GB)", "select round(pg_database_size(current_database()) / 1073741824.0, 2)")
+                  show(cur, "tables: name | live rows | dead rows | last autovacuum | last autoanalyze | total size (MB)", """
+                    select relname, n_live_tup, n_dead_tup, last_autovacuum, last_autoanalyze, round(pg_total_relation_size(relid) / 1048576.0)
+                    from pg_stat_user_tables order by pg_total_relation_size(relid) desc limit 12""")
+                  show(cur, "active queries: pid | state | seconds | wait | query", """
+                    select pid, state, round(extract(epoch from now() - query_start)), wait_event_type, left(query, 110)
+                    from pg_stat_activity where state <> 'idle' and pid <> pg_backend_pid() order by query_start limit 12""")
               elif mode == "reclassify":
                   cur.execute(Path("sql", "reclassify_documents.sql").read_text(encoding="utf-8"))
                   cur.execute("select public.reclassify_document_categories()")
