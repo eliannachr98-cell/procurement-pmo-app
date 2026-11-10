@@ -163,6 +163,18 @@ jobs:
                   cur.execute("select indexname, indexdef from pg_indexes where tablename = 'procurements_compact'")
                   for row in cur.fetchall():
                       print("index:", row[0], "|", row[1][:140])
+                  cur.execute("analyze public.procurements_compact")
+                  print("analyzed procurements_compact")
+                  for label, sql in [
+                      ("year2026", "select adam, title from public.procurements_compact where publication_date >= '2026-01-01' and publication_date <= '2026-12-31' order by publication_date desc nulls last limit 50"),
+                      ("declaration", "select adam, title from public.procurements_compact where document_category = 'declaration' order by publication_date desc nulls last limit 100"),
+                  ]:
+                      started = _t.time()
+                      cur.execute("explain (analyze, buffers) " + sql)
+                      rows = cur.fetchall()
+                      print(f"explain {label}: {_t.time() - started:.1f}s")
+                      for row in rows[:9]:
+                          print("plan2:", row[0][:150])
               elif mode == "reclassify":
                   cur.execute(Path("sql", "reclassify_documents.sql").read_text(encoding="utf-8"))
                   cur.execute("select public.reclassify_document_categories()")
