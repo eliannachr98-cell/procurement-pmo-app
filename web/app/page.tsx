@@ -704,7 +704,7 @@ export default function Home() {
             {team.code && <div className="overviewScope">
               <div className="overviewScopeToggle" role="group" aria-label="Εύρος Διαγωνισμών και Αγοράς">
                 <button type="button" className={overviewScope === "all" ? "active" : ""} onClick={() => setOverviewScope("all")}>Όλη η αγορά</button>
-                <button type="button" className={overviewScope === "mine" ? "active" : ""} onClick={() => setOverviewScope("mine")}>Η αγορά μου{watchlistReady ? ` (${alertsWatchlist.length + authorityWatch.length + contractorWatch.length})` : ""}</button>
+                <button type="button" className={overviewScope === "mine" ? "active" : ""} onClick={() => setOverviewScope("mine")}>Η αγορά μου</button>
               </div>
               <p className="overviewScopeNote">Η αγορά μου: διαγωνισμοί στα CPV σου, από τις αρχές σου ή που πήραν οι ανάδοχοι που ακολουθείς. Ισχύει για τους Διαγωνισμούς και την Αγορά. Ο Ανταγωνισμός δείχνει πάντα όσα ακολουθείς.{overviewScope === "mine" && watchlistReady && alertsWatchlist.length === 0 && authorityWatch.length === 0 && contractorWatch.length === 0 ? " Δεν ακολουθείς ακόμα τίποτα, οπότε εμφανίζεται όλη η αγορά." : ""}</p>
             </div>}
