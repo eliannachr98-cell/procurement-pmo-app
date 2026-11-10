@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject, type SyntheticEvent } from "react";
 import "leaflet/dist/leaflet.css";
-import { LayoutGrid, ClipboardList, TrendingUp, Bell, CircleUserRound } from "lucide-react";
+import { LayoutGrid, ClipboardList, TrendingUp, Bell, CircleUserRound, Tags, MapPin, Building2, Trophy } from "lucide-react";
 import { captureChartImage, downloadExcel, downloadPdf, type ExportPayload } from "@/lib/exports";
 import type { Apodeltiosi } from "@/lib/apodeltiosi";
 
@@ -424,6 +424,7 @@ export default function Home() {
   const trackKeys = useMemo(() => team.code ? contractorWatch.map((item) => item.contractor_key) : [], [team.code, contractorWatch]);
   const scopeCodes = useMemo(() => page === "overview" && overviewScope === "mine" ? mineCodes : [], [page, overviewScope, mineCodes]);
   const scopeAuthorities = useMemo(() => page === "overview" && overviewScope === "mine" ? mineAuthorities : [], [page, overviewScope, mineAuthorities]);
+  const scopeContractors = useMemo(() => page === "overview" && overviewScope === "mine" ? trackKeys : [], [page, overviewScope, trackKeys]);
   const scopeWaiting = page === "overview" && overviewScope === "mine" && Boolean(team.code) && !watchlistReady;
 
   const loadDashboard = useCallback(() => {
@@ -435,6 +436,7 @@ export default function Home() {
     cpv.forEach((item) => params.append("cpv", item));
     scopeCodes.forEach((item) => params.append("watchCpv", item));
     scopeAuthorities.forEach((item) => params.append("watchAuthority", item));
+    scopeContractors.forEach((item) => params.append("watchContractor", item));
     if (year !== "Όλα") params.set("year", year);
     contractType.forEach((item) => params.append("contractType", item));
     fetch(`/api/dashboard?${params.toString()}`)
@@ -452,7 +454,7 @@ export default function Home() {
         setDashboard(emptyDashboard);
         setDashboardError("Πολύ ευρύ φίλτρο για να υπολογιστεί - πρόσθεσε έτος ή άλλο φίλτρο για να στενέψει.");
       });
-  }, [authority, contractor, cpv, year, contractType, scopeCodes, scopeAuthorities, scopeWaiting]);
+  }, [authority, contractor, cpv, year, contractType, scopeCodes, scopeAuthorities, scopeContractors, scopeWaiting]);
 
   const loadMarketOverview = useCallback(() => {
     if (scopeWaiting) return;
@@ -463,6 +465,7 @@ export default function Home() {
     cpv.forEach((item) => params.append("cpv", item));
     scopeCodes.forEach((item) => params.append("watchCpv", item));
     scopeAuthorities.forEach((item) => params.append("watchAuthority", item));
+    scopeContractors.forEach((item) => params.append("watchContractor", item));
     if (year !== "Όλα") params.set("year", year);
     contractType.forEach((item) => params.append("contractType", item));
     setMarketOverviewState("loading");
@@ -478,7 +481,7 @@ export default function Home() {
         setMarketOverview(null);
         setMarketOverviewState("error");
       });
-  }, [authority, contractor, cpv, year, contractType, scopeCodes, scopeAuthorities, scopeWaiting]);
+  }, [authority, contractor, cpv, year, contractType, scopeCodes, scopeAuthorities, scopeContractors, scopeWaiting]);
 
   // Ανταγωνισμός is always about the interests. When the switch is on "Τα
   // ενδιαφέροντά μου" it reuses the Αγορά data; otherwise it fetches its own.
@@ -493,6 +496,7 @@ export default function Home() {
     mineCodes.forEach((item) => params.append("watchCpv", item));
     mineAuthorities.forEach((item) => params.append("watchAuthority", item));
     trackKeys.forEach((item) => params.append("track", item));
+    trackKeys.forEach((item) => params.append("watchContractor", item));
     if (year !== "Όλα") params.set("year", year);
     contractType.forEach((item) => params.append("contractType", item));
     setCompetitionState("loading");
@@ -699,10 +703,10 @@ export default function Home() {
           {page === "overview" && <>
             {team.code && <div className="overviewScope">
               <div className="overviewScopeToggle" role="group" aria-label="Εύρος Διαγωνισμών και Αγοράς">
-                <button type="button" className={overviewScope === "mine" ? "active" : ""} onClick={() => setOverviewScope("mine")}>Τα ενδιαφέροντά μου{watchlistReady ? ` (${alertsWatchlist.length + authorityWatch.length})` : ""}</button>
                 <button type="button" className={overviewScope === "all" ? "active" : ""} onClick={() => setOverviewScope("all")}>Όλη η αγορά</button>
+                <button type="button" className={overviewScope === "mine" ? "active" : ""} onClick={() => setOverviewScope("mine")}>Η αγορά μου{watchlistReady ? ` (${alertsWatchlist.length + authorityWatch.length + contractorWatch.length})` : ""}</button>
               </div>
-              <p className="overviewScopeNote">Ισχύει για τους Διαγωνισμούς και την Αγορά (CPV και αρχές που ακολουθείς). Ο Ανταγωνισμός δείχνει πάντα όσα ακολουθείς.{overviewScope === "mine" && watchlistReady && alertsWatchlist.length === 0 && authorityWatch.length === 0 ? " Δεν έχεις ορίσει CPV ή αρχές, οπότε εμφανίζεται όλη η αγορά." : ""}</p>
+              <p className="overviewScopeNote">Η αγορά μου: διαγωνισμοί στα CPV σου, από τις αρχές σου ή που πήραν οι ανάδοχοι που ακολουθείς. Ισχύει για τους Διαγωνισμούς και την Αγορά. Ο Ανταγωνισμός δείχνει πάντα όσα ακολουθείς.{overviewScope === "mine" && watchlistReady && alertsWatchlist.length === 0 && authorityWatch.length === 0 && contractorWatch.length === 0 ? " Δεν ακολουθείς ακόμα τίποτα, οπότε εμφανίζεται όλη η αγορά." : ""}</p>
             </div>}
             <div className="overviewWrap">
             <section className="overviewSection"><h2 className="overviewHeading">Διαγωνισμοί</h2>
@@ -780,61 +784,71 @@ export default function Home() {
               <p className="eyebrow">ΕΝΔΙΑΦΕΡΟΝΤΑ</p>
               <h2>Τι ακολουθείς</h2>
               {team.code ? <>
-                <p className="watchlistCaption">Εδώ ορίζεις CPV, περιοχές, ανταγωνιστές και αναθέτουσες αρχές. Η Επισκόπηση και οι ειδοποιήσεις τα χρησιμοποιούν.</p>
-                <div className="cpvNutsRow">
-                  <MultiSearchInput
-                    label="CPV"
-                    type="cpv"
-                    values={alertsWatchlist.map((item) => item.cpv_code)}
-                    initialLabels={Object.fromEntries(alertsWatchlist.map((item) => [item.cpv_code, item.cpv_label ?? item.cpv_code]))}
-                    onChange={(nextValues) => {
-                      const removed = alertsWatchlist.map((item) => item.cpv_code).find((code) => !nextValues.includes(code));
-                      if (removed) removeInterestCpv(removed);
-                    }}
-                    onSelectOption={addInterestCpv}
-                    placeholder="Αναζήτησε κωδικό ή περιγραφή CPV"
-                  />
-                  <MultiSearchInput
-                    label="Περιοχή"
-                    type="nuts"
-                    values={alertsNutsFilter.map((item) => item.nuts_code)}
-                    initialLabels={Object.fromEntries(alertsNutsFilter.map((item) => [item.nuts_code, item.nuts_name ?? item.nuts_code]))}
-                    onChange={(nextValues) => {
-                      const removed = alertsNutsFilter.map((item) => item.nuts_code).find((code) => !nextValues.includes(code));
-                      if (removed) removeInterestNuts(removed);
-                    }}
-                    onSelectOption={addInterestNuts}
-                    placeholder="π.χ. Αττική - άφησέ το κενό για όλη τη χώρα"
-                  />
+                <p className="watchlistCaption">Όσα ορίσεις εδώ καθορίζουν την Επισκόπηση («Η αγορά μου», Ανταγωνισμός) και τις ειδοποιήσεις.</p>
+                <div className="interestGrid">
+                  <section className="interestBox">
+                    <header className="interestBoxHead"><span className="interestIcon"><Tags size={18} /></span><div><h3>CPV</h3><p>Κατηγορίες διαγωνισμών</p></div><b className="interestCount">{number.format(alertsWatchlist.length)}</b></header>
+                    <MultiSearchInput
+                      label="Προσθήκη"
+                      type="cpv"
+                      values={alertsWatchlist.map((item) => item.cpv_code)}
+                      initialLabels={Object.fromEntries(alertsWatchlist.map((item) => [item.cpv_code, item.cpv_label ?? item.cpv_code]))}
+                      onChange={(nextValues) => {
+                        const removed = alertsWatchlist.map((item) => item.cpv_code).find((code) => !nextValues.includes(code));
+                        if (removed) removeInterestCpv(removed);
+                      }}
+                      onSelectOption={addInterestCpv}
+                      placeholder="Κωδικός ή περιγραφή CPV"
+                    />
+                  </section>
+                  <section className="interestBox">
+                    <header className="interestBoxHead"><span className="interestIcon"><MapPin size={18} /></span><div><h3>Περιοχές</h3><p>Για τις ειδοποιήσεις</p></div><b className="interestCount">{number.format(alertsNutsFilter.length)}</b></header>
+                    <MultiSearchInput
+                      label="Προσθήκη"
+                      type="nuts"
+                      values={alertsNutsFilter.map((item) => item.nuts_code)}
+                      initialLabels={Object.fromEntries(alertsNutsFilter.map((item) => [item.nuts_code, item.nuts_name ?? item.nuts_code]))}
+                      onChange={(nextValues) => {
+                        const removed = alertsNutsFilter.map((item) => item.nuts_code).find((code) => !nextValues.includes(code));
+                        if (removed) removeInterestNuts(removed);
+                      }}
+                      onSelectOption={addInterestNuts}
+                      placeholder="π.χ. Αττική (κενό = όλη η χώρα)"
+                    />
+                  </section>
+                  <section className="interestBox">
+                    <header className="interestBoxHead"><span className="interestIcon"><Building2 size={18} /></span><div><h3>Αναθέτουσες αρχές</h3><p>Οι διαγωνισμοί τους μπαίνουν στην αγορά μου</p></div><b className="interestCount">{number.format(authorityWatch.length)}</b></header>
+                    <MultiSearchInput
+                      label="Προσθήκη"
+                      type="authority"
+                      values={authorityWatch.map((item) => item.authority_name)}
+                      onChange={(nextValues) => {
+                        const removed = authorityWatch.map((item) => item.authority_name).find((name) => !nextValues.includes(name));
+                        if (removed) removeInterestAuthority(removed);
+                      }}
+                      onSelectOption={addInterestAuthority}
+                      placeholder="Όνομα αναθέτουσας αρχής"
+                    />
+                  </section>
+                  <section className="interestBox">
+                    <header className="interestBoxHead"><span className="interestIcon"><Trophy size={18} /></span><div><h3>Ανάδοχοι</h3><p>Ανταγωνιστές που παρακολουθείς</p></div><b className="interestCount">{number.format(contractorWatch.length)}</b></header>
+                    <MultiSearchInput
+                      label="Προσθήκη"
+                      type="contractor"
+                      values={contractorWatch.map((item) => item.contractor_key)}
+                      initialLabels={Object.fromEntries(contractorWatch.map((item) => [item.contractor_key, item.contractor_label ?? item.contractor_key]))}
+                      onChange={(nextValues) => {
+                        const removed = contractorWatch.map((item) => item.contractor_key).find((key) => !nextValues.includes(key));
+                        if (removed) removeInterestContractor(removed);
+                      }}
+                      onSelectOption={addInterestContractor}
+                      placeholder="Όνομα ή ΑΦΜ αναδόχου"
+                    />
+                  </section>
                 </div>
-                <div className="cpvNutsRow">
-                  <MultiSearchInput
-                    label="Ανάδοχοι (ανταγωνιστές)"
-                    type="contractor"
-                    values={contractorWatch.map((item) => item.contractor_key)}
-                    initialLabels={Object.fromEntries(contractorWatch.map((item) => [item.contractor_key, item.contractor_label ?? item.contractor_key]))}
-                    onChange={(nextValues) => {
-                      const removed = contractorWatch.map((item) => item.contractor_key).find((key) => !nextValues.includes(key));
-                      if (removed) removeInterestContractor(removed);
-                    }}
-                    onSelectOption={addInterestContractor}
-                    placeholder="Αναζήτησε ανάδοχο, π.χ. PwC"
-                  />
-                  <MultiSearchInput
-                    label="Αναθέτουσες αρχές"
-                    type="authority"
-                    values={authorityWatch.map((item) => item.authority_name)}
-                    onChange={(nextValues) => {
-                      const removed = authorityWatch.map((item) => item.authority_name).find((name) => !nextValues.includes(name));
-                      if (removed) removeInterestAuthority(removed);
-                    }}
-                    onSelectOption={addInterestAuthority}
-                    placeholder="Αναζήτησε αναθέτουσα αρχή"
-                  />
-                </div>
+                <div className="profileDivider" />
+                <p className="eyebrow">ΔΡΑΣΤΗΡΙΟΤΗΤΑ</p>
                 <div className="metrics profileMetrics">
-                  <Metric label="CPV" value={number.format(alertsWatchlist.length)} tone="sky" />
-                  <Metric label="Περιοχές" value={number.format(alertsNutsFilter.length)} tone="mint" />
                   <Metric label="Υποβεβλημένες προσφορές" value={number.format(submittedCount)} tone="sand" />
                   <Metric label="Ενδιαφέρον συμμετοχής" value={number.format(interestedCount)} tone="lilac" />
                 </div>

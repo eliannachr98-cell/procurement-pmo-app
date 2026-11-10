@@ -58,10 +58,14 @@ export async function GET(request: Request) {
 
     const watchCpvs = searchParams.getAll("watchCpv").flatMap((value) => value.split(",")).map((value) => value.trim()).filter(Boolean);
     const watchAuthorities = searchParams.getAll("watchAuthority").map((value) => value.trim()).filter(Boolean);
-    if (watchCpvs.length || watchAuthorities.length) {
+    const watchContractors = searchParams.getAll("watchContractor").map((value) => value.trim()).filter(Boolean);
+    if (watchCpvs.length || watchAuthorities.length || watchContractors.length) {
+      const contractorGroups: Awaited<ReturnType<typeof procurementAdamsForContractor>>[] = [];
+      for (const item of watchContractors) contractorGroups.push(await procurementAdamsForContractor(item));
       const scoped = union([
         watchCpvs.length ? await procurementAdamsForCpvCodes(watchCpvs) : [],
         watchAuthorities.length ? await procurementAdamsForAuthorities(watchAuthorities) : [],
+        union(contractorGroups.map((item) => item.procurementAdams)),
       ]);
       matchingAdams = intersect(matchingAdams, scoped);
     }

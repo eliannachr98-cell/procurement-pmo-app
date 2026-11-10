@@ -39,26 +39,24 @@ export async function GET(request: Request) {
     }
     const watchCpvs = list("watchCpv");
     const watchAuthorities = list("watchAuthority");
+    const watchContractors = list("watchContractor");
     const track = list("track");
-    if (watchCpvs.length || watchAuthorities.length) {
+    if (watchCpvs.length || watchAuthorities.length || watchContractors.length) {
+      const contractorGroups: Awaited<ReturnType<typeof procurementAdamsForContractor>>[] = [];
+      for (const item of watchContractors) contractorGroups.push(await procurementAdamsForContractor(item));
       const scoped = union([
         watchCpvs.length ? await procurementAdamsForCpvCodes(watchCpvs) : [],
         watchAuthorities.length ? await procurementAdamsForAuthorities(watchAuthorities) : [],
+        union(contractorGroups.map((item) => item.procurementAdams)),
       ]);
       matchingAdams = intersect(matchingAdams, scoped);
-    }
-    if (track.length && !watchCpvs.length && !watchAuthorities.length) {
-      // Only competitors followed: describe the tenders they took part in.
-      const groups: Awaited<ReturnType<typeof procurementAdamsForContractor>>[] = [];
-      for (const item of track) groups.push(await procurementAdamsForContractor(item));
-      matchingAdams = intersect(matchingAdams, union(groups.map((item) => item.procurementAdams)));
     }
     if (matchingAdams?.length === 0) return NextResponse.json({ empty: true });
 
     // A year (or no filter at all) on its own is far too heavy to compute per
     // request, so it's precomputed into market_overview_cache (see
     // sql/market_overview.sql); anything narrower is computed live.
-    const cacheOnly = !authority && !contractors.length && !cpvs.length && !watchCpvs.length && !watchAuthorities.length && !track.length && !contractTypes.length;
+    const cacheOnly = !authority && !contractors.length && !cpvs.length && !watchCpvs.length && !watchAuthorities.length && !watchContractors.length && !track.length && !contractTypes.length;
     if (cacheOnly) {
       const key = /^\d{4}$/.test(year) ? year : "all";
       const rows = await supabaseGet<{ payload: unknown }[]>(`market_overview_cache?select=payload&cache_key=eq.${key}`);
