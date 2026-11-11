@@ -261,7 +261,7 @@ export async function GET(request: Request) {
             p_scope_cpv: watchCpvs.length ? watchCpvs : null,
             p_scope_authorities: watchAuthorities.length ? watchAuthorities : null,
             p_scope_contractors: watchContractors.length ? watchContractors : null,
-            p_scope_nuts: watchNuts.length ? watchNuts : null,
+            ...(watchNuts.length ? { p_scope_nuts: watchNuts } : {}),
             p_query: query || null,
             p_authority: authority || null,
             p_year: /^\d{4}$/.test(year) ? year : null,
