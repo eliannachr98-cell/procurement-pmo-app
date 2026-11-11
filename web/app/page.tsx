@@ -778,7 +778,7 @@ export default function Home() {
               <Metric label="Ακυρωμένοι" value={number.format(statusCount("Ακυρωμένος"))} sub={`Π/Υ: ${euro.format(statusBudget("Ακυρωμένος"))}`} tone="rose" />
             </div>
             <div className="overviewSplit">
-              <article className="panel monthlyTablePanel"><PanelHeader title="Διαγωνισμοί ανά μήνα" caption="Πλήθος, Π/Υ, CPV και αναθέτουσες αρχές ανά μήνα δημοσίευσης" onDownload={{ filename: "diagonismoi-ana-mina", title: "Διαγωνισμοί ανά μήνα", headers: ["Μήνας", "Διαγωνισμοί", "Συνολική αξία", "CPV", "Αναθέτουσες Αρχές"], rows: dashboard.monthly.map((item) => [`${item.month}-01`, item.count, item.budget, item.cpv, item.authorities]), columnTypes: ["month", "number", "currency", "number", "number"] }} /><MonthlyTable months={dashboard.monthly} /></article>
+              <article className="panel monthlyTablePanel"><PanelHeader title="Διαγωνισμοί ανά μήνα" caption="Πλήθος, Π/Υ, CPV και αναθέτουσες/διενεργούσες αρχές ανά μήνα δημοσίευσης" onDownload={{ filename: "diagonismoi-ana-mina", title: "Διαγωνισμοί ανά μήνα", headers: ["Μήνας", "Διαγωνισμοί", "Συνολική αξία", "CPV", "Αναθέτουσες/Διενεργούσες Αρχές"], rows: dashboard.monthly.map((item) => [`${item.month}-01`, item.count, item.budget, item.cpv, item.authorities]), columnTypes: ["month", "number", "currency", "number", "number"] }} /><MonthlyTable months={dashboard.monthly} /></article>
             <NutsMap counts={dashboard.nuts} />
             </div>
             </section>
@@ -798,7 +798,7 @@ export default function Home() {
                     <div className="overviewWrap" aria-hidden="true"><OverviewCompetition data={marketOverview} state={marketOverviewState} /></div>
                   </div>
                 : watchlistReady && !hasInterests
-                  ? <p className="noRows">Δεν ακολουθείς ακόμα CPV, αναθέτουσες αρχές ή αναδόχους. Πρόσθεσέ τα στο Προφίλ για να δεις τον ανταγωνισμό. <button type="button" className="profileLink" onClick={() => setPage("profile")}>Πήγαινε στο Προφίλ →</button></p>
+                  ? <p className="noRows">Δεν ακολουθείς ακόμα CPV, αναθέτουσες/διενεργούσες αρχές ή αναδόχους. Πρόσθεσέ τα στο Προφίλ για να δεις τον ανταγωνισμό. <button type="button" className="profileLink" onClick={() => setPage("profile")}>Πήγαινε στο Προφίλ →</button></p>
                   : <OverviewCompetition data={competition} state={competitionState} />}
             </section>
             </div>
@@ -932,7 +932,7 @@ export default function Home() {
         {page !== "alerts" && page !== "profile" && <aside className="filters">
           <div className="filterHeading"><div><span>Φίλτρα</span><small>{number.format(tenders.length)} φορτωμένα · {number.format(dashboard.total || totalTenders)} συνολικά</small></div><button title={loading ? "Φόρτωση…" : "Επαναφορά φίλτρων"} onClick={() => { setStatus("Όλες"); setAuthority(""); setContractor([]); setCpv([]); setQuery(""); setYear("Όλα"); setContractType([]); setDocumentType("Όλοι"); setHideDirectAwards(false); }}><span className={loading ? "spinIcon" : ""}>↻</span></button></div>
           <label>Έτος<select value={year} onChange={(event) => setYear(event.target.value)}><option>Όλα</option>{years.map((item) => <option key={item}>{item}</option>)}</select></label>
-          <SingleSearchInput label="Αναθέτουσα Αρχή" type="authority" value={authority === "Όλες" ? "" : authority} onChange={setAuthority} placeholder="Γράψε ή επίλεξε αρχή" />
+          <SingleSearchInput label="Αναθέτουσα/Διενεργούσα Αρχή" type="authority" value={authority === "Όλες" ? "" : authority} onChange={setAuthority} placeholder="Γράψε ή επίλεξε αρχή" />
           <MultiSearchInput label="Ανάδοχος" type="contractor" values={contractor} onChange={setContractor} placeholder="Αναζήτησε και επίλεξε αναδόχους" />
           <MultiSearchInput label="CPV" type="cpv" values={cpv} onChange={setCpv} placeholder="Αναζήτησε κωδικό ή περιγραφή CPV" />
           <CheckboxDropdown label="Τύπος σύμβασης" options={contractTypeOptions} values={contractType} onChange={setContractType} />
@@ -1056,7 +1056,7 @@ function shortMonthLabel(ym: string) {
 const percentText = (value: number | null | undefined) => value === null || value === undefined ? "—" : `${value.toFixed(1).replace(".", ",")}%`;
 
 function OverviewMarket({ data, state }: { data: MarketOverview | null; state: "idle" | "loading" | "error" }) {
-  if (state === "error") return <p className="noRows">Δεν υπάρχουν ακόμα υπολογισμένα στοιχεία για αυτό το φίλτρο - δοκίμασε άλλο Έτος ή πρόσθεσε Αναθέτουσα Αρχή, CPV ή Ανάδοχο.</p>;
+  if (state === "error") return <p className="noRows">Δεν υπάρχουν ακόμα υπολογισμένα στοιχεία για αυτό το φίλτρο - δοκίμασε άλλο Έτος ή πρόσθεσε Αναθέτουσα/Διενεργούσα Αρχή, CPV ή Ανάδοχο.</p>;
   if (!data) return <p className="noRows">{state === "loading" ? "Υπολογισμός…" : "Δεν υπάρχουν δεδομένα."}</p>;
   if (data.empty) return <p className="noRows">Δεν υπάρχουν δεδομένα για τα τρέχοντα φίλτρα.</p>;
   return <>
@@ -1071,8 +1071,8 @@ function OverviewMarket({ data, state }: { data: MarketOverview | null; state: "
         <div className="tableScroll"><table><thead><tr><th>Ανάδοχος</th><th>Σύνολο</th><th>Αναθέσεις</th><th>Συμβάσεις</th><th>Αξία</th></tr></thead>
           <tbody>{data.topContractors.map((item) => <tr key={item.name}><td>{item.name}</td><td><b>{number.format(item.total ?? item.awards + item.contracts)}</b></td><td>{number.format(item.awards)}</td><td>{number.format(item.contracts)}</td><td>{euro.format(item.value)}</td></tr>)}</tbody></table>
           {!data.topContractors.length && <p className="noRows">Δεν υπάρχουν αναθέσεις ή συμβάσεις.</p>}</div></article>
-      <article className="panel"><PanelHeader title="Κορυφαίες αναθέτουσες αρχές" caption="Κατά αριθμό διαγωνισμών" />
-        <div className="tableScroll"><table><thead><tr><th>Αναθέτουσα Αρχή</th><th>Διαγωνισμοί</th><th>Αξία</th></tr></thead>
+      <article className="panel"><PanelHeader title="Κορυφαίες αναθέτουσες/διενεργούσες αρχές" caption="Κατά αριθμό διαγωνισμών" />
+        <div className="tableScroll"><table><thead><tr><th>Αναθέτουσα/Διενεργούσα Αρχή</th><th>Διαγωνισμοί</th><th>Αξία</th></tr></thead>
           <tbody>{data.topAuthorities.map((item) => <tr key={item.authority}><td>{item.authority}</td><td>{number.format(item.tenders)}</td><td>{euro.format(item.value)}</td></tr>)}</tbody></table>
           {!data.topAuthorities.length && <p className="noRows">Δεν υπάρχουν αναθέσεις ή συμβάσεις.</p>}</div></article>
     </div>
@@ -1080,7 +1080,7 @@ function OverviewMarket({ data, state }: { data: MarketOverview | null; state: "
 }
 
 function OverviewCompetition({ data, state }: { data: MarketOverview | null; state: "idle" | "loading" | "error" }) {
-  if (state === "error") return <p className="noRows">Δεν υπάρχουν ακόμα υπολογισμένα στοιχεία για αυτό το φίλτρο - δοκίμασε άλλο Έτος ή πρόσθεσε Αναθέτουσα Αρχή, CPV ή Ανάδοχο.</p>;
+  if (state === "error") return <p className="noRows">Δεν υπάρχουν ακόμα υπολογισμένα στοιχεία για αυτό το φίλτρο - δοκίμασε άλλο Έτος ή πρόσθεσε Αναθέτουσα/Διενεργούσα Αρχή, CPV ή Ανάδοχο.</p>;
   if (!data) return <p className="noRows">{state === "loading" ? "Υπολογισμός…" : "Δεν υπάρχουν δεδομένα."}</p>;
   if (data.empty) return <p className="noRows">Δεν υπάρχουν δεδομένα για τα τρέχοντα φίλτρα.</p>;
   const discount = data.discount;
@@ -1108,7 +1108,7 @@ function MonthlyTable({ months }: { months: { month: string; count: number; budg
   // the totals row rather than show a misleading number.
   const totals = months.reduce((sum, item) => ({ count: sum.count + item.count, budget: sum.budget + item.budget }), { count: 0, budget: 0 });
   return <div className="tableScroll monthlyTable"><table>
-    <thead><tr><th>Μήνας</th><th>Διαγωνισμοί</th><th>Συνολική αξία</th><th>CPV</th><th>Αναθέτουσες Αρχές</th></tr></thead>
+    <thead><tr><th>Μήνας</th><th>Διαγωνισμοί</th><th>Συνολική αξία</th><th>CPV</th><th>Αναθέτουσες/Διενεργούσες Αρχές</th></tr></thead>
     <tbody>
       {months.map((item) => <tr key={item.month}><td>{monthLabel(item.month)}</td><td>{number.format(item.count)}</td><td>{euro.format(item.budget)}</td><td>{number.format(item.cpv)}</td><td>{number.format(item.authorities)}</td></tr>)}
       <tr className="tableTotal"><td>Σύνολο</td><td>{number.format(totals.count)}</td><td>{euro.format(totals.budget)}</td><td>—</td><td>—</td></tr>
@@ -1119,7 +1119,7 @@ function MonthlyTable({ months }: { months: { month: string; count: number; budg
 function TenderTable({ rows, expanded = false, title = "Λίστα διαγωνισμών", caption, onViewAll }: { rows: Tender[]; expanded?: boolean; title?: string; caption?: string; onViewAll?: () => void }) {
   const [selected, setSelected] = useState<Tender | null>(null);
   if (selected) return <TenderDetail tender={selected} onBack={() => setSelected(null)} />;
-  return <article className={`panel tablePanel ${expanded ? "expanded" : ""}`}><PanelHeader title={title} caption={caption ?? `${number.format(rows.length)} εγγραφές μετά τα φίλτρα`} onDownload={{ filename: title, title, headers: ["ΑΔΑΜ", "Τίτλος", "Αναθέτουσα Αρχή", "CPV", "Περιγραφή CPV", "Π/Υ", "Τύπος σύμβασης", "Τύπος διαδικασίας", "Τύπος εγγράφου", "Κατάσταση", "Δημοσίευση"], rows: rows.map((item) => [item.adam, item.title, item.authority, item.cpv, item.cpvDescription ?? "", item.budget, item.contractType ?? "", item.procedureType ?? "", documentTypeLabels[item.documentType ?? ""] ?? item.documentType ?? "", item.status, item.publicationDate ?? ""]), columnTypes: ["text", "text", "text", "text", "text", "currency", "text", "text", "text", "text", "date"] }} /><div className="tableScroll"><table><thead><tr><th>ΑΔΑΜ</th><th>Τίτλος</th><th>Αναθέτουσα Αρχή</th><th>CPV / Τίτλος</th><th>Π/Υ</th><th>Τύπος σύμβασης</th><th>Κατάσταση</th><th>Δημοσίευση</th><th /></tr></thead><tbody>{rows.map((item) => <tr key={item.adam}><td><AdamCopy adam={item.adam} className="adam adamCopy" />{item.procedureType === DIRECT_AWARD_PROCEDURE && <b className="directAwardBadge directAwardBadgeAdam" title="Απευθείας ανάθεση - όχι ανοιχτός διαγωνισμός">Απευθείας</b>}</td><td>{item.title}</td><td>{item.authority}</td><td><strong>{item.cpv}</strong><small className="cellSub">{item.cpvDescription}</small></td><td>{euro.format(item.budget)}</td><td className="cellPlain">{item.contractType ?? "—"}</td><td><span className={`status ${statusTone[item.status]}`}>{item.status}</span>{item.dateIssue && <span className="dateWarn" title="Η ημερομηνία αποσφράγισης δεν φαίνεται σωστή (πριν τη δημοσίευση ή πάνω από 365 ημέρες μετά)">⚠</span>}</td><td>{formatDate(item.publicationDate)}</td><td><button className="view" aria-label={`Προβολή ${item.adam}`} onClick={() => setSelected(item)}>→</button></td></tr>)}</tbody></table></div>{!rows.length && <p className="noRows">Δεν βρέθηκαν διαγωνισμοί για τα επιλεγμένα φίλτρα.</p>}{onViewAll && <button className="viewAll" onClick={onViewAll}>Προβολή όλων των διαγωνισμών →</button>}</article>;
+  return <article className={`panel tablePanel ${expanded ? "expanded" : ""}`}><PanelHeader title={title} caption={caption ?? `${number.format(rows.length)} εγγραφές μετά τα φίλτρα`} onDownload={{ filename: title, title, headers: ["ΑΔΑΜ", "Τίτλος", "Αναθέτουσα/Διενεργούσα Αρχή", "CPV", "Περιγραφή CPV", "Π/Υ", "Τύπος σύμβασης", "Τύπος διαδικασίας", "Τύπος εγγράφου", "Κατάσταση", "Δημοσίευση"], rows: rows.map((item) => [item.adam, item.title, item.authority, item.cpv, item.cpvDescription ?? "", item.budget, item.contractType ?? "", item.procedureType ?? "", documentTypeLabels[item.documentType ?? ""] ?? item.documentType ?? "", item.status, item.publicationDate ?? ""]), columnTypes: ["text", "text", "text", "text", "text", "currency", "text", "text", "text", "text", "date"] }} /><div className="tableScroll"><table><thead><tr><th>ΑΔΑΜ</th><th>Τίτλος</th><th>Αναθέτουσα/Διενεργούσα Αρχή</th><th>CPV / Τίτλος</th><th>Π/Υ</th><th>Τύπος σύμβασης</th><th>Κατάσταση</th><th>Δημοσίευση</th><th /></tr></thead><tbody>{rows.map((item) => <tr key={item.adam}><td><AdamCopy adam={item.adam} className="adam adamCopy" />{item.procedureType === DIRECT_AWARD_PROCEDURE && <b className="directAwardBadge directAwardBadgeAdam" title="Απευθείας ανάθεση - όχι ανοιχτός διαγωνισμός">Απευθείας</b>}</td><td>{item.title}</td><td>{item.authority}</td><td><strong>{item.cpv}</strong><small className="cellSub">{item.cpvDescription}</small></td><td>{euro.format(item.budget)}</td><td className="cellPlain">{item.contractType ?? "—"}</td><td><span className={`status ${statusTone[item.status]}`}>{item.status}</span>{item.dateIssue && <span className="dateWarn" title="Η ημερομηνία αποσφράγισης δεν φαίνεται σωστή (πριν τη δημοσίευση ή πάνω από 365 ημέρες μετά)">⚠</span>}</td><td>{formatDate(item.publicationDate)}</td><td><button className="view" aria-label={`Προβολή ${item.adam}`} onClick={() => setSelected(item)}>→</button></td></tr>)}</tbody></table></div>{!rows.length && <p className="noRows">Δεν βρέθηκαν διαγωνισμοί για τα επιλεγμένα φίλτρα.</p>}{onViewAll && <button className="viewAll" onClick={onViewAll}>Προβολή όλων των διαγωνισμών →</button>}</article>;
 }
 
 function TenderDetail({ tender, onBack }: { tender: Tender; onBack: () => void }) {
@@ -1653,7 +1653,7 @@ function MarketPanel({ awards, contracts, cpv, contractor, authority, year, cont
 
   return <>
     <article className="panel marketHero">
-      <div><p className="eyebrow">COMPETITION MAPPING</p><h2>Ανάλυση ανταγωνισμού</h2><p>Επίλεξε CPV, ανάδοχο ή αναθέτουσα αρχή από το πλαϊνό φίλτρο για να δεις την αγορά, τους αναδόχους, και τις συνδεδεμένες συμβάσεις.</p></div>
+      <div><p className="eyebrow">COMPETITION MAPPING</p><h2>Ανάλυση ανταγωνισμού</h2><p>Επίλεξε CPV, ανάδοχο ή αναθέτουσα/διενεργούσα αρχή από το πλαϊνό φίλτρο για να δεις την αγορά, τους αναδόχους, και τις συνδεδεμένες συμβάσεις.</p></div>
     </article>
     {!hasSelection && <article className="panel empty marketStart"><span>⌕</span><h2>Επίλεξε CPV ή ανάδοχο</h2><p>Τα αποτελέσματα ανταγωνισμού θα εμφανιστούν μόνο μετά τη δική σου επιλογή.</p></article>}
     {hasSelection && <>
@@ -1664,9 +1664,9 @@ function MarketPanel({ awards, contracts, cpv, contractor, authority, year, cont
       </div>}
       <label className="search marketContractorSearch"><span>⌕</span><input value={contractorSearch} onChange={(event) => setContractorSearch(event.target.value)} placeholder="Αναζήτηση αναδόχου" /></label>
       <article className="panel tablePanel">
-        <PanelHeader title="Ανάδοχοι" caption="Ταξινομημένοι κατά αριθμό αναθέσεων. Πάτησε πάνω σε έναν ανάδοχο για να δεις τις αναθέσεις και τις συμβάσεις του." onDownload={locked ? undefined : { filename: "anadoxoi", title: "Ανάδοχοι", headers: ["Ανάδοχος", "Αναθέσεις", "Συμβάσεις", "Συνολική αξία", "Μέση έκπτωση", "Διαγωνισμοί στη μέση έκπτωση", "Αναθέτουσες Αρχές"], rows: contractorRows.map((item) => [item.name, item.awards, item.contracts, item.value, formatDiscount(item.discount), item.discountCount, item.authorities]), columnTypes: ["text", "number", "number", "currency", "text", "number", "number"] }} />
+        <PanelHeader title="Ανάδοχοι" caption="Ταξινομημένοι κατά αριθμό αναθέσεων. Πάτησε πάνω σε έναν ανάδοχο για να δεις τις αναθέσεις και τις συμβάσεις του." onDownload={locked ? undefined : { filename: "anadoxoi", title: "Ανάδοχοι", headers: ["Ανάδοχος", "Αναθέσεις", "Συμβάσεις", "Συνολική αξία", "Μέση έκπτωση", "Διαγωνισμοί στη μέση έκπτωση", "Αναθέτουσες/Διενεργούσες Αρχές"], rows: contractorRows.map((item) => [item.name, item.awards, item.contracts, item.value, formatDiscount(item.discount), item.discountCount, item.authorities]), columnTypes: ["text", "number", "number", "currency", "text", "number", "number"] }} />
         <div className="tableScroll"><table>
-          <thead><tr><th /><th>Ανάδοχος</th><th>Αναθέσεις</th><th>Συμβάσεις</th><th>Συνολική αξία</th><th title="Μέσος όρος έκπτωσης της ανάθεσης/σύμβασης σε σχέση με τον Π/Υ της διακήρυξης">Μέση έκπτωση</th><th>Αναθέτουσες Αρχές</th></tr></thead>
+          <thead><tr><th /><th>Ανάδοχος</th><th>Αναθέσεις</th><th>Συμβάσεις</th><th>Συνολική αξία</th><th title="Μέσος όρος έκπτωσης της ανάθεσης/σύμβασης σε σχέση με τον Π/Υ της διακήρυξης">Μέση έκπτωση</th><th>Αναθέτουσες/Διενεργούσες Αρχές</th></tr></thead>
           <tbody>{visibleRows.map((item) => (
             <tr key={item.key} className={selectedContractor === item.key ? "selectedRow" : ""} onClick={() => !locked && setSelectedContractor(item.key === selectedContractor ? "" : item.key)}>
               <td><input type="checkbox" checked={selectedContractor === item.key} disabled={locked} readOnly /></td>
@@ -1785,14 +1785,14 @@ function ContractorProfile({ name, summary, awards, contracts, onClose }: {
     <div className="metrics marketMetrics">
       <Metric label="Αναθέσεις" value={number.format(summary.awards)} tone="sky" />
       <Metric label="Συμβάσεις" value={number.format(summary.contracts)} tone="mint" />
-      <Metric label="Αναθέτουσες Αρχές" value={number.format(summary.authorities)} tone="sand" />
+      <Metric label="Αναθέτουσες/Διενεργούσες Αρχές" value={number.format(summary.authorities)} tone="sand" />
       <Metric label="Μέση έκπτωση" value={formatDiscount(summary.discount)} tone="sky" sub={summary.discount === null ? "Δεν υπάρχουν συγκρίσιμοι διαγωνισμοί" : `από ${summary.discountCount} ${summary.discountCount === 1 ? "διαγωνισμό" : "διαγωνισμούς"} με ίδια βάση ΦΠΑ`} />
     </div>
     <div className="tabRow">
       <button type="button" className={tab === "won" ? "active" : ""} onClick={() => setTab("won")}>Διακηρύξεις</button>
       <button type="button" className={tab === "distribution" ? "active" : ""} onClick={() => setTab("distribution")}>Κατανομή</button>
     </div>
-    {tab === "won" && <><PanelHeader title="Διακηρύξεις" caption="Μία γραμμή ανά Ανάθεση/Σύμβαση - ένα tender με πολλά lots μπορεί να εμφανιστεί πάνω από μία φορά." onDownload={{ filename: "diakiryxeis", title: "Διακηρύξεις", headers: ["ΑΔΑΜ Διακήρυξης", "ΑΔΑΜ Ανάθεσης/Σύμβασης", "Τίτλος", "Αναθέτουσα Αρχή", "Κατάσταση", "Ημερομηνία", "Αξία"], rows: wonRows.map(({ row: item, status, date }) => [Boolean(item.noticeAdam && item.noticeTitle) ? item.noticeAdam! : item.adam, item.adam, Boolean(item.noticeAdam && item.noticeTitle) ? item.noticeTitle! : item.title, item.authority, status, date ?? "", item.value]), columnTypes: ["text", "text", "text", "text", "text", "date", "currency"] }} /><div className="tableScroll"><table><thead><tr><th>ΑΔΑΜ Διακήρυξης</th><th>Τίτλος</th><th>Αναθέτουσα Αρχή</th><th>Κατάσταση</th><th>Ημερομηνία</th><th>Αξία</th></tr></thead><tbody>{wonRows.map(({ row: item, repeats, status, date }) => {
+    {tab === "won" && <><PanelHeader title="Διακηρύξεις" caption="Μία γραμμή ανά Ανάθεση/Σύμβαση - ένα tender με πολλά lots μπορεί να εμφανιστεί πάνω από μία φορά." onDownload={{ filename: "diakiryxeis", title: "Διακηρύξεις", headers: ["ΑΔΑΜ Διακήρυξης", "ΑΔΑΜ Ανάθεσης/Σύμβασης", "Τίτλος", "Αναθέτουσα/Διενεργούσα Αρχή", "Κατάσταση", "Ημερομηνία", "Αξία"], rows: wonRows.map(({ row: item, status, date }) => [Boolean(item.noticeAdam && item.noticeTitle) ? item.noticeAdam! : item.adam, item.adam, Boolean(item.noticeAdam && item.noticeTitle) ? item.noticeTitle! : item.title, item.authority, status, date ?? "", item.value]), columnTypes: ["text", "text", "text", "text", "text", "date", "currency"] }} /><div className="tableScroll"><table><thead><tr><th>ΑΔΑΜ Διακήρυξης</th><th>Τίτλος</th><th>Αναθέτουσα/Διενεργούσα Αρχή</th><th>Κατάσταση</th><th>Ημερομηνία</th><th>Αξία</th></tr></thead><tbody>{wonRows.map(({ row: item, repeats, status, date }) => {
       const hasNotice = Boolean(item.noticeAdam && item.noticeTitle);
       const unionNote = status === "Ανάθεση" ? "η αξία αφορά όλη την ανάθεση" : "η αξία αφορά όλη τη σύμβαση";
       const recordAdamLabel = status === "Σύμβαση" ? "ΑΔΑΜ Σύμβασης" : "ΑΔΑΜ Ανάθεσης";
@@ -2587,14 +2587,14 @@ function AlertsPanelContent({ code, onUnauthorized, watchlist, setWatchlist, nut
       };
 
       return <article className="panel tablePanel">
-      <PanelHeader title="Νέοι διαγωνισμοί" caption={`${number.format(recent.length + active.length + passed.length)} διαγωνισμοί από τις αρχές του 2026 στα CPV που παρακολουθείς`} onDownload={{ filename: "neoi-diagonismoi", title: "Νέοι διαγωνισμοί", headers: ["ΑΔΑΜ", "Τίτλος", "Αναθέτουσα Αρχή", "Π/Υ", "Αποσφράγιση", "Τύπος σύμβασης", "Τύπος εγγράφου"], rows: shownItems.map((item) => [item.adam, item.title, item.authority, item.budget, item.openingDate ?? "", item.contractType ?? "", item.documentType ? (documentTypeLabels[item.documentType] ?? item.documentType) : ""]), columnTypes: ["text", "text", "text", "currency", "date", "text", "text"] }} />
+      <PanelHeader title="Νέοι διαγωνισμοί" caption={`${number.format(recent.length + active.length + passed.length)} διαγωνισμοί από τις αρχές του 2026 στα CPV που παρακολουθείς`} onDownload={{ filename: "neoi-diagonismoi", title: "Νέοι διαγωνισμοί", headers: ["ΑΔΑΜ", "Τίτλος", "Αναθέτουσα/Διενεργούσα Αρχή", "Π/Υ", "Αποσφράγιση", "Τύπος σύμβασης", "Τύπος εγγράφου"], rows: shownItems.map((item) => [item.adam, item.title, item.authority, item.budget, item.openingDate ?? "", item.contractType ?? "", item.documentType ? (documentTypeLabels[item.documentType] ?? item.documentType) : ""]), columnTypes: ["text", "text", "text", "currency", "date", "text", "text"] }} />
       <div className="alertAuthorityFilter">
         <MultiSearchInput
-          label="Αναθέτουσα Αρχή"
+          label="Αναθέτουσα/Διενεργούσα Αρχή"
           type="authority"
           values={authorityFilter}
           onChange={setAuthorityFilter}
-          placeholder="Αναζητήστε Αναθέτουσα Αρχή"
+          placeholder="Αναζητήστε Αναθέτουσα/Διενεργούσα Αρχή"
         />
         <label className="alertDirectAwardToggle">
           <input type="checkbox" checked={hideDirectAwards} onChange={(event) => setHideDirectAwards(event.target.checked)} />
