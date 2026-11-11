@@ -524,10 +524,10 @@ export default function Home() {
       });
   }, [authority, contractor, cpv, year, contractType, mineCodes, mineAuthorities, trackKeys]);
   useEffect(() => {
-    if (!competitionNeedsOwnFetch) return;
+    if (!competitionNeedsOwnFetch || dashboardLoading) return;
     const timer = window.setTimeout(loadCompetition, 500);
     return () => window.clearTimeout(timer);
-  }, [competitionNeedsOwnFetch, loadCompetition]);
+  }, [competitionNeedsOwnFetch, loadCompetition, dashboardLoading]);
 
   useEffect(() => {
     if (page !== "profile" || !team.code || !watchlistReady) return;
@@ -599,25 +599,30 @@ export default function Home() {
   // Only the Επισκόπηση shows these numbers, so they're fetched there only
   // (and again whenever its filters change).
   useEffect(() => {
-    if (page !== "overview") return;
+    if (page !== "overview" || dashboardLoading) return;
     const timer = window.setTimeout(loadMarketOverview, 500);
     return () => window.clearTimeout(timer);
-  }, [page, loadMarketOverview]);
+  }, [page, loadMarketOverview, dashboardLoading]);
 
   useEffect(() => {
-    // Αναθέτουσα Αρχή applies on every keystroke (no "pick an option" step
-    // like CPV/Ανάδοχος have) - a longer pause here means fewer full
-    // reloads fired while someone is still mid-word.
+    // The tender list only depends on the filters, not on the Επισκόπηση scope.
     const timer = window.setTimeout(() => {
-      // Ειδοποιήσεις has no filter UI and its own independent data fetch -
-      // this pair is wasted there. Checked via a ref, not a `page`
-      // dependency, so switching tabs alone can't retrigger this effect.
+      // Ειδοποιήσεις has no filter UI and its own independent data fetch.
       if (pageRef.current === "alerts") return;
       loadTenderPage(1);
-      loadDashboard();
     }, 500);
     return () => window.clearTimeout(timer);
-  }, [loadTenderPage, loadDashboard]);
+  }, [loadTenderPage]);
+
+  // The Επισκόπηση numbers load one block at a time (Διαγωνισμοί first), so the
+  // database is not asked for three heavy things at once. dashboardLoading is
+  // raised right away so the other blocks wait for it.
+  useEffect(() => {
+    if (pageRef.current === "alerts") return;
+    setDashboardLoading(true);
+    const timer = window.setTimeout(loadDashboard, 500);
+    return () => window.clearTimeout(timer);
+  }, [loadDashboard]);
 
 
   // The ΑΔΑΜ/τίτλος search box and Τύπος εγγράφου select are both hidden on

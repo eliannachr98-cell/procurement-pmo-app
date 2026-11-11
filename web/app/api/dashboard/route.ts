@@ -3,8 +3,6 @@ import {
   intersect,
   procurementAdamsForContractor,
   procurementAdamsForCpv,
-  procurementAdamsForCpvCodes,
-  procurementAdamsForAuthorities,
   supabaseRpc,
   union,
 } from "@/lib/matching";
@@ -59,16 +57,6 @@ export async function GET(request: Request) {
     const watchCpvs = searchParams.getAll("watchCpv").flatMap((value) => value.split(",")).map((value) => value.trim()).filter(Boolean);
     const watchAuthorities = searchParams.getAll("watchAuthority").map((value) => value.trim()).filter(Boolean);
     const watchContractors = searchParams.getAll("watchContractor").map((value) => value.trim()).filter(Boolean);
-    if (watchCpvs.length || watchAuthorities.length || watchContractors.length) {
-      const contractorGroups: Awaited<ReturnType<typeof procurementAdamsForContractor>>[] = [];
-      for (const item of watchContractors) contractorGroups.push(await procurementAdamsForContractor(item));
-      const scoped = union([
-        watchCpvs.length ? await procurementAdamsForCpvCodes(watchCpvs) : [],
-        watchAuthorities.length ? await procurementAdamsForAuthorities(watchAuthorities) : [],
-        union(contractorGroups.map((item) => item.procurementAdams)),
-      ]);
-      matchingAdams = intersect(matchingAdams, scoped);
-    }
 
     if (matchingAdams?.length === 0) {
       return NextResponse.json({ total: 0, status: [], cpv: [], cpvTotal: 0, nuts: [], monthly: [] } satisfies Breakdown);
@@ -81,6 +69,9 @@ export async function GET(request: Request) {
       p_contract_type: contractTypes.length ? contractTypes : null,
       p_document_type: null,
       p_adams: matchingAdams,
+      p_scope_cpv: watchCpvs.length ? watchCpvs : null,
+      p_scope_authorities: watchAuthorities.length ? watchAuthorities : null,
+      p_scope_contractors: watchContractors.length ? watchContractors : null,
     });
 
     // The SQL (and its cache) still names the status "Ολοκληρωμένος"; the app

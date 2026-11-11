@@ -3,8 +3,6 @@ import {
   intersect,
   procurementAdamsForContractor,
   procurementAdamsForCpv,
-  procurementAdamsForCpvCodes,
-  procurementAdamsForAuthorities,
   supabaseGet,
   supabaseRpc,
   union,
@@ -41,16 +39,6 @@ export async function GET(request: Request) {
     const watchAuthorities = list("watchAuthority");
     const watchContractors = list("watchContractor");
     const track = list("track");
-    if (watchCpvs.length || watchAuthorities.length || watchContractors.length) {
-      const contractorGroups: Awaited<ReturnType<typeof procurementAdamsForContractor>>[] = [];
-      for (const item of watchContractors) contractorGroups.push(await procurementAdamsForContractor(item));
-      const scoped = union([
-        watchCpvs.length ? await procurementAdamsForCpvCodes(watchCpvs) : [],
-        watchAuthorities.length ? await procurementAdamsForAuthorities(watchAuthorities) : [],
-        union(contractorGroups.map((item) => item.procurementAdams)),
-      ]);
-      matchingAdams = intersect(matchingAdams, scoped);
-    }
     if (matchingAdams?.length === 0) return NextResponse.json({ empty: true });
 
     // A year (or no filter at all) on its own is far too heavy to compute per
@@ -69,6 +57,9 @@ export async function GET(request: Request) {
       p_authority: authority && authority !== "Όλες" ? authority : null,
       p_contract_type: contractTypes.length ? contractTypes : null,
       p_adams: matchingAdams,
+      p_scope_cpv: watchCpvs.length ? watchCpvs : null,
+      p_scope_authorities: watchAuthorities.length ? watchAuthorities : null,
+      p_scope_contractors: watchContractors.length ? watchContractors : null,
       p_stats_only: true,
       p_track: track.length ? track : null,
     });
