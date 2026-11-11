@@ -1,7 +1,9 @@
 -- One page of the Διαγωνισμοί list for "Η αγορά μου": only the notices of the
 -- CPVs (within the regions), authorities and contractors a profile follows,
 -- through the same scope_condition as the Επισκόπηση, plus the usual filters.
--- Returns the same columns the list reads from procurements_compact.
+-- Returns the same columns the list reads from procurements_compact. Ordered by the
+-- later submission deadline first (deadlines that look wrong - before publication or
+-- over a year after - count as no deadline), then newest publication.
 create or replace function public.list_scoped_procurements(
   p_scope_cpv text[] default null,
   p_scope_authorities text[] default null,
@@ -60,7 +62,11 @@ begin
              p.budget_ex_vat, p.budget_inc_vat, p.budget_unknown_vat, p.status, p.cancelled_at
       from public.procurements_compact p
       where %s
-      order by p.publication_date desc nulls last
+      order by case when p.opening_at is null
+                      or (p.opening_at at time zone 'Europe/Athens')::date < p.publication_date
+                      or (p.opening_at at time zone 'Europe/Athens')::date - p.publication_date > 365
+                    then null else p.opening_at end desc nulls last,
+               p.publication_date desc nulls last
       limit %s offset %s
     ) t
   $q$, array_to_string(conditions, ' and '), greatest(p_limit, 1), greatest(p_offset, 0)) into result;
