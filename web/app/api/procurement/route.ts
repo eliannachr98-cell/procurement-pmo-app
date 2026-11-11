@@ -551,6 +551,7 @@ export async function GET(request: Request) {
         publicationDate: notice.publication_date,
         deadline: submissionDeadline,
         openingDate: submissionDeadline,
+        extendedOpeningDate: undefined as string | undefined,
         dateIssue: Boolean(notice.opening_at && notice.publication_date && (notice.opening_at.slice(0, 10) < notice.publication_date || (new Date(notice.opening_at.slice(0, 10)).getTime() - new Date(notice.publication_date).getTime()) / 86400000 > 365)),
         awardDate: linkedAwards.map((row) => row.award_date).filter(Boolean).sort()[0],
         contractDates: linkedContracts.map((row) => row.signed_date).filter(Boolean),
@@ -591,8 +592,7 @@ export async function GET(request: Request) {
           }
           if (latest) {
             tender.status = "Ενεργός";
-            tender.openingDate = latest;
-            tender.deadline = latest;
+            tender.extendedOpeningDate = latest;
           }
         }
       } catch {
