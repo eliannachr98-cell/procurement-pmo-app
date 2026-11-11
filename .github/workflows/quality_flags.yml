@@ -117,7 +117,7 @@ jobs:
                     where e.y in (2024, 2025) and not exists (select 1 from cmp_db x where x.adam = e.adam and x.tk = '3' and x.cat = 'declaration')
                     group by e.y order by e.y""")
               elif mode == "apply-sql":
-                  for name in ("quality_flags.sql", "scope_condition.sql", "dashboard_aggregates.sql", "market_overview.sql", "reclassify_documents.sql", "watchlists.sql", "interest_news.sql", "publication_nulls_last_index.sql"):
+                  for name in ("quality_flags.sql", "scope_condition.sql", "dashboard_aggregates.sql", "market_overview.sql", "reclassify_documents.sql", "watchlists.sql", "interest_news.sql", "publication_nulls_last_index.sql", "idx_contractors_vat.sql", "idx_contracts_award.sql"):
                       cur.execute(Path("sql", name).read_text(encoding="utf-8"))
                       print("applied", name)
               elif mode == "export":
