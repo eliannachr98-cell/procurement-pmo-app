@@ -430,7 +430,11 @@ export default function Home() {
       })
       .then((payload) => {
         if (requestId !== latestRequest.current) return;
-        setTenders((current) => append ? [...current, ...(payload.tenders ?? [])] : (payload.tenders ?? []));
+        setTenders((current) => {
+          if (!append) return payload.tenders ?? [];
+          const seen = new Set(current.map((item) => item.adam));
+          return [...current, ...(payload.tenders ?? []).filter((item: Tender) => !seen.has(item.adam))];
+        });
         setAwards((current) => append ? [...current, ...(payload.awards ?? [])] : (payload.awards ?? []));
         setContracts((current) => append ? [...current, ...(payload.contracts ?? [])] : (payload.contracts ?? []));
         setLoadedPage(nextPage);
@@ -757,7 +761,7 @@ export default function Home() {
 
   const scopeBar = team.code ? (
             <div className="overviewScope">
-              <div className="overviewScopeToggle" role="group" aria-label="Εύρος Διαγωνισμών και Αγοράς">
+              <div className="overviewScopeToggle" data-scope={overviewScope} role="group" aria-label="Εύρος Διαγωνισμών και Αγοράς"><span className="scopeThumb" aria-hidden="true" />
                 <button type="button" className={overviewScope === "all" ? "active" : ""} onClick={() => setOverviewScope("all")}>Όλη η αγορά</button>
                 <button type="button" className={overviewScope === "mine" ? "active" : ""} onClick={() => setOverviewScope("mine")}>Η αγορά μου</button>
               </div>

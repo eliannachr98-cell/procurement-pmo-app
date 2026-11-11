@@ -196,6 +196,26 @@ function statusFor(row: ProcurementRow, awards: AwardRow[], contracts: ContractR
   return "Ενεργός";
 }
 
+// Notices of the same tender as the ones on this page (same authority and same
+// budget, e.g. a later Παράταση or Τροποποίηση), even when they fall outside the
+// page, so the list can hang them under the main tender.
+async function fetchRelatedNotices(rows: ProcurementRow[]): Promise<ProcurementRow[]> {
+  const pairs = rows.filter((row) => row.authority_name && money(row) > 0);
+  if (!pairs.length) return [];
+  const authorities = [...new Set(pairs.map((row) => row.authority_name as string))];
+  const budgets = [...new Set(pairs.map((row) => money(row)))];
+  const quoted = authorities.map((name) => `"${name.split("\\").join("\\\\").split('"').join('\\"')}"`).join(",");
+  const list = budgets.join(",");
+  const found = await supabaseGet<ProcurementRow[]>(
+    "procurements_compact?select=adam,title,authority_name,contract_type,procedure_type,document_category,nuts_code,nuts_name,publication_date,opening_at,budget_ex_vat,budget_inc_vat,budget_unknown_vat,status,cancelled_at" +
+    `&authority_name=in.(${encodeURIComponent(quoted)})` +
+    `&or=(budget_inc_vat.in.(${list}),budget_ex_vat.in.(${list}),budget_unknown_vat.in.(${list}))&limit=2000`,
+  );
+  const have = new Set(rows.map((row) => row.adam));
+  const keys = new Set(pairs.map((row) => `${row.authority_name}|${money(row)}`));
+  return found.filter((row) => !have.has(row.adam) && row.authority_name && keys.has(`${row.authority_name}|${money(row)}`));
+}
+
 export async function GET(request: Request) {
   try {
     const searchParams = new URL(request.url).searchParams;
@@ -288,7 +308,10 @@ export async function GET(request: Request) {
       (filters.length ? `&${filters.join("&")}` : "") +
       `&order=publication_date.desc.nullslast&limit=${pageSize}&offset=${offset}`,
     );
-    const notices = noticePage.rows;
+    const pageNotices = noticePage.rows;
+    let relatedNotices: ProcurementRow[] = [];
+    try { relatedNotices = await fetchRelatedNotices(pageNotices); } catch { relatedNotices = []; }
+    const notices = [...pageNotices, ...relatedNotices];
     const noticeAdams = notices.map((row) => row.adam);
 
     const [awards, contracts, noticeCpvs] = await Promise.all([
@@ -680,7 +703,7 @@ export async function GET(request: Request) {
           // next page will return some more rows; if not, an empty/partial
           // one ends it.
           total: offset + notices.length,
-          hasMore: notices.length === pageSize,
+          hasMore: pageNotices.length === pageSize,
           loadedAt: new Date().toISOString(),
         },
       },
