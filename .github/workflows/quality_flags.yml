@@ -183,6 +183,20 @@ jobs:
                   started = _t.time()
                   cur.execute("select (public.market_overview(null, null, null, null, true, null, array['79400000-8','79410000-1'], null, null))->>'tenders'")
                   print("timing market_overview scope(2 cpv):", cur.fetchone()[0], "tenders", round(_t.time() - started, 1), "s")
+                  cpv10 = "array['79410000-1','79400000-8','79421000-1','79411000-8','79421100-2','72000000-5','72200000-7','72225000-8','72222300-0','73200000-4']"
+                  vats6 = "array['094496049','997802310','094428065','094316657','801079752','094241121']"
+                  for label, sql in [
+                      ("market 10cpv", f"select (public.market_overview(null,null,null,null,true,null,{cpv10},null,null))->>'tenders'"),
+                      ("market 6 contractors", f"select (public.market_overview(null,null,null,null,true,null,null,null,{vats6}))->>'tenders'"),
+                      ("market 10cpv+6contractors", f"select (public.market_overview(null,null,null,null,true,null,{cpv10},null,{vats6}))->>'tenders'"),
+                      ("dashboard 10cpv", f"select (public.dashboard_breakdown(null,null,null,null,null,null,{cpv10},null,null))->>'total'"),
+                      ("dashboard 6 contractors", f"select (public.dashboard_breakdown(null,null,null,null,null,null,null,null,{vats6}))->>'total'"),
+                      ("competition 10cpv+track", f"select (public.market_overview(null,null,null,null,true,{vats6},{cpv10},null,{vats6}))->>'tenders'"),
+                  ]:
+                      started = _t.time()
+                      cur.execute(sql)
+                      res = cur.fetchone()[0]
+                      print(f"timing2 {label}: n={res} {_t.time() - started:.1f}s")
               elif mode == "reclassify":
                   cur.execute(Path("sql", "reclassify_documents.sql").read_text(encoding="utf-8"))
                   cur.execute("select public.reclassify_document_categories()")
