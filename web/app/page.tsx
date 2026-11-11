@@ -1109,7 +1109,7 @@ function OverviewMarket({ data, state }: { data: MarketOverview | null; state: "
   if (!data) return <p className="noRows">{state === "loading" ? "Υπολογισμός…" : "Δεν υπάρχουν δεδομένα."}</p>;
   if (data.empty) return <p className="noRows">Δεν υπάρχουν δεδομένα για τα τρέχοντα φίλτρα.</p>;
   return <>
-    <div className="metrics">
+    <div className="metrics statusMetrics">
       <Metric label="Ανάδοχοι" value={number.format(data.contractors)} tone="sky" />
       <Metric label="Αναθέσεις" value={number.format(data.awards)} tone="mint" sub={data.awardsValue === undefined ? undefined : `Αξία: ${euro.format(data.awardsValue)}`} />
       <Metric label="Συμβάσεις" value={number.format(data.contracts)} tone="lilac" sub={data.contractsValue === undefined ? undefined : `Αξία: ${euro.format(data.contractsValue)}`} />
@@ -1134,7 +1134,7 @@ function OverviewCompetition({ data, state }: { data: MarketOverview | null; sta
   if (data.empty) return <p className="noRows">Δεν υπάρχουν δεδομένα για τα τρέχοντα φίλτρα.</p>;
   const discount = data.discount;
   return <>
-    <div className="metrics">
+    <div className="metrics statusMetrics">
       <Metric label="Μέση έκπτωση" value={percentText(discount.average)} tone="sky" />
       <Metric label="Διάμεση έκπτωση" value={percentText(discount.median)} tone="mint" />
       <Metric label="Με έκπτωση πάνω από 0%" value={percentText(discount.positiveShare)} tone="lilac" />
