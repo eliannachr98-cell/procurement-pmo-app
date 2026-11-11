@@ -224,3 +224,30 @@ export async function procurementAdamsForAuthorities(names: string[]) {
   );
   return rows.map((row) => row.adam);
 }
+
+// Read-through cache for the numbers of one set of followed interests (the
+// "Η αγορά μου" scope). Computing them from scratch takes seconds to minutes on
+// a cold database, so the result is stored in scope_cache and reused until the
+// next data sync (dashboard_cache "all" is rebuilt at the end of every sync).
+export async function cachedScope<T>(kind: string, scope: unknown, compute: () => Promise<T>): Promise<T> {
+  const { createHash } = await import("node:crypto");
+  const key = `${kind}|${createHash("sha1").update(JSON.stringify(scope)).digest("hex")}`;
+  try {
+    const [rows, sync] = await Promise.all([
+      supabaseGet<{ payload: T; refreshed_at: string }[]>(`scope_cache?select=payload,refreshed_at&cache_key=eq.${encodeURIComponent(key)}`),
+      supabaseGet<{ refreshed_at: string }[]>("dashboard_cache?select=refreshed_at&cache_key=eq.all&limit=1"),
+    ]);
+    const cachedAt = rows[0] ? new Date(rows[0].refreshed_at).getTime() : 0;
+    const syncedAt = sync[0] ? new Date(sync[0].refreshed_at).getTime() : 0;
+    if (rows[0] && cachedAt >= syncedAt) return rows[0].payload;
+  } catch {
+    // no cache table yet, or a read problem: just compute
+  }
+  const payload = await compute();
+  try {
+    await supabaseWrite("scope_cache", "POST", [{ cache_key: key, payload, refreshed_at: new Date().toISOString() }], "resolution=merge-duplicates,return=minimal");
+  } catch {
+    // caching is best effort
+  }
+  return payload;
+}

@@ -4,6 +4,7 @@ import {
   procurementAdamsForContractor,
   procurementAdamsForCpv,
   supabaseGet,
+  cachedScope,
   supabaseRpc,
   union,
 } from "@/lib/matching";
@@ -53,7 +54,9 @@ export async function GET(request: Request) {
       return NextResponse.json(rows[0].payload, { headers: { "Cache-Control": "no-store, max-age=0" } });
     }
 
-    const summary = await supabaseRpc<unknown>("market_overview", {
+    const hasScope = watchCpvs.length > 0 || watchAuthorities.length > 0 || watchContractors.length > 0;
+    const plainScope = hasScope && (!authority || authority === "Όλες") && !contractors.length && !cpvs.length && !year && !contractTypes.length;
+    const computeSummary = () => supabaseRpc<unknown>("market_overview", {
       p_year: /^\d{4}$/.test(year) ? year : null,
       p_authority: authority && authority !== "Όλες" ? authority : null,
       p_contract_type: contractTypes.length ? contractTypes : null,
@@ -65,6 +68,9 @@ export async function GET(request: Request) {
       p_stats_only: true,
       p_track: track.length ? track : null,
     });
+    const summary = plainScope
+      ? await cachedScope(track.length ? "competition" : "market", { c: [...watchCpvs].sort(), a: [...watchAuthorities].sort(), k: [...watchContractors].sort(), n: [...watchNuts].sort(), t: [...track].sort() }, computeSummary)
+      : await computeSummary();
     return NextResponse.json(summary, { headers: { "Cache-Control": "no-store, max-age=0" } });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown market overview error";

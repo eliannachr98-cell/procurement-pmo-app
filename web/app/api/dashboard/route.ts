@@ -3,6 +3,7 @@ import {
   intersect,
   procurementAdamsForContractor,
   procurementAdamsForCpv,
+  cachedScope,
   supabaseRpc,
   union,
 } from "@/lib/matching";
@@ -63,7 +64,9 @@ export async function GET(request: Request) {
       return NextResponse.json({ total: 0, status: [], cpv: [], cpvTotal: 0, nuts: [], monthly: [] } satisfies Breakdown);
     }
 
-    const breakdown = await supabaseRpc<Breakdown>("dashboard_breakdown", {
+    const hasScope = watchCpvs.length > 0 || watchAuthorities.length > 0 || watchContractors.length > 0;
+    const plainScope = hasScope && !authority && !contractors.length && !cpvs.length && !year && !contractTypes.length;
+    const computeBreakdown = () => supabaseRpc<Breakdown>("dashboard_breakdown", {
       p_query: null,
       p_authority: authority || null,
       p_year: /^\d{4}$/.test(year) ? year : null,
@@ -75,6 +78,11 @@ export async function GET(request: Request) {
       p_scope_contractors: watchContractors.length ? watchContractors : null,
       ...(watchNuts.length ? { p_scope_nuts: watchNuts } : {}),
     });
+
+    // The SQL (and its cache)    });
+    const breakdown = plainScope
+      ? await cachedScope("dashboard", { c: [...watchCpvs].sort(), a: [...watchAuthorities].sort(), k: [...watchContractors].sort(), n: [...watchNuts].sort() }, computeBreakdown)
+      : await computeBreakdown();
 
     // The SQL (and its cache) still names the status "Ολοκληρωμένος"; the app
     // shows it as "Συμβασιοποιημένος".
