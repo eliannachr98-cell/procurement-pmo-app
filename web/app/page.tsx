@@ -800,7 +800,7 @@ export default function Home() {
           spot regardless of which tab is active. */}
       <div className="teamCodeRow">{team.code !== undefined && <TeamCodeBar team={team} />}</div>
 
-      <div className={`workspace${page === "alerts" || page === "profile" ? " workspaceFull" : ""}${page === "tenders" ? " tendersWorkspace" : ""}`}>
+      <div className={`workspace${page === "alerts" || page === "profile" ? " workspaceFull" : ""}${page === "tenders" || page === "overview" ? " tendersWorkspace" : ""}`}>
         <section className="content">
           <div className="pageTitle">
             <div><p className="eyebrow">PROCUREMENT INTELLIGENCE</p><h1>{page === "overview" ? "Επισκόπηση" : page === "tenders" ? "Διαγωνισμοί" : page === "market" ? "Αγορά & Ανταγωνισμός" : page === "profile" ? "Προφίλ" : "Παρακολούθηση"}</h1></div>
@@ -814,7 +814,7 @@ export default function Home() {
             {scopeBar}
             <div className={`overviewWrap${dashboardLoading ? " isLoading" : ""}`}>
             <section className="overviewSection"><h2 className="overviewHeading">Διαγωνισμοί</h2>
-            <div className="metrics">
+            <div className="metrics statusMetrics">
               <Metric label="Διαγωνισμοί" value={number.format(dashboard.total)} sub={`Π/Υ: ${euro.format(totalBudget)}`} tone="sky" />
               <Metric label="Ενεργοί" value={number.format(statusCount("Ενεργός"))} sub={`Π/Υ: ${euro.format(statusBudget("Ενεργός"))}`} tone="mint" />
               <Metric label="Σε αξιολόγηση" value={number.format(statusCount("Αξιολόγηση"))} sub={`Π/Υ: ${euro.format(statusBudget("Αξιολόγηση"))}`} tone="sand" />
