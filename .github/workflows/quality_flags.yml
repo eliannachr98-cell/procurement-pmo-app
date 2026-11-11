@@ -151,7 +151,6 @@ jobs:
                   import time as _t
                   for label, sql in [
                       ("top50 by publication_date", "select adam from public.procurements_compact order by publication_date desc nulls last limit 50"),
-                      ("count all", "select count(*) from public.procurements_compact"),
                       ("count declaration", "select count(*) from public.procurements_compact where document_category = 'declaration'"),
                       ("top50 declaration", "select adam from public.procurements_compact where document_category = 'declaration' order by publication_date desc nulls last limit 50"),
                       ("year 2026 top50", "select adam from public.procurements_compact where publication_date >= '2026-01-01' and publication_date <= '2026-12-31' order by publication_date desc nulls last limit 50"),
@@ -178,6 +177,12 @@ jobs:
                       print(f"explain {label}: {_t.time() - started:.1f}s")
                       for row in rows[:9]:
                           print("plan2:", row[0][:150])
+                  cur.execute("select tablename, indexname, indexdef from pg_indexes where tablename in ('awards_compact','contracts_compact','record_contractors_compact','record_cpvs_compact') order by 1, 2")
+                  for row in cur.fetchall():
+                      print("idx:", row[0], "|", row[2].split(" USING ")[1][:120] if " USING " in row[2] else row[2][:120])
+                  started = _t.time()
+                  cur.execute("select (public.market_overview(null, null, null, null, true, null, array['79400000-8','79410000-1'], null, null))->>'tenders'")
+                  print("timing market_overview scope(2 cpv):", cur.fetchone()[0], "tenders", round(_t.time() - started, 1), "s")
               elif mode == "reclassify":
                   cur.execute(Path("sql", "reclassify_documents.sql").read_text(encoding="utf-8"))
                   cur.execute("select public.reclassify_document_categories()")
