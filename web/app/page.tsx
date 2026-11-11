@@ -1112,7 +1112,7 @@ const percentText = (value: number | null | undefined) => value === null || valu
 
 function OverviewMarket({ data, state }: { data: MarketOverview | null; state: "idle" | "loading" | "error" }) {
   if (state === "error") return <p className="noRows">Δεν υπάρχουν ακόμα υπολογισμένα στοιχεία για αυτό το φίλτρο - δοκίμασε άλλο Έτος ή πρόσθεσε Αναθέτουσα/Διενεργούσα Αρχή, CPV ή Ανάδοχο.</p>;
-  if (!data) return <p className="noRows">{state === "loading" ? "Υπολογισμός…" : "Δεν υπάρχουν δεδομένα."}</p>;
+  if (!data) return <p className="noRows">{state === "loading" ? "Φόρτωση…" : "Δεν υπάρχουν δεδομένα."}</p>;
   if (data.empty) return <p className="noRows">Δεν υπάρχουν δεδομένα για τα τρέχοντα φίλτρα.</p>;
   return <>
     <div className="metrics statusMetrics">
@@ -1136,7 +1136,7 @@ function OverviewMarket({ data, state }: { data: MarketOverview | null; state: "
 
 function OverviewCompetition({ data, state }: { data: MarketOverview | null; state: "idle" | "loading" | "error" }) {
   if (state === "error") return <p className="noRows">Δεν υπάρχουν ακόμα υπολογισμένα στοιχεία για αυτό το φίλτρο - δοκίμασε άλλο Έτος ή πρόσθεσε Αναθέτουσα/Διενεργούσα Αρχή, CPV ή Ανάδοχο.</p>;
-  if (!data) return <p className="noRows">{state === "loading" ? "Υπολογισμός…" : "Δεν υπάρχουν δεδομένα."}</p>;
+  if (!data) return <p className="noRows">{state === "loading" ? "Φόρτωση…" : "Δεν υπάρχουν δεδομένα."}</p>;
   if (data.empty) return <p className="noRows">Δεν υπάρχουν δεδομένα για τα τρέχοντα φίλτρα.</p>;
   const discount = data.discount;
   return <>
