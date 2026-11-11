@@ -562,6 +562,44 @@ export async function GET(request: Request) {
       };
     });
 
+    // A tender whose deadline passed is "Σε αξιολόγηση" - unless a related
+    // notice of the same tender (same authority and budget, e.g. a Παράταση)
+    // gives a later deadline that is still ahead: then it is still open.
+    const underEvaluation = tenders.filter((tender) => tender.status === "Αξιολόγηση" && tender.authority && tender.budget > 0);
+    if (underEvaluation.length) {
+      try {
+        const authorities = [...new Set(underEvaluation.map((tender) => tender.authority))];
+        const quoted = authorities.map((name) => `"${name.split("\\").join("\\\\").split('"').join('\\"')}"`).join(",");
+        const earliestPublication = underEvaluation.map((tender) => tender.publicationDate).filter(Boolean).sort()[0] ?? "2000-01-01";
+        const related = await supabaseGet<{
+          adam: string; authority_name: string | null; publication_date: string | null; opening_at: string | null;
+          budget_ex_vat: number | null; budget_inc_vat: number | null; budget_unknown_vat: number | null;
+        }[]>(
+          `procurements_compact?select=adam,authority_name,publication_date,opening_at,budget_ex_vat,budget_inc_vat,budget_unknown_vat` +
+          `&authority_name=in.(${encodeURIComponent(quoted)})&opening_at=gt.${encodeURIComponent(new Date().toISOString())}` +
+          `&publication_date=gte.${earliestPublication}&limit=3000`,
+        );
+        for (const tender of underEvaluation) {
+          let latest: string | undefined;
+          for (const row of related) {
+            if (row.adam === tender.adam || row.authority_name !== tender.authority || !row.opening_at || !row.publication_date) continue;
+            if (row.publication_date < tender.publicationDate) continue;
+            if (Math.abs(money(row) - tender.budget) > 0.01) continue;
+            const daysAfterPublication = (new Date(row.opening_at.slice(0, 10)).getTime() - new Date(row.publication_date).getTime()) / 86400000;
+            if (daysAfterPublication < 0 || daysAfterPublication > 365) continue;
+            if (!latest || row.opening_at > latest) latest = row.opening_at;
+          }
+          if (latest) {
+            tender.status = "Ενεργός";
+            tender.openingDate = latest;
+            tender.deadline = latest;
+          }
+        }
+      } catch {
+        // the extension check is best effort: keep the computed status
+      }
+    }
+
     const awardItems = marketAwards.flatMap((award) => {
       const cpv = marketAwardCpvsByAdam.get(award.adam)?.[0];
       const contractorsForAward = marketAwardContractorsByAdam.get(award.adam) ?? [];
