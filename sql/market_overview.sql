@@ -14,6 +14,7 @@
 -- dashboard_breakdown, so Postgres plans for the actual values.
 
 drop function if exists public.market_overview(text, text, text[], text[], boolean);
+drop function if exists public.market_overview(text, text, text[], text[], boolean, text[]);
 
 create or replace function public.market_overview(
   p_year text default null,
@@ -21,17 +22,27 @@ create or replace function public.market_overview(
   p_contract_type text[] default null,
   p_adams text[] default null,
   p_stats_only boolean default false,
-  p_track text[] default null
+  p_track text[] default null,
+  p_scope_cpv text[] default null,
+  p_scope_authorities text[] default null,
+  p_scope_contractors text[] default null
 )
 returns json
 language plpgsql stable as $$
 declare
   conditions text[] := array['p.document_category = ''declaration'''];
   join_flags text := '';
+  scope_sql text;
   result json;
 begin
   if p_adams is not null then
     conditions := conditions || format('p.adam = any(%L::text[])', p_adams);
+  end if;
+  if p_scope_cpv is not null or p_scope_authorities is not null or p_scope_contractors is not null then
+    scope_sql := public.scope_condition(p_scope_cpv, p_scope_authorities, p_scope_contractors);
+    if scope_sql is not null then
+      conditions := conditions || scope_sql;
+    end if;
   end if;
   if p_authority is not null then
     conditions := conditions || format('p.authority_name ilike %L', '%' || p_authority || '%');

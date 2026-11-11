@@ -191,6 +191,7 @@ end;
 $$;
 
 drop function if exists public.dashboard_breakdown(text, text, text, text, text, text[]);
+drop function if exists public.dashboard_breakdown(text, text, text, text[], text, text[]);
 
 create or replace function public.dashboard_breakdown(
   p_query text default null,
@@ -198,11 +199,15 @@ create or replace function public.dashboard_breakdown(
   p_year text default null,
   p_contract_type text[] default null,
   p_document_type text default null,
-  p_adams text[] default null
+  p_adams text[] default null,
+  p_scope_cpv text[] default null,
+  p_scope_authorities text[] default null,
+  p_scope_contractors text[] default null
 )
 returns json
 language plpgsql stable as $$
 declare
+  scope_sql text;
   result json;
   only_year_filter boolean;
   cacheable_single_type boolean;
@@ -211,7 +216,8 @@ declare
   sql_text text;
 begin
   only_year_filter := p_adams is null and p_query is null and p_authority is null
-    and p_contract_type is null and p_document_type is null;
+    and p_contract_type is null and p_document_type is null
+    and p_scope_cpv is null and p_scope_authorities is null and p_scope_contractors is null;
 
   if only_year_filter then
     select payload into result from public.dashboard_cache where cache_key = coalesce(p_year, 'all');
@@ -226,6 +232,7 @@ begin
   -- the year-only path above - the live query for this filter reliably hit
   -- PostgREST's own timeout regardless of how selective the value was.
   cacheable_single_type := p_adams is null and p_query is null and p_authority is null
+    and p_scope_cpv is null and p_scope_authorities is null and p_scope_contractors is null
     and p_document_type is null and p_contract_type is not null and array_length(p_contract_type, 1) = 1;
 
   if cacheable_single_type then
@@ -245,6 +252,12 @@ begin
   -- forces a plan chosen for these actual values on every call.
   if p_adams is not null then
     conditions := conditions || format('p.adam = any(%L::text[])', p_adams);
+  end if;
+  if p_scope_cpv is not null or p_scope_authorities is not null or p_scope_contractors is not null then
+    scope_sql := public.scope_condition(p_scope_cpv, p_scope_authorities, p_scope_contractors);
+    if scope_sql is not null then
+      conditions := conditions || scope_sql;
+    end if;
   end if;
   if p_query is not null then
     conditions := conditions || format('(p.adam ilike %L or p.title ilike %L)', '%' || p_query || '%', '%' || p_query || '%');
