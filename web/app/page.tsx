@@ -765,7 +765,6 @@ export default function Home() {
                 <button type="button" className={overviewScope === "all" ? "active" : ""} onClick={() => setOverviewScope("all")}>Όλη η Αγορά</button>
                 <button type="button" className={overviewScope === "mine" ? "active" : ""} onClick={() => setOverviewScope("mine")}>Η Αγορά μου</button>
               </div>
-              {(dashboardLoading || marketOverviewState === "loading" || competitionState === "loading") && <span className="overviewBusy">Υπολογισμός…</span>}
               {overviewScope === "mine" && watchlistReady && alertsWatchlist.length === 0 && <p className="overviewScopeNote">Δεν έχεις ορίσει CPV: εμφανίζεται όλη η αγορά.</p>}
             </div>
   ) : null;
