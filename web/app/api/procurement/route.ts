@@ -583,7 +583,7 @@ export async function GET(request: Request) {
           let latest: string | undefined;
           for (const row of related) {
             if (row.adam === tender.adam || row.authority_name !== tender.authority || !row.opening_at || !row.publication_date) continue;
-            if (row.publication_date < tender.publicationDate) continue;
+            if (tender.publicationDate && row.publication_date < tender.publicationDate) continue;
             if (Math.abs(money(row) - tender.budget) > 0.01) continue;
             const daysAfterPublication = (new Date(row.opening_at.slice(0, 10)).getTime() - new Date(row.publication_date).getTime()) / 86400000;
             if (daysAfterPublication < 0 || daysAfterPublication > 365) continue;
