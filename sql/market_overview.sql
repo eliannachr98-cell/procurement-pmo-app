@@ -15,6 +15,7 @@
 
 drop function if exists public.market_overview(text, text, text[], text[], boolean);
 drop function if exists public.market_overview(text, text, text[], text[], boolean, text[]);
+drop function if exists public.market_overview(text, text, text[], text[], boolean, text[], text[], text[], text[]);
 
 create or replace function public.market_overview(
   p_year text default null,
@@ -25,7 +26,8 @@ create or replace function public.market_overview(
   p_track text[] default null,
   p_scope_cpv text[] default null,
   p_scope_authorities text[] default null,
-  p_scope_contractors text[] default null
+  p_scope_contractors text[] default null,
+  p_scope_nuts text[] default null
 )
 returns json
 language plpgsql stable as $$
@@ -39,7 +41,7 @@ begin
     conditions := conditions || format('p.adam = any(%L::text[])', p_adams);
   end if;
   if p_scope_cpv is not null or p_scope_authorities is not null or p_scope_contractors is not null then
-    scope_sql := public.scope_condition(p_scope_cpv, p_scope_authorities, p_scope_contractors);
+    scope_sql := public.scope_condition(p_scope_cpv, p_scope_authorities, p_scope_contractors, p_scope_nuts);
     if scope_sql is not null then
       conditions := conditions || scope_sql;
     end if;

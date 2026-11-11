@@ -6,11 +6,15 @@
 -- index) and then embedded as a literal array, which is what keeps the plans of
 -- dashboard_breakdown and market_overview fast. A condition made of OR-ed
 -- subqueries was far slower (minutes).
+-- p_nuts (region code prefixes, e.g. EL3) narrows the CPV part to those regions.
 -- A contractor key is a 9-digit VAT number or part of the name.
+drop function if exists public.scope_condition(text[], text[], text[]);
+
 create or replace function public.scope_condition(
   p_cpv text[] default null,
   p_authorities text[] default null,
-  p_contractors text[] default null
+  p_contractors text[] default null,
+  p_nuts text[] default null
 )
 returns text
 language plpgsql stable as $$
@@ -28,7 +32,10 @@ begin
     select coalesce(array_agg(distinct c.record_adam), array[]::text[]) into part
     from public.record_cpvs_compact c
     join public.procurement_quality_flags f on f.adam = c.record_adam and f.notice_type_key = '3'
-    where c.record_type = 'procurement' and c.cpv_code = any(p_cpv);
+    join public.procurements_compact pn on pn.adam = c.record_adam
+    where c.record_type = 'procurement' and c.cpv_code = any(p_cpv)
+      and (p_nuts is null or cardinality(p_nuts) = 0
+           or exists (select 1 from unnest(p_nuts) np where pn.nuts_code like np || '%'));
     adams := adams || part;
   end if;
 
