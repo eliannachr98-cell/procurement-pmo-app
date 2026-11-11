@@ -5,6 +5,7 @@ import {
   procurementAdamsForContractor,
   procurementAdamsForCpv,
   relatedRows,
+  cachedScope,
   supabaseGet,
   supabaseRpc,
   union,
@@ -216,7 +217,7 @@ async function fetchRelatedNotices(rows: ProcurementRow[]): Promise<ProcurementR
   return found.filter((row) => !have.has(row.adam) && row.authority_name && keys.has(`${row.authority_name}|${money(row)}`));
 }
 
-export async function GET(request: Request) {
+async function computeGet(request: Request) {
   try {
     const searchParams = new URL(request.url).searchParams;
     const page = Math.max(1, Number(searchParams.get("page") ?? 1) || 1);
@@ -719,3 +720,22 @@ export async function GET(request: Request) {
   }
 }
 
+
+// The list is the heaviest request of the app, and the same pages are asked for
+// again and again (every visitor opens the same first page of "Όλη η Αγορά").
+// Without a text search it is stored in scope_cache by its parameters and
+// reused until the next data sync.
+export async function GET(request: Request) {
+  const url = new URL(request.url);
+  if (url.searchParams.get("q")) return computeGet(request);
+  const key = [...url.searchParams.entries()].map(([name, value]) => `${name}=${value}`).sort().join("&");
+  const state: { failure: Response | null } = { failure: null };
+  const body = await cachedScope<unknown>("list", key, async () => {
+    const response = await computeGet(request);
+    if (!response.ok) { state.failure = response; throw new Error("list request failed"); }
+    return response.json();
+  }).catch(() => null);
+  if (state.failure) return state.failure;
+  if (body) return NextResponse.json(body, { headers: { "Cache-Control": "no-store, max-age=0" } });
+  return computeGet(request);
+}

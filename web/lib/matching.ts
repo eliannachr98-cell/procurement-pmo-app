@@ -246,6 +246,10 @@ export async function cachedScope<T>(kind: string, scope: unknown, compute: () =
   const payload = await compute();
   try {
     await supabaseWrite("scope_cache", "POST", [{ cache_key: key, payload, refreshed_at: new Date().toISOString() }], "resolution=merge-duplicates,return=minimal");
+    if (Math.random() < 0.03) {
+      // now and then drop cache rows from before the last few days
+      await supabaseWrite(`scope_cache?refreshed_at=lt.${encodeURIComponent(new Date(Date.now() - 3 * 86400000).toISOString())}`, "DELETE", undefined, "return=minimal");
+    }
   } catch {
     // caching is best effort
   }

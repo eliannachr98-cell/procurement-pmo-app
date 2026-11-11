@@ -674,11 +674,11 @@ export default function Home() {
     // The tender list only depends on the filters, not on the Επισκόπηση scope.
     const timer = window.setTimeout(() => {
       // Ειδοποιήσεις has no filter UI and its own independent data fetch.
-      if (pageRef.current === "alerts") return;
+      if (pageRef.current !== "tenders" && pageRef.current !== "market") return;
       loadTenderPage(1);
     }, 500);
     return () => window.clearTimeout(timer);
-  }, [loadTenderPage]);
+  }, [loadTenderPage, page]);
 
   // The Επισκόπηση numbers load one block at a time (Διαγωνισμοί first), so the
   // database is not asked for three heavy things at once. dashboardLoading is
@@ -985,7 +985,7 @@ export default function Home() {
         {/* Ειδοποιήσεις is a CPV watch-list/alert feed, not a filtered view of the
             database - the regular filters don't apply to it at all. */}
         {page !== "alerts" && page !== "profile" && <aside className="filters">
-          <div className="filterHeading"><div><span>Φίλτρα</span><small>{number.format(tenders.length)} φορτωμένα · {number.format(dashboard.total || totalTenders)} συνολικά</small></div><button title={loading ? "Φόρτωση…" : "Επαναφορά φίλτρων"} onClick={() => { setStatus("Όλες"); setAuthority(""); setContractor([]); setCpv([]); setQuery(""); setYear("Όλα"); setContractType([]); setDocumentType("Όλοι"); setHideDirectAwards(false); }}><span className={loading ? "spinIcon" : ""}>↻</span></button></div>
+          <div className="filterHeading"><div><span>Φίλτρα</span><small>{page === "overview" ? `${number.format(dashboard.total || totalTenders)} διαγωνισμοί` : `${number.format(tenders.length)} φορτωμένα · ${number.format(dashboard.total || totalTenders)} συνολικά`}</small></div><button title={loading ? "Φόρτωση…" : "Επαναφορά φίλτρων"} onClick={() => { setStatus("Όλες"); setAuthority(""); setContractor([]); setCpv([]); setQuery(""); setYear("Όλα"); setContractType([]); setDocumentType("Όλοι"); setHideDirectAwards(false); }}><span className={loading ? "spinIcon" : ""}>↻</span></button></div>
           <label>Έτος<select value={year} onChange={(event) => setYear(event.target.value)}><option>Όλα</option>{years.map((item) => <option key={item}>{item}</option>)}</select></label>
           <SingleSearchInput label="Αναθέτουσα/Διενεργούσα Αρχή" type="authority" value={authority === "Όλες" ? "" : authority} onChange={setAuthority} placeholder="Γράψε ή επίλεξε αρχή" />
           <MultiSearchInput label="Ανάδοχος" type="contractor" values={contractor} onChange={setContractor} placeholder="Αναζήτησε και επίλεξε αναδόχους" />
