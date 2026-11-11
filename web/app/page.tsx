@@ -396,8 +396,9 @@ export default function Home() {
   const mineNuts = useMemo(() => team.code ? alertsNutsFilter.map((item) => item.nuts_code) : [], [team.code, alertsNutsFilter]);
   const scopeOn = (page === "overview" || page === "tenders") && overviewScope === "mine";
   const scopeCodes = useMemo(() => scopeOn ? mineCodes : [], [scopeOn, mineCodes]);
-  const scopeAuthorities = useMemo(() => scopeOn ? mineAuthorities : [], [scopeOn, mineAuthorities]);
-  const scopeContractors = useMemo(() => scopeOn ? trackKeys : [], [scopeOn, trackKeys]);
+  // "Η αγορά μου" is the followed CPVs within the followed regions only; followed authorities and contractors do not widen it.
+  const scopeAuthorities = useMemo<string[]>(() => [], []);
+  const scopeContractors = useMemo<string[]>(() => [], []);
   const scopeNuts = useMemo(() => scopeOn ? mineNuts : [], [scopeOn, mineNuts]);
   const scopeWaiting = scopeOn && Boolean(team.code) && !watchlistReady;
 
@@ -519,9 +520,9 @@ export default function Home() {
     contractor.forEach((item) => params.append("contractor", item));
     cpv.forEach((item) => params.append("cpv", item));
     mineCodes.forEach((item) => params.append("watchCpv", item));
-    mineAuthorities.forEach((item) => params.append("watchAuthority", item));
+    if (mineCodes.length === 0) mineAuthorities.forEach((item) => params.append("watchAuthority", item));
     trackKeys.forEach((item) => params.append("track", item));
-    trackKeys.forEach((item) => params.append("watchContractor", item));
+    if (mineCodes.length === 0) trackKeys.forEach((item) => params.append("watchContractor", item));
     mineNuts.forEach((item) => params.append("watchNuts", item));
     if (year !== "Όλα") params.set("year", year);
     contractType.forEach((item) => params.append("contractType", item));
@@ -716,7 +717,7 @@ export default function Home() {
                 <button type="button" className={overviewScope === "mine" ? "active" : ""} onClick={() => setOverviewScope("mine")}>Η αγορά μου</button>
               </div>
               {(dashboardLoading || marketOverviewState === "loading" || competitionState === "loading") && <span className="overviewBusy">Υπολογισμός…</span>}
-              <p className="overviewScopeNote">Η αγορά μου: διαγωνισμοί στα CPV σου και στις περιοχές σου, από τις αρχές σου ή που πήραν οι ανάδοχοι που ακολουθείς. Ισχύει για Διαγωνισμούς, Αγορά και τη λίστα Διαγωνισμών. Ο Ανταγωνισμός δείχνει πάντα όσα ακολουθείς.{overviewScope === "mine" && watchlistReady && alertsWatchlist.length === 0 && authorityWatch.length === 0 && contractorWatch.length === 0 ? " Δεν ακολουθείς ακόμα τίποτα, οπότε εμφανίζεται όλη η αγορά." : ""}</p>
+              <p className="overviewScopeNote">Η αγορά μου: οι διαγωνισμοί στα CPV σου και στις περιοχές σου. Ισχύει για Διαγωνισμούς, Αγορά και τη λίστα Διαγωνισμών. Ο Ανταγωνισμός δείχνει τους ανταγωνιστές που ακολουθείς.{overviewScope === "mine" && watchlistReady && alertsWatchlist.length === 0 ? " Δεν έχεις ορίσει CPV, οπότε εμφανίζεται όλη η αγορά." : ""}</p>
             </div>
   ) : null;
 
@@ -877,7 +878,7 @@ export default function Home() {
                     />
                   </section>
                   <section className="interestBox">
-                    <header className="interestBoxHead"><span className="interestIcon"><Building2 size={18} /></span><div><h3>Αναθέτουσες αρχές</h3><p>Οι διαγωνισμοί τους μπαίνουν στην αγορά μου</p></div><span className="interestMeta"><em>{newsLabel(interestNews?.authorities)}</em>{syncShort && <small>Ενημ. {syncShort}</small>}</span><b className="interestCount">{number.format(authorityWatch.length)}</b></header>
+                    <header className="interestBoxHead"><span className="interestIcon"><Building2 size={18} /></span><div><h3>Αναθέτουσες αρχές</h3><p>Παρακολούθηση αρχών (θα φαίνονται στην Αγορά)</p></div><span className="interestMeta"><em>{newsLabel(interestNews?.authorities)}</em>{syncShort && <small>Ενημ. {syncShort}</small>}</span><b className="interestCount">{number.format(authorityWatch.length)}</b></header>
                     <MultiSearchInput
                       label="Προσθήκη"
                       type="authority"
