@@ -386,7 +386,23 @@ export default function Home() {
       .catch(() => setYears([]));
   }, []);
 
+  // What the profile follows. "Η αγορά μου" scopes the Επισκόπηση and the
+  // Διαγωνισμοί list to it; with nothing followed (or "Όλη η αγορά") there is
+  // nothing to scope by. scopeWaiting holds requests back until the followed
+  // CPVs have loaded.
+  const mineCodes = useMemo(() => team.code ? alertsWatchlist.map((item) => item.cpv_code) : [], [team.code, alertsWatchlist]);
+  const mineAuthorities = useMemo(() => team.code ? authorityWatch.map((item) => item.authority_name) : [], [team.code, authorityWatch]);
+  const trackKeys = useMemo(() => team.code ? contractorWatch.map((item) => item.contractor_key) : [], [team.code, contractorWatch]);
+  const mineNuts = useMemo(() => team.code ? alertsNutsFilter.map((item) => item.nuts_code) : [], [team.code, alertsNutsFilter]);
+  const scopeOn = (page === "overview" || page === "tenders") && overviewScope === "mine";
+  const scopeCodes = useMemo(() => scopeOn ? mineCodes : [], [scopeOn, mineCodes]);
+  const scopeAuthorities = useMemo(() => scopeOn ? mineAuthorities : [], [scopeOn, mineAuthorities]);
+  const scopeContractors = useMemo(() => scopeOn ? trackKeys : [], [scopeOn, trackKeys]);
+  const scopeNuts = useMemo(() => scopeOn ? mineNuts : [], [scopeOn, mineNuts]);
+  const scopeWaiting = scopeOn && Boolean(team.code) && !watchlistReady;
+
   const loadTenderPage = useCallback((nextPage: number, append = false) => {
+    if (scopeWaiting) return;
     const requestId = ++latestRequest.current;
     setLoading(true);
     const params = new URLSearchParams({ page: String(nextPage), pageSize: "100" });
@@ -398,6 +414,10 @@ export default function Home() {
     contractType.forEach((item) => params.append("contractType", item));
     if (documentType !== "Όλοι") params.set("documentType", documentType);
     if (hideDirectAwards) params.set("hideDirectAwards", "true");
+    scopeCodes.forEach((item) => params.append("watchCpv", item));
+    scopeAuthorities.forEach((item) => params.append("watchAuthority", item));
+    scopeContractors.forEach((item) => params.append("watchContractor", item));
+    scopeNuts.forEach((item) => params.append("watchNuts", item));
     // Pages are intentionally small; users can continue through the complete
     // dataset without downloading the whole historical database at once.
     fetch(`/api/procurement?${params.toString()}`)
@@ -421,18 +441,11 @@ export default function Home() {
       .finally(() => {
         if (requestId === latestRequest.current) setLoading(false);
       });
-  }, [query, authority, contractor, cpv, year, contractType, documentType, hideDirectAwards]);
+  }, [query, authority, contractor, cpv, year, contractType, documentType, hideDirectAwards, scopeCodes, scopeAuthorities, scopeContractors, scopeNuts, scopeWaiting]);
 
   // CPV codes of the profile's interests. Applied to Διαγωνισμοί/Αγορά only
   // while "Τα ενδιαφέροντά μου" is selected; with no interests there is nothing
   // to scope by and the whole market is shown.
-  const mineCodes = useMemo(() => team.code ? alertsWatchlist.map((item) => item.cpv_code) : [], [team.code, alertsWatchlist]);
-  const mineAuthorities = useMemo(() => team.code ? authorityWatch.map((item) => item.authority_name) : [], [team.code, authorityWatch]);
-  const trackKeys = useMemo(() => team.code ? contractorWatch.map((item) => item.contractor_key) : [], [team.code, contractorWatch]);
-  const scopeCodes = useMemo(() => page === "overview" && overviewScope === "mine" ? mineCodes : [], [page, overviewScope, mineCodes]);
-  const scopeAuthorities = useMemo(() => page === "overview" && overviewScope === "mine" ? mineAuthorities : [], [page, overviewScope, mineAuthorities]);
-  const scopeContractors = useMemo(() => page === "overview" && overviewScope === "mine" ? trackKeys : [], [page, overviewScope, trackKeys]);
-  const scopeWaiting = page === "overview" && overviewScope === "mine" && Boolean(team.code) && !watchlistReady;
 
   const loadDashboard = useCallback(() => {
     if (scopeWaiting) return;
@@ -444,6 +457,7 @@ export default function Home() {
     scopeCodes.forEach((item) => params.append("watchCpv", item));
     scopeAuthorities.forEach((item) => params.append("watchAuthority", item));
     scopeContractors.forEach((item) => params.append("watchContractor", item));
+    scopeNuts.forEach((item) => params.append("watchNuts", item));
     if (year !== "Όλα") params.set("year", year);
     contractType.forEach((item) => params.append("contractType", item));
     setDashboardLoading(true);
@@ -464,7 +478,7 @@ export default function Home() {
         setDashboardError("Πολύ ευρύ φίλτρο για να υπολογιστεί - πρόσθεσε έτος ή άλλο φίλτρο για να στενέψει.");
         setDashboardLoading(false);
       });
-  }, [authority, contractor, cpv, year, contractType, scopeCodes, scopeAuthorities, scopeContractors, scopeWaiting]);
+  }, [authority, contractor, cpv, year, contractType, scopeCodes, scopeAuthorities, scopeContractors, scopeNuts, scopeWaiting]);
 
   const loadMarketOverview = useCallback(() => {
     if (scopeWaiting) return;
@@ -476,6 +490,7 @@ export default function Home() {
     scopeCodes.forEach((item) => params.append("watchCpv", item));
     scopeAuthorities.forEach((item) => params.append("watchAuthority", item));
     scopeContractors.forEach((item) => params.append("watchContractor", item));
+    scopeNuts.forEach((item) => params.append("watchNuts", item));
     if (year !== "Όλα") params.set("year", year);
     contractType.forEach((item) => params.append("contractType", item));
     setMarketOverviewState("loading");
@@ -491,7 +506,7 @@ export default function Home() {
         setMarketOverview(null);
         setMarketOverviewState("error");
       });
-  }, [authority, contractor, cpv, year, contractType, scopeCodes, scopeAuthorities, scopeContractors, scopeWaiting]);
+  }, [authority, contractor, cpv, year, contractType, scopeCodes, scopeAuthorities, scopeContractors, scopeNuts, scopeWaiting]);
 
   // Ανταγωνισμός is always about the interests. When the switch is on "Τα
   // ενδιαφέροντά μου" it reuses the Αγορά data; otherwise it fetches its own.
@@ -507,6 +522,7 @@ export default function Home() {
     mineAuthorities.forEach((item) => params.append("watchAuthority", item));
     trackKeys.forEach((item) => params.append("track", item));
     trackKeys.forEach((item) => params.append("watchContractor", item));
+    mineNuts.forEach((item) => params.append("watchNuts", item));
     if (year !== "Όλα") params.set("year", year);
     contractType.forEach((item) => params.append("contractType", item));
     setCompetitionState("loading");
@@ -522,7 +538,7 @@ export default function Home() {
         setCompetition(null);
         setCompetitionState("error");
       });
-  }, [authority, contractor, cpv, year, contractType, mineCodes, mineAuthorities, trackKeys]);
+  }, [authority, contractor, cpv, year, contractType, mineCodes, mineAuthorities, trackKeys, mineNuts]);
   useEffect(() => {
     if (!competitionNeedsOwnFetch || dashboardLoading) return;
     const timer = window.setTimeout(loadCompetition, 500);
@@ -693,6 +709,17 @@ export default function Home() {
   const statusBudget = (value: Status) => dashboard.status.find((item) => item.status === value)?.budget ?? 0;
   const totalBudget = dashboard.status.reduce((sum, item) => sum + item.budget, 0);
 
+  const scopeBar = team.code ? (
+            <div className="overviewScope">
+              <div className="overviewScopeToggle" role="group" aria-label="Εύρος Διαγωνισμών και Αγοράς">
+                <button type="button" className={overviewScope === "all" ? "active" : ""} onClick={() => setOverviewScope("all")}>Όλη η αγορά</button>
+                <button type="button" className={overviewScope === "mine" ? "active" : ""} onClick={() => setOverviewScope("mine")}>Η αγορά μου</button>
+              </div>
+              {(dashboardLoading || marketOverviewState === "loading" || competitionState === "loading") && <span className="overviewBusy">Υπολογισμός…</span>}
+              <p className="overviewScopeNote">Η αγορά μου: διαγωνισμοί στα CPV σου και στις περιοχές σου, από τις αρχές σου ή που πήραν οι ανάδοχοι που ακολουθείς. Ισχύει για Διαγωνισμούς, Αγορά και τη λίστα Διαγωνισμών. Ο Ανταγωνισμός δείχνει πάντα όσα ακολουθείς.{overviewScope === "mine" && watchlistReady && alertsWatchlist.length === 0 && authorityWatch.length === 0 && contractorWatch.length === 0 ? " Δεν ακολουθείς ακόμα τίποτα, οπότε εμφανίζεται όλη η αγορά." : ""}</p>
+            </div>
+  ) : null;
+
   return (
     <main className="shell">
       <header className="topbar">
@@ -738,14 +765,7 @@ export default function Home() {
           {page === "overview" && dashboardError && <div className="dataBanner error">{dashboardError}</div>}
 
           {page === "overview" && <>
-            {team.code && <div className="overviewScope">
-              <div className="overviewScopeToggle" role="group" aria-label="Εύρος Διαγωνισμών και Αγοράς">
-                <button type="button" className={overviewScope === "all" ? "active" : ""} onClick={() => setOverviewScope("all")}>Όλη η αγορά</button>
-                <button type="button" className={overviewScope === "mine" ? "active" : ""} onClick={() => setOverviewScope("mine")}>Η αγορά μου</button>
-              </div>
-              {(dashboardLoading || marketOverviewState === "loading" || competitionState === "loading") && <span className="overviewBusy">Υπολογισμός…</span>}
-              <p className="overviewScopeNote">Η αγορά μου: διαγωνισμοί στα CPV σου, από τις αρχές σου ή που πήραν οι ανάδοχοι που ακολουθείς. Ισχύει για τους Διαγωνισμούς και την Αγορά. Ο Ανταγωνισμός δείχνει πάντα όσα ακολουθείς.{overviewScope === "mine" && watchlistReady && alertsWatchlist.length === 0 && authorityWatch.length === 0 && contractorWatch.length === 0 ? " Δεν ακολουθείς ακόμα τίποτα, οπότε εμφανίζεται όλη η αγορά." : ""}</p>
-            </div>}
+            {scopeBar}
             <div className={`overviewWrap${dashboardLoading ? " isLoading" : ""}`}>
             <section className="overviewSection"><h2 className="overviewHeading">Διαγωνισμοί</h2>
             <div className="metrics">
@@ -761,6 +781,7 @@ export default function Home() {
             <NutsMap counts={dashboard.nuts} />
             </div>
             </section>
+            <div className="overviewJump"><button type="button" onClick={() => setPage("tenders")}>{team.code && overviewScope === "mine" ? "Δες τους διαγωνισμούς της αγοράς μου →" : "Δες όλους τους διαγωνισμούς →"}</button></div>
             <section className="overviewSection"><h2 className="overviewHeading">Αγορά</h2><OverviewMarket data={marketOverview} state={marketOverviewState} /></section>
             <section className="overviewSection"><h2 className="overviewHeading">Ανταγωνισμός <span className="overviewHeadingNote">για όσα ακολουθείς</span></h2>
               {!team.code
@@ -783,6 +804,7 @@ export default function Home() {
           </>}
 
           {page === "tenders" && <>
+            {scopeBar}
             <TenderTable rows={filtered} expanded />
             {hasMore && <button className="viewAll" disabled={loading} onClick={() => loadTenderPage(loadedPage + 1, true)}>
               {loading ? "Φόρτωση…" : `Φόρτωση περισσότερων (${number.format(tenders.length)} από ${number.format(totalTenders)})`}

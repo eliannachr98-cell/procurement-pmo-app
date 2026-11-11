@@ -38,6 +38,7 @@ export async function GET(request: Request) {
     const watchCpvs = list("watchCpv");
     const watchAuthorities = list("watchAuthority");
     const watchContractors = list("watchContractor");
+    const watchNuts = list("watchNuts");
     const track = list("track");
     if (matchingAdams?.length === 0) return NextResponse.json({ empty: true });
 
@@ -60,6 +61,7 @@ export async function GET(request: Request) {
       p_scope_cpv: watchCpvs.length ? watchCpvs : null,
       p_scope_authorities: watchAuthorities.length ? watchAuthorities : null,
       p_scope_contractors: watchContractors.length ? watchContractors : null,
+      p_scope_nuts: watchNuts.length ? watchNuts : null,
       p_stats_only: true,
       p_track: track.length ? track : null,
     });

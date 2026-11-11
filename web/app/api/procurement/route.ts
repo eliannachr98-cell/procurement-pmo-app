@@ -6,6 +6,7 @@ import {
   procurementAdamsForCpv,
   relatedRows,
   supabaseGet,
+  supabaseRpc,
   union,
 } from "@/lib/matching";
 
@@ -249,7 +250,31 @@ export async function GET(request: Request) {
     if (hideDirectAwards) filters.push(`procedure_type=neq.${encodeURIComponent(DIRECT_AWARD_PROCEDURE)}`);
     if (matchingAdams) filters.push(`adam=in.(${matchingAdams.map(encodeURIComponent).join(",")})`);
 
-    const noticePage = await supabasePage<ProcurementRow[]>(
+    const watchCpvs = searchParams.getAll("watchCpv").map((value) => value.trim()).filter(Boolean);
+    const watchAuthorities = searchParams.getAll("watchAuthority").map((value) => value.trim()).filter(Boolean);
+    const watchContractors = searchParams.getAll("watchContractor").map((value) => value.trim()).filter(Boolean);
+    const watchNuts = searchParams.getAll("watchNuts").map((value) => value.trim()).filter(Boolean);
+    const scoped = watchCpvs.length > 0 || watchAuthorities.length > 0 || watchContractors.length > 0;
+    const noticePage = scoped
+      ? {
+          rows: await supabaseRpc<ProcurementRow[]>("list_scoped_procurements", {
+            p_scope_cpv: watchCpvs.length ? watchCpvs : null,
+            p_scope_authorities: watchAuthorities.length ? watchAuthorities : null,
+            p_scope_contractors: watchContractors.length ? watchContractors : null,
+            p_scope_nuts: watchNuts.length ? watchNuts : null,
+            p_query: query || null,
+            p_authority: authority || null,
+            p_year: /^\d{4}$/.test(year) ? year : null,
+            p_contract_types: contractTypes.length ? contractTypes : null,
+            p_document_type: documentType || null,
+            p_hide_direct_procedure: hideDirectAwards ? DIRECT_AWARD_PROCEDURE : null,
+            p_adams: matchingAdams,
+            p_limit: pageSize,
+            p_offset: offset,
+          }),
+          total: 0,
+        }
+      : await supabasePage<ProcurementRow[]>(
       "procurements_compact?select=adam,title,authority_name,contract_type,procedure_type,document_category,nuts_code,nuts_name,publication_date,opening_at,budget_ex_vat,budget_inc_vat,budget_unknown_vat,status,cancelled_at" +
       (filters.length ? `&${filters.join("&")}` : "") +
       `&order=publication_date.desc.nullslast&limit=${pageSize}&offset=${offset}`,

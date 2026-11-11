@@ -57,6 +57,7 @@ export async function GET(request: Request) {
     const watchCpvs = searchParams.getAll("watchCpv").flatMap((value) => value.split(",")).map((value) => value.trim()).filter(Boolean);
     const watchAuthorities = searchParams.getAll("watchAuthority").map((value) => value.trim()).filter(Boolean);
     const watchContractors = searchParams.getAll("watchContractor").map((value) => value.trim()).filter(Boolean);
+    const watchNuts = searchParams.getAll("watchNuts").map((value) => value.trim()).filter(Boolean);
 
     if (matchingAdams?.length === 0) {
       return NextResponse.json({ total: 0, status: [], cpv: [], cpvTotal: 0, nuts: [], monthly: [] } satisfies Breakdown);
@@ -72,6 +73,7 @@ export async function GET(request: Request) {
       p_scope_cpv: watchCpvs.length ? watchCpvs : null,
       p_scope_authorities: watchAuthorities.length ? watchAuthorities : null,
       p_scope_contractors: watchContractors.length ? watchContractors : null,
+      p_scope_nuts: watchNuts.length ? watchNuts : null,
     });
 
     // The SQL (and its cache) still names the status "Ολοκληρωμένος"; the app
