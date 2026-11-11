@@ -53,3 +53,4 @@
 @media(max-width:1100px){.overviewWrap .statusMetrics{grid-template-columns:repeat(3,minmax(0,1fr))}}@media(max-width:520px){.overviewWrap .statusMetrics{grid-template-columns:repeat(2,minmax(0,1fr))}}
 h1{font-size:22px;letter-spacing:-.5px}.overviewHeading{font-size:16px}.panel h2,.profileCard h2{font-size:15px}.filterHeading span{font-size:15px}.overviewWrap .metric .metricMain strong,.overviewWrap .statusMetrics .metricMain strong{font-size:16px}
 .pageTitle h1{font-size:22px;letter-spacing:-.5px}
+.overviewWrap table th,.tablePanel table th{font-size:9px}.overviewWrap table td,.tablePanel table td,.tendersTable td,.tendersTable .adam{font-size:10px}.tendersTable th{font-size:9px}.tendersTable tr.relatedRow td{font-size:9.5px}
