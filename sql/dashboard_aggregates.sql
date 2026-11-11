@@ -84,10 +84,17 @@ begin
       -- linked to the notice through its award. Missing that fallback
       -- silently left completed tenders (real signed contract) bucketed as
       -- merely Ανατεθειμένος - confirmed live against actual contract rows.
-      select distinct m.adam
+      -- Two index-friendly branches instead of one join over every contract:
+      -- contracts that carry the notice, and contracts without one that are
+      -- linked through their award.
+      select c.procurement_adam as adam
       from public.contracts_compact c
-      left join public.awards_compact a on a.adam = c.award_adam
-      join matched m on m.adam = coalesce(c.procurement_adam, a.procurement_adam)
+      where c.procurement_adam in (select adam from matched)
+      union
+      select a.procurement_adam
+      from public.awards_compact a
+      join public.contracts_compact c on c.award_adam = a.adam and c.procurement_adam is null
+      where a.procurement_adam in (select adam from matched)
     ),
     status_calc as (
       select m.adam, m.nuts_name, m.nuts_code, m.budget, m.publication_date, m.authority_name,
@@ -308,10 +315,17 @@ begin
       -- linked to the notice through its award. Missing that fallback
       -- silently left completed tenders (real signed contract) bucketed as
       -- merely Ανατεθειμένος - confirmed live against actual contract rows.
-      select distinct m.adam
+      -- Two index-friendly branches instead of one join over every contract:
+      -- contracts that carry the notice, and contracts without one that are
+      -- linked through their award.
+      select c.procurement_adam as adam
       from public.contracts_compact c
-      left join public.awards_compact a on a.adam = c.award_adam
-      join matched m on m.adam = coalesce(c.procurement_adam, a.procurement_adam)
+      where c.procurement_adam in (select adam from matched)
+      union
+      select a.procurement_adam
+      from public.awards_compact a
+      join public.contracts_compact c on c.award_adam = a.adam and c.procurement_adam is null
+      where a.procurement_adam in (select adam from matched)
     ),
     status_calc as (
       select m.adam, m.nuts_name, m.nuts_code, m.budget, m.publication_date, m.authority_name,
