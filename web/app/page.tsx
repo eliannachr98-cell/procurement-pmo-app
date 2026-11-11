@@ -766,7 +766,7 @@ export default function Home() {
                 <button type="button" className={overviewScope === "mine" ? "active" : ""} onClick={() => setOverviewScope("mine")}>Η αγορά μου</button>
               </div>
               {(dashboardLoading || marketOverviewState === "loading" || competitionState === "loading") && <span className="overviewBusy">Υπολογισμός…</span>}
-              <p className="overviewScopeNote">Η αγορά μου: οι διαγωνισμοί στα CPV σου και στις περιοχές σου. Ισχύει για Διαγωνισμούς, Αγορά και τη λίστα Διαγωνισμών. Ο Ανταγωνισμός δείχνει τους ανταγωνιστές που ακολουθείς.{overviewScope === "mine" && watchlistReady && alertsWatchlist.length === 0 ? " Δεν έχεις ορίσει CPV, οπότε εμφανίζεται όλη η αγορά." : ""}</p>
+              {overviewScope === "mine" && watchlistReady && alertsWatchlist.length === 0 && <p className="overviewScopeNote">Δεν έχεις ορίσει CPV: εμφανίζεται όλη η αγορά.</p>}
             </div>
   ) : null;
 
@@ -794,6 +794,7 @@ export default function Home() {
                 <span><Icon size={16} strokeWidth={2.25} /></span>{label}
               </button>
             ))}
+            {team.code !== undefined && <TeamCodeBar team={team} />}
           </div>
         </nav>
       </header>
@@ -802,7 +803,6 @@ export default function Home() {
           copy on Ειδοποιήσεις and Αγορά - always visible so its state can
           never be out of sync with itself. Sits below the tab row, same
           spot regardless of which tab is active. */}
-      <div className="teamCodeRow">{team.code !== undefined && <TeamCodeBar team={team} />}</div>
 
       <div className={`workspace${page === "alerts" || page === "profile" ? " workspaceFull" : ""}${page === "tenders" || page === "overview" ? " tendersWorkspace" : ""}`}>
         <section className="content">
@@ -815,8 +815,8 @@ export default function Home() {
           {page === "overview" && dashboardError && <div className="dataBanner error">{dashboardError}</div>}
 
           {page === "overview" && <>
-            {scopeBar}
             <div className={`overviewWrap${dashboardLoading ? " isLoading" : ""}`}>
+            <div className="overviewBlock">
             <section className="overviewSection"><h2 className="overviewHeading">Διαγωνισμοί</h2>
             <div className="metrics statusMetrics">
               <Metric label="Διαγωνισμοί" value={number.format(dashboard.total)} sub={`Π/Υ: ${euro.format(totalBudget)}`} tone="sky" />
@@ -832,8 +832,11 @@ export default function Home() {
             </div>
             </section>
             <div className="overviewJump"><button type="button" onClick={() => setPage("tenders")}>{team.code && overviewScope === "mine" ? "Δες τους διαγωνισμούς της αγοράς μου →" : "Δες όλους τους διαγωνισμούς →"}</button></div>
-            <section className="overviewSection"><h2 className="overviewHeading">Αγορά</h2><OverviewMarket data={marketOverview} state={marketOverviewState} /></section>
-            <section className="overviewSection"><h2 className="overviewHeading">Ανταγωνισμός <span className="overviewHeadingNote">για όσα ακολουθείς</span></h2>
+            </div>
+            <div className="overviewBlock">
+            <h2 className="overviewHeading overviewBlockTitle">Αγορά &amp; Ανταγωνισμός</h2>
+            <section className="overviewSection"><h3 className="overviewSubheading">Αγορά</h3><OverviewMarket data={marketOverview} state={marketOverviewState} /></section>
+            <section className="overviewSection"><h3 className="overviewSubheading">Ανταγωνισμός <span className="overviewHeadingNote">για όσα ακολουθείς</span></h3>
               {!team.code
                 ? <div className="overviewGate locked">
                     <div className="overviewLockCard">
@@ -850,11 +853,12 @@ export default function Home() {
                   ? <p className="noRows">Δεν ακολουθείς ακόμα CPV, αναθέτουσες/διενεργούσες αρχές ή αναδόχους. Πρόσθεσέ τα στο Προφίλ για να δεις τον ανταγωνισμό. <button type="button" className="profileLink" onClick={() => setPage("profile")}>Πήγαινε στο Προφίλ →</button></p>
                   : <OverviewCompetition data={competition} state={competitionState} />}
             </section>
+            <div className="overviewJump"><button type="button" onClick={() => setPage("market")}>Δες Αγορά &amp; Ανταγωνισμός →</button></div>
+            </div>
             </div>
           </>}
 
           {page === "tenders" && <>
-            {scopeBar}
             <TenderTable rows={filtered} expanded marks={tenderMarks} loading={loading} />
             {hasMore && <button className="viewAll" disabled={loading} onClick={() => loadTenderPage(loadedPage + 1, true)}>
               {loading ? "Φόρτωση…" : `Φόρτωση περισσότερων (${number.format(tenders.length)} από ${number.format(totalTenders)})`}
@@ -979,6 +983,7 @@ export default function Home() {
         {/* Ειδοποιήσεις is a CPV watch-list/alert feed, not a filtered view of the
             database - the regular filters don't apply to it at all. */}
         {page !== "alerts" && page !== "profile" && <aside className="filters">
+          {(page === "overview" || page === "tenders") && scopeBar}
           <div className="filterHeading"><div><span>Φίλτρα</span><small>{number.format(tenders.length)} φορτωμένα · {number.format(dashboard.total || totalTenders)} συνολικά</small></div><button title={loading ? "Φόρτωση…" : "Επαναφορά φίλτρων"} onClick={() => { setStatus("Όλες"); setAuthority(""); setContractor([]); setCpv([]); setQuery(""); setYear("Όλα"); setContractType([]); setDocumentType("Όλοι"); setHideDirectAwards(false); }}><span className={loading ? "spinIcon" : ""}>↻</span></button></div>
           <label>Έτος<select value={year} onChange={(event) => setYear(event.target.value)}><option>Όλα</option>{years.map((item) => <option key={item}>{item}</option>)}</select></label>
           <SingleSearchInput label="Αναθέτουσα/Διενεργούσα Αρχή" type="authority" value={authority === "Όλες" ? "" : authority} onChange={setAuthority} placeholder="Γράψε ή επίλεξε αρχή" />
@@ -1273,7 +1278,7 @@ function NutsMap({ counts }: { counts: { nuts_code: string; nuts_name: string; c
 
   useEffect(() => () => { mapRef.current?.remove(); mapRef.current = null; }, []);
 
-  return <article className="panel nutsPanel"><PanelHeader title="Διαγωνισμοί ανά NUTS" caption={`${number.format(total)} διαγωνισμοί με τα τρέχοντα φίλτρα`} onDownload={{ filename: "diagonismoi-ana-nuts", title: "Διαγωνισμοί ανά NUTS", headers: ["NUTS", "Περιοχή", "Πλήθος"], rows: regions.map((item) => [item.nuts_code, item.nuts_name, item.count]), columnTypes: ["text", "text", "number"] }} /><div className="nutsMap"><div className="realMap" ref={mapElRef} /><div className="nutsLegend">{regions.slice(0,10).map((item) => <div key={item.nuts_code}><span title={item.nuts_name}>{item.nuts_name}</span><i><b style={{width:`${(item.count/max)*100}%`}} /></i><strong>{number.format(item.count)}</strong></div>)}</div></div></article>;
+  return <article className="panel nutsPanel"><PanelHeader title="Διαγωνισμοί ανά NUTS" caption={`${number.format(total)} διαγωνισμοί με τα τρέχοντα φίλτρα`} onDownload={{ filename: "diagonismoi-ana-nuts", title: "Διαγωνισμοί ανά NUTS", headers: ["NUTS", "Περιοχή", "Πλήθος"], rows: regions.map((item) => [item.nuts_code, item.nuts_name, item.count]), columnTypes: ["text", "text", "number"] }} /><div className="nutsMap"><div className="realMap" ref={mapElRef} /><div className="nutsLegend">{regions.slice(0,6).map((item) => <div key={item.nuts_code}><span title={item.nuts_name}>{item.nuts_name}</span><i><b style={{width:`${(item.count/max)*100}%`}} /></i><strong>{number.format(item.count)}</strong></div>)}</div></div></article>;
 }
 
 // Approximate centroid [lat, lon] per Greek NUTS unit (official 2021

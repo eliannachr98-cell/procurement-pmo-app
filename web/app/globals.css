@@ -67,3 +67,9 @@ h1{font-size:22px;letter-spacing:-.5px}.overviewHeading{font-size:16px}.panel h2
 .overviewJump button{padding:4px 14px;font-size:11px}
 .tendersTable td,.tendersTable th{vertical-align:middle}
 .overviewWrap .overviewTables .tableScroll,.overviewWrap .overviewBigFour .tableScroll{max-height:236px;overflow-y:auto;overflow-x:hidden}
+.topbar{min-height:84px;padding:14px 22px;gap:18px}.topbar nav{grid-template-columns:minmax(0,1fr) 250px;column-gap:14px}.navMain{flex-wrap:nowrap;gap:6px}.topbar nav button{padding:9px 11px;font-size:12px;white-space:nowrap;flex:0 0 auto}.navProfileCol{flex-direction:column;align-items:flex-end}.brand small{font-size:10px}
+.topbar .teamCodeBar{margin:6px 0 0;min-height:0;justify-content:flex-end}.topbar .teamCodeStatus{color:#cdeee2;font-size:11px;gap:6px}.topbar .teamCodeStatus button:not(.teamCodeToggle):not(.teamCodeSignup){font-size:11px;padding:3px 8px;background:rgba(255,255,255,.12);border-color:rgba(255,255,255,.3);color:#fff}
+@media(max-width:1100px){.navMain{flex-wrap:wrap}}
+.overviewBlock{background:rgba(255,255,255,.55);border:1px solid #cddde5;border-radius:16px;padding:12px 16px 14px;margin-top:14px}.overviewBlock .overviewHeading{margin-top:0}.overviewSubheading{margin:14px 0 8px;font-size:13px;letter-spacing:0;color:var(--ink)}.overviewBlock .overviewSection:first-of-type .overviewSubheading{margin-top:6px}.overviewBlock .overviewJump{margin:10px 0 0}
+.overviewSplit .realMap{height:230px}.overviewSplit .nutsMap{padding:6px 14px 12px;gap:8px}.nutsLegend{gap:6px}
+.filters .overviewScope{display:block;margin:0 0 12px}.filters .overviewScopeToggle{display:grid;width:100%;margin:0}.filters .overviewScopeToggle button,.filters .overviewScopeToggle button.active{min-width:0;padding:5px 6px}.filters .overviewScopeNote{order:0;flex:none;font-size:10px;margin:6px 0 0}.filters .overviewBusy{display:block;margin-top:6px;font-size:10px}
