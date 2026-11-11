@@ -762,8 +762,8 @@ export default function Home() {
   const scopeBar = team.code ? (
             <div className="overviewScope">
               <div className="overviewScopeToggle" data-scope={overviewScope} role="group" aria-label="Εύρος Διαγωνισμών και Αγοράς"><span className="scopeThumb" aria-hidden="true" />
-                <button type="button" className={overviewScope === "all" ? "active" : ""} onClick={() => setOverviewScope("all")}>Όλη η αγορά</button>
-                <button type="button" className={overviewScope === "mine" ? "active" : ""} onClick={() => setOverviewScope("mine")}>Η αγορά μου</button>
+                <button type="button" className={overviewScope === "all" ? "active" : ""} onClick={() => setOverviewScope("all")}>Όλη η Αγορά</button>
+                <button type="button" className={overviewScope === "mine" ? "active" : ""} onClick={() => setOverviewScope("mine")}>Η Αγορά μου</button>
               </div>
               {(dashboardLoading || marketOverviewState === "loading" || competitionState === "loading") && <span className="overviewBusy">Υπολογισμός…</span>}
               {overviewScope === "mine" && watchlistReady && alertsWatchlist.length === 0 && <p className="overviewScopeNote">Δεν έχεις ορίσει CPV: εμφανίζεται όλη η αγορά.</p>}
@@ -1260,7 +1260,7 @@ function NutsMap({ counts }: { counts: { nuts_code: string; nuts_name: string; c
       if (!layer) return;
       layer.clearLayers();
       for (const { item, position } of pins) {
-        const size = Math.round(26 + (item.count / max) * 24);
+        const size = Math.round(18 + (item.count / max) * 14);
         // A 4-6 digit count ("36.250") doesn't fit legibly inside a 24-46px
         // circle - the exact figure is still available in the tooltip below.
         const label = item.count >= 1000 ? `${Math.round(item.count / 1000)}χ` : number.format(item.count);
