@@ -210,6 +210,10 @@ export async function GET(request: Request) {
     const contractTypes = searchParams.getAll("contractType").flatMap((value) => value.split(",")).map((value) => value.trim()).filter(Boolean);
     const documentType = searchParams.get("documentType")?.trim() ?? "";
     const hideDirectAwards = searchParams.get("hideDirectAwards") === "true";
+    const isoDate = /^\d{4}-\d{2}-\d{2}$/;
+    const deadlineFrom = isoDate.test(searchParams.get("deadlineFrom") ?? "") ? (searchParams.get("deadlineFrom") as string) : "";
+    const deadlineTo = isoDate.test(searchParams.get("deadlineTo") ?? "") ? (searchParams.get("deadlineTo") as string) : "";
+    const includeInvitations = searchParams.get("includeInvitations") === "true";
 
     let matchingAdams: string[] | null = null;
     let matchingAwardAdams: string[] | null = null;
@@ -248,6 +252,8 @@ export async function GET(request: Request) {
     // was captured) get excluded too, not just confirmed direct awards -
     // an acceptable edge case for an opt-in checkbox rather than a real bug.
     if (hideDirectAwards) filters.push(`procedure_type=neq.${encodeURIComponent(DIRECT_AWARD_PROCEDURE)}`);
+    if (deadlineFrom) filters.push(`opening_at=gte.${deadlineFrom}`);
+    if (deadlineTo) filters.push(`opening_at=lte.${deadlineTo}T23:59:59`);
     if (matchingAdams) filters.push(`adam=in.(${matchingAdams.map(encodeURIComponent).join(",")})`);
 
     const watchCpvs = searchParams.getAll("watchCpv").map((value) => value.trim()).filter(Boolean);
@@ -271,6 +277,9 @@ export async function GET(request: Request) {
             p_adams: matchingAdams,
             p_limit: pageSize,
             p_offset: offset,
+            ...(deadlineFrom ? { p_deadline_from: deadlineFrom } : {}),
+            ...(deadlineTo ? { p_deadline_to: deadlineTo } : {}),
+            ...(includeInvitations ? { p_include_invitations: true } : {}),
           }),
           total: 0,
         }
