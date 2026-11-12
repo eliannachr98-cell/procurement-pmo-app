@@ -283,6 +283,10 @@ async function computeGet(request: Request) {
     }
     if (contractTypes.length) filters.push(`contract_type=in.(${contractTypes.map(encodeURIComponent).join(",")})`);
     if (documentType) filters.push(`document_category=eq.${encodeURIComponent(documentType)}`);
+    // The general market lists the Διακηρύξεις first (newest publication first);
+    // related notices (extension, amendment...) hang under them. A search text
+    // or an explicit document type still reaches every kind of notice.
+    else if (!query) filters.push("document_category=eq.declaration");
     // Rows with no recorded procedure_type (older data, before this field
     // was captured) get excluded too, not just confirmed direct awards -
     // an acceptable edge case for an opt-in checkbox rather than a real bug.
