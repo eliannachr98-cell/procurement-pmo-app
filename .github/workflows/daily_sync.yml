@@ -135,6 +135,21 @@ jobs:
           print('market overview cache refreshed')
           PY
 
+      - name: Refresh market facts (Αγορά / Ανταγωνισμός tables)
+        env:
+          DATABASE_URL: ${{ secrets.COMPACT_DATABASE_URL }}
+        run: |
+          python - <<'PY'
+          import os
+          import psycopg
+
+          with psycopg.connect(os.environ['DATABASE_URL'], connect_timeout=30, prepare_threshold=None, autocommit=True) as conn:
+              with conn.cursor() as cur:
+                  cur.execute("set statement_timeout = 0")
+                  cur.execute("select public.refresh_market_facts()")
+          print('market facts refreshed')
+          PY
+
       - name: Save failed batch for diagnosis
         if: failure()
         uses: actions/upload-artifact@v4
