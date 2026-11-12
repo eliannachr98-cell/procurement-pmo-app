@@ -672,6 +672,12 @@ async function computeGet(request: Request) {
             if (Math.abs(money(row) - tender.budget) > 0.01) continue;
             const daysAfterPublication = (new Date(row.opening_at.slice(0, 10)).getTime() - new Date(row.publication_date).getTime()) / 86400000;
             if (daysAfterPublication < 0 || daysAfterPublication > 365) continue;
+            if (tender.openingDate) {
+              // same rules as the in-page check: issued around the original deadline, moved by weeks
+              const original = new Date(tender.openingDate.slice(0, 10)).getTime();
+              if (new Date(row.publication_date).getTime() > original + 3 * 86400000) continue;
+              if (new Date(row.opening_at.slice(0, 10)).getTime() - original > 180 * 86400000) continue;
+            }
             if (!latest || row.opening_at > latest) latest = row.opening_at;
           }
           if (latest) {
@@ -788,8 +794,8 @@ async function computeGet(request: Request) {
 export async function GET(request: Request) {
   const url = new URL(request.url);
   if (url.searchParams.get("q") || url.searchParams.get("adams")) return computeGet(request);
-  // "v4" is the result-shape/logic version: bump it to drop cached lists after a change.
-  const key = "v4|" + [...url.searchParams.entries()].map(([name, value]) => `${name}=${value}`).sort().join("&");
+  // "v5" is the result-shape/logic version: bump it to drop cached lists after a change.
+  const key = "v5|" + [...url.searchParams.entries()].map(([name, value]) => `${name}=${value}`).sort().join("&");
   const state: { failure: Response | null } = { failure: null };
   const body = await cachedScope<unknown>("list", key, async () => {
     const response = await computeGet(request);
