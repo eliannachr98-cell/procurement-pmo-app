@@ -1153,13 +1153,13 @@ function shortMonthLabel(ym: string) {
 const percentText = (value: number | null | undefined) => value === null || value === undefined ? "—" : `${value.toFixed(1).replace(".", ",")}%`;
 
 // Counts only (no amounts): tenders, contractors, authorities, awards, contracts.
-function MarketCounts({ data }: { data: MarketOverview }) {
+function MarketCounts({ data, tenders = true, values = false }: { data: MarketOverview; tenders?: boolean; values?: boolean }) {
   return <div className="metrics statusMetrics">
-    <Metric label="Διαγωνισμοί" value={number.format(data.tenders)} tone="sand" />
+    {tenders && <Metric label="Διαγωνισμοί" value={number.format(data.tenders)} tone="sand" />}
     <Metric label="Ανάδοχοι" value={number.format(data.contractors)} tone="sky" />
     <Metric label="Αναθέτουσες/Διενεργούσες Αρχές" value={data.authorities === undefined ? "—" : number.format(data.authorities)} tone="mint" />
-    <Metric label="Αναθέσεις" value={number.format(data.awards)} tone="lilac" />
-    <Metric label="Συμβάσεις" value={number.format(data.contracts)} tone="sky" />
+    <Metric label="Αναθέσεις" value={number.format(data.awards)} tone="lilac" sub={values && data.awardsValue !== undefined ? `Αξία: ${euro.format(data.awardsValue)}` : undefined} />
+    <Metric label="Συμβάσεις" value={number.format(data.contracts)} tone="sky" sub={values && data.contractsValue !== undefined ? `Αξία: ${euro.format(data.contractsValue)}` : undefined} />
   </div>;
 }
 
@@ -1168,7 +1168,7 @@ function OverviewMarket({ data, state }: { data: MarketOverview | null; state: "
   if (!data) return <p className="noRows">{state === "loading" ? "Φόρτωση…" : "Δεν υπάρχουν δεδομένα."}</p>;
   if (data.empty) return <p className="noRows">Δεν υπάρχουν δεδομένα για τα τρέχοντα φίλτρα.</p>;
   return <>
-    <MarketCounts data={data} />
+    <MarketCounts data={data} tenders={false} values />
     <div className="overviewTables">
       <article className="panel"><PanelHeader title="Κορυφαίοι ανάδοχοι" caption="Κατά σύνολο αναθέσεων και συμβάσεων" />
         <div className="tableScroll"><table><thead><tr><th>Ανάδοχος</th><th>Σύνολο</th><th>Αναθέσεις</th><th>Συμβάσεις</th><th>Αξία</th></tr></thead>
