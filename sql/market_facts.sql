@@ -249,6 +249,7 @@ begin
       'tenders', (select count(*) from matched),
       'tendersWithAwards', (select count(*) from matched where awards_n + contracts_n > 0),
       'contractors', (select count(*) from contractor_totals),
+      'authorities', (select count(distinct authority_name) from matched),
       'awards', (select coalesce(sum(awards_n), 0) from matched),
       'contracts', (select coalesce(sum(contracts_n), 0) from matched),
       'value', (select coalesce(sum(awards_value + contracts_value), 0) from matched),
