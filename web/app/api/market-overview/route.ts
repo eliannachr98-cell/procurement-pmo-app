@@ -89,7 +89,7 @@ export async function GET(request: Request) {
       }
     };
     const summary = plainScope
-      ? await cachedScope(track.length ? "competition" : "market", { c: [...watchCpvs].sort(), a: [...watchAuthorities].sort(), k: [...watchContractors].sort(), n: [...watchNuts].sort(), t: [...track].sort() }, computeSummary)
+      ? await cachedScope(track.length ? "competition2" : "market2", { c: [...watchCpvs].sort(), a: [...watchAuthorities].sort(), k: [...watchContractors].sort(), n: [...watchNuts].sort(), t: [...track].sort() }, computeSummary)
       : await computeSummary();
     return NextResponse.json(summary, { headers: { "Cache-Control": "no-store, max-age=0" } });
   } catch (error) {
