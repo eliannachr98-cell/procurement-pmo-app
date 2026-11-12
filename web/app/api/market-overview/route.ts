@@ -48,6 +48,15 @@ export async function GET(request: Request) {
     // sql/market_overview.sql); anything narrower is computed live.
     const cacheOnly = !authority && !contractors.length && !cpvs.length && !watchCpvs.length && !watchAuthorities.length && !watchContractors.length && !track.length && !contractTypes.length;
     if (cacheOnly) {
+      // The ready-made facts tables answer a year / "all" in well under a
+      // second and include the authority count; the old precomputed cache is
+      // only the fallback.
+      try {
+        const fast = await supabaseRpc<{ tenders?: number }>("market_overview_fast", { p_year: /^\d{4}$/.test(year) ? year : null, p_stats_only: true });
+        if (fast && (fast.tenders ?? 0) > 0) return NextResponse.json(fast, { headers: { "Cache-Control": "no-store, max-age=0" } });
+      } catch {
+        // fall through to the cache table
+      }
       const key = /^\d{4}$/.test(year) ? year : "all";
       const rows = await supabaseGet<{ payload: unknown }[]>(`market_overview_cache?select=payload&cache_key=eq.${key}`);
       if (!rows.length) return NextResponse.json({ error: "not precomputed" }, { status: 404 });
