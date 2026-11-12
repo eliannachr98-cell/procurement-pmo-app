@@ -197,6 +197,15 @@ function statusFor(row: ProcurementRow, awards: AwardRow[], contracts: ContractR
   return "Ενεργός";
 }
 
+// Best-effort queries (related notices, extension check) must never hold the
+// whole list back: after `ms` they give up and the list is returned without them.
+function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
+  return new Promise<T>((resolve) => {
+    const timer = setTimeout(() => resolve(fallback), ms);
+    promise.then((value) => { clearTimeout(timer); resolve(value); }, () => { clearTimeout(timer); resolve(fallback); });
+  });
+}
+
 // Notices of the same tender as the ones on this page (same authority and same
 // budget, e.g. a later Παράταση or Τροποποίηση), even when they fall outside the
 // page, so the list can hang them under the main tender.
@@ -207,11 +216,16 @@ async function fetchRelatedNotices(rows: ProcurementRow[]): Promise<ProcurementR
   const budgets = [...new Set(pairs.map((row) => money(row)))];
   const quoted = authorities.map((name) => `"${name.split("\\").join("\\\\").split('"').join('\\"')}"`).join(",");
   const list = budgets.join(",");
-  const found = await supabaseGet<ProcurementRow[]>(
+  const publicationDates = pairs.map((row) => row.publication_date).filter((value): value is string => Boolean(value)).sort();
+  const shift = (date: string, days: number) => new Date(new Date(date).getTime() + days * 86400000).toISOString().slice(0, 10);
+  const from = shift(publicationDates[0] ?? "2000-01-01", -450);
+  const to = shift(publicationDates[publicationDates.length - 1] ?? "2100-01-01", 400);
+  const found = await withTimeout(supabaseGet<ProcurementRow[]>(
     "procurements_compact?select=adam,title,authority_name,contract_type,procedure_type,document_category,nuts_code,nuts_name,publication_date,opening_at,budget_ex_vat,budget_inc_vat,budget_unknown_vat,status,cancelled_at" +
     `&authority_name=in.(${encodeURIComponent(quoted)})` +
+    `&publication_date=gte.${from}&publication_date=lte.${to}` +
     `&or=(budget_inc_vat.in.(${list}),budget_ex_vat.in.(${list}),budget_unknown_vat.in.(${list}))&limit=2000`,
-  );
+  ), 7000, [] as ProcurementRow[]);
   const have = new Set(rows.map((row) => row.adam));
   const keys = new Set(pairs.map((row) => `${row.authority_name}|${money(row)}`));
   return found.filter((row) => !have.has(row.adam) && row.authority_name && keys.has(`${row.authority_name}|${money(row)}`));
@@ -596,14 +610,14 @@ async function computeGet(request: Request) {
         const authorities = [...new Set(underEvaluation.map((tender) => tender.authority))];
         const quoted = authorities.map((name) => `"${name.split("\\").join("\\\\").split('"').join('\\"')}"`).join(",");
         const earliestPublication = underEvaluation.map((tender) => tender.publicationDate).filter(Boolean).sort()[0] ?? "2000-01-01";
-        const related = await supabaseGet<{
+        const related = await withTimeout(supabaseGet<{
           adam: string; authority_name: string | null; publication_date: string | null; opening_at: string | null;
           budget_ex_vat: number | null; budget_inc_vat: number | null; budget_unknown_vat: number | null;
         }[]>(
           `procurements_compact?select=adam,authority_name,publication_date,opening_at,budget_ex_vat,budget_inc_vat,budget_unknown_vat` +
           `&authority_name=in.(${encodeURIComponent(quoted)})&opening_at=gt.${encodeURIComponent(new Date().toISOString())}` +
           `&publication_date=gte.${earliestPublication}&limit=3000`,
-        );
+        ), 7000, [] as { adam: string; authority_name: string | null; publication_date: string | null; opening_at: string | null; budget_ex_vat: number | null; budget_inc_vat: number | null; budget_unknown_vat: number | null }[]);
         for (const tender of underEvaluation) {
           let latest: string | undefined;
           for (const row of related) {

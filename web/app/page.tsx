@@ -518,7 +518,7 @@ export default function Home() {
   // Ανταγωνισμός is always about the interests. When the switch is on "Τα
   // ενδιαφέροντά μου" it reuses the Αγορά data; otherwise it fetches its own.
   const hasInterests = mineCodes.length > 0 || mineAuthorities.length > 0 || trackKeys.length > 0;
-  const competitionNeedsOwnFetch = page === "overview" && Boolean(team.code) && watchlistReady && hasInterests;
+  const competitionNeedsOwnFetch = page === "overview" && Boolean(team.code) && overviewScope === "mine" && watchlistReady && hasInterests;
   const loadCompetition = useCallback(() => {
     const requestId = ++latestCompetitionRequest.current;
     const params = new URLSearchParams();
@@ -838,21 +838,11 @@ export default function Home() {
             <div className="overviewBlock">
             <h2 className="overviewHeading overviewBlockTitle">Αγορά &amp; Ανταγωνισμός</h2>
             <section className="overviewSection"><h3 className="overviewSubheading">Αγορά</h3><OverviewMarket data={marketOverview} state={marketOverviewState} /></section>
-            <section className="overviewSection"><h3 className="overviewSubheading">Ανταγωνισμός <span className="overviewHeadingNote">για όσα ακολουθείς</span></h3>
-              {!team.code
-                ? <div className="overviewGate locked">
-                    <div className="overviewLockCard">
-                      <strong>Ο Ανταγωνισμός δείχνει δεδομένα για όσα ακολουθείς στο προφίλ σου</strong>
-                      <p>Συνδέσου ή εγγράψου για να τον δεις.</p>
-                      <div className="overviewLockActions">
-                        <button type="button" className="teamCodeToggle" onClick={() => team.setShowCodeBox(true)}>Σύνδεση</button>
-                        <button type="button" className="teamCodeSignup" onClick={() => team.setShowSignupBox(true)}>Εγγραφή</button>
-                      </div>
-                    </div>
-                    <div className="overviewWrap" aria-hidden="true"><OverviewCompetition data={marketOverview} state={marketOverviewState} /></div>
-                  </div>
+            <section className="overviewSection"><h3 className="overviewSubheading">Ανταγωνισμός <span className="overviewHeadingNote">{team.code && overviewScope === "mine" ? "για όσα ακολουθείς" : ""}</span></h3>
+              {!team.code || overviewScope === "all"
+                ? <OverviewCompetition data={marketOverview} state={marketOverviewState} />
                 : watchlistReady && !hasInterests
-                  ? <p className="noRows">Δεν ακολουθείς ακόμα CPV, αναθέτουσες/διενεργούσες αρχές ή αναδόχους. Πρόσθεσέ τα στο Προφίλ για να δεις τον ανταγωνισμό. <button type="button" className="profileLink" onClick={() => setPage("profile")}>Πήγαινε στο Προφίλ →</button></p>
+                  ? <p className="noRows">Δεν ακολουθείς ακόμα CPV, αναθέτουσες/διενεργούσες αρχές ή αναδόχους. Πρόσθεσέ τα στο Προφίλ για να δεις τον ανταγωνισμό σου. <button type="button" className="profileLink" onClick={() => setPage("profile")}>Πήγαινε στο Προφίλ →</button></p>
                   : <OverviewCompetition data={competition} state={competitionState} />}
             </section>
             <div className="overviewJump"><button type="button" onClick={() => setPage("market")}>Δες Αγορά &amp; Ανταγωνισμός →</button></div>
