@@ -614,7 +614,8 @@ export default function Home() {
     submitted: markedSubmitted,
     onInterest: (adam) => toggleMark("interest", adam),
     onSubmitted: (adam) => toggleMark("submitted", adam),
-    isNew: (tender) => Boolean(visitBaseline && tender.publicationDate && tender.publicationDate >= visitBaseline.slice(0, 10)),
+    // ΝΕΟ only in "Η Αγορά μου" (signed in); never in "Όλη η Αγορά"
+    isNew: (tender) => Boolean(scopeOn && team.code && visitBaseline && tender.publicationDate && tender.publicationDate >= visitBaseline.slice(0, 10)),
   };
 
   // The CPV and region interests are managed from Προφίλ. Same endpoints as
