@@ -229,7 +229,7 @@ export async function procurementAdamsForAuthorities(names: string[]) {
 // "Η αγορά μου" scope). Computing them from scratch takes seconds to minutes on
 // a cold database, so the result is stored in scope_cache and reused until the
 // next data sync (dashboard_cache "all" is rebuilt at the end of every sync).
-export async function cachedScope<T>(kind: string, scope: unknown, compute: () => Promise<T>): Promise<T> {
+export async function cachedScope<T>(kind: string, scope: unknown, compute: () => Promise<T>, shouldStore: (payload: T) => boolean = () => true): Promise<T> {
   const { createHash } = await import("node:crypto");
   const key = `${kind}|${createHash("sha1").update(JSON.stringify(scope)).digest("hex")}`;
   try {
@@ -244,6 +244,7 @@ export async function cachedScope<T>(kind: string, scope: unknown, compute: () =
     // no cache table yet, or a read problem: just compute
   }
   const payload = await compute();
+  if (!shouldStore(payload)) return payload;
   try {
     await supabaseWrite("scope_cache", "POST", [{ cache_key: key, payload, refreshed_at: new Date().toISOString() }], "resolution=merge-duplicates,return=minimal");
     if (Math.random() < 0.03) {

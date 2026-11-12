@@ -209,7 +209,7 @@ function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T
 // Notices of the same tender as the ones on this page (same authority and same
 // budget, e.g. a later Παράταση or Τροποποίηση), even when they fall outside the
 // page, so the list can hang them under the main tender.
-async function fetchRelatedNotices(rows: ProcurementRow[]): Promise<ProcurementRow[]> {
+async function fetchRelatedNotices(rows: ProcurementRow[], state: { partial: boolean }): Promise<ProcurementRow[]> {
   const pairs = rows.filter((row) => row.authority_name && money(row) > 0);
   if (!pairs.length) return [];
   const authorities = [...new Set(pairs.map((row) => row.authority_name as string))];
@@ -225,7 +225,8 @@ async function fetchRelatedNotices(rows: ProcurementRow[]): Promise<ProcurementR
     `&authority_name=in.(${encodeURIComponent(quoted)})` +
     `&publication_date=gte.${from}&publication_date=lte.${to}` +
     `&or=(budget_inc_vat.in.(${list}),budget_ex_vat.in.(${list}),budget_unknown_vat.in.(${list}))&limit=2000`,
-  ), 7000, [] as ProcurementRow[]);
+  ), 12000, null as ProcurementRow[] | null);
+  if (!found) { state.partial = true; return []; }
   const have = new Set(rows.map((row) => row.adam));
   const keys = new Set(pairs.map((row) => `${row.authority_name}|${money(row)}`));
   return found.filter((row) => !have.has(row.adam) && row.authority_name && keys.has(`${row.authority_name}|${money(row)}`));
@@ -333,7 +334,8 @@ async function computeGet(request: Request) {
     );
     const pageNotices = noticePage.rows;
     let relatedNotices: ProcurementRow[] = [];
-    try { relatedNotices = await fetchRelatedNotices(pageNotices); } catch { relatedNotices = []; }
+    const relatedState = { partial: false };
+    try { relatedNotices = await fetchRelatedNotices(pageNotices, relatedState); } catch { relatedNotices = []; relatedState.partial = true; }
     const notices = [...pageNotices, ...relatedNotices];
     const noticeAdams = notices.map((row) => row.adam);
 
@@ -771,6 +773,7 @@ async function computeGet(request: Request) {
           // one ends it.
           total: offset + notices.length,
           hasMore: pageNotices.length === pageSize,
+          partial: relatedState.partial,
           loadedAt: new Date().toISOString(),
         },
       },
@@ -794,14 +797,14 @@ async function computeGet(request: Request) {
 export async function GET(request: Request) {
   const url = new URL(request.url);
   if (url.searchParams.get("q") || url.searchParams.get("adams")) return computeGet(request);
-  // "v5" is the result-shape/logic version: bump it to drop cached lists after a change.
-  const key = "v5|" + [...url.searchParams.entries()].map(([name, value]) => `${name}=${value}`).sort().join("&");
+  // "v6" is the result-shape/logic version: bump it to drop cached lists after a change.
+  const key = "v6|" + [...url.searchParams.entries()].map(([name, value]) => `${name}=${value}`).sort().join("&");
   const state: { failure: Response | null } = { failure: null };
   const body = await cachedScope<unknown>("list", key, async () => {
     const response = await computeGet(request);
     if (!response.ok) { state.failure = response; throw new Error("list request failed"); }
     return response.json();
-  }).catch(() => null);
+  }, (payload) => !(payload as { meta?: { partial?: boolean } })?.meta?.partial).catch(() => null);
   if (state.failure) return state.failure;
   if (body) return NextResponse.json(body, { headers: { "Cache-Control": "no-store, max-age=0" } });
   return computeGet(request);
