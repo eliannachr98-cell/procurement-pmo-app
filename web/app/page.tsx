@@ -755,6 +755,45 @@ export default function Home() {
       (!hideDirectAwards || tender.procedureType !== DIRECT_AWARD_PROCEDURE);
   }), [tenders, query, status, authority, year, contractType, documentType, hideDirectAwards, page]);
 
+  // Sorting and the "only tenders I submitted an offer on" view of Διαγωνισμοί.
+  const [tenderSort, setTenderSort] = useState<"newest" | "oldest" | "deadlineNear" | "deadlineFar">("newest");
+  const [onlyOffers, setOnlyOffers] = useState(false);
+  const [offerTenders, setOfferTenders] = useState<Tender[]>([]);
+  const [offerLoading, setOfferLoading] = useState(false);
+  useEffect(() => {
+    if (!onlyOffers || page !== "tenders") return;
+    const adams = [...markedSubmitted].slice(0, 100);
+    if (!adams.length) { setOfferTenders([]); return; }
+    let cancelled = false;
+    setOfferLoading(true);
+    fetch(`/api/procurement?page=1&pageSize=100&adams=${encodeURIComponent(adams.join(","))}`)
+      .then((response) => response.ok ? response.json() : Promise.reject(new Error("offers")))
+      .then((payload) => { if (!cancelled) setOfferTenders(payload.tenders ?? []); })
+      .catch(() => { if (!cancelled) setOfferTenders([]); })
+      .finally(() => { if (!cancelled) setOfferLoading(false); });
+    return () => { cancelled = true; };
+  }, [onlyOffers, page, markedSubmitted]);
+  const shownTenders = useMemo(() => {
+    const source = onlyOffers ? offerTenders.filter((tender) => markedSubmitted.has(tender.adam)) : filtered;
+    const opening = (tender: Tender) => tender.openingDate && !tender.dateIssue ? tender.openingDate : "";
+    const published = (tender: Tender) => tender.publicationDate ?? "";
+    const desc = (a: string, b: string) => b.localeCompare(a);
+    // A missing deadline always goes last, whichever way the list is sorted.
+    const byOpening = (a: Tender, b: Tender, direction: 1 | -1) => {
+      const left = opening(a); const right = opening(b);
+      if (!left && !right) return 0;
+      if (!left) return 1;
+      if (!right) return -1;
+      return direction * left.localeCompare(right);
+    };
+    return [...source].sort((a, b) => {
+      if (tenderSort === "oldest") return published(a).localeCompare(published(b)) || byOpening(a, b, 1);
+      if (tenderSort === "deadlineNear") return byOpening(a, b, 1) || desc(published(a), published(b));
+      if (tenderSort === "deadlineFar") return byOpening(a, b, -1) || desc(published(a), published(b));
+      return desc(published(a), published(b)) || byOpening(a, b, -1);
+    });
+  }, [filtered, onlyOffers, offerTenders, markedSubmitted, tenderSort]);
+
   const documentTypes = Object.entries(documentTypeLabels);
   const statusCount = (value: Status) => dashboard.status.find((item) => item.status === value)?.count ?? 0;
   const statusBudget = (value: Status) => dashboard.status.find((item) => item.status === value)?.budget ?? 0;
@@ -852,8 +891,17 @@ export default function Home() {
           </>}
 
           {page === "tenders" && <>
-            <TenderTable rows={filtered} expanded marks={tenderMarks} loading={loading} />
-            {hasMore && <button className="viewAll" disabled={loading} onClick={() => loadTenderPage(loadedPage + 1, true)}>
+            <div className="tenderToolbar">
+              <label>Ταξινόμηση<select value={tenderSort} onChange={(event) => setTenderSort(event.target.value as typeof tenderSort)}>
+                <option value="newest">Νεότερα πρώτα (δημοσίευση)</option>
+                <option value="oldest">Παλαιότερα πρώτα (δημοσίευση)</option>
+                <option value="deadlineNear">Πιο κοντινή αποσφράγιση</option>
+                <option value="deadlineFar">Πιο μακρινή αποσφράγιση</option>
+              </select></label>
+              <label className={`checkboxRow${team.code ? "" : " disabled"}`} title={team.code ? "" : "Συνδέσου για να βλέπεις τις προσφορές σου"}><input type="checkbox" disabled={!team.code} checked={onlyOffers} onChange={(event) => setOnlyOffers(event.target.checked)} />Μόνο όσα έχω υποβάλει προσφορά</label>
+            </div>
+            <TenderTable rows={shownTenders} expanded marks={tenderMarks} loading={onlyOffers ? offerLoading : loading} />
+            {!onlyOffers && hasMore && <button className="viewAll" disabled={loading} onClick={() => loadTenderPage(loadedPage + 1, true)}>
               {loading ? "Φόρτωση…" : `Φόρτωση περισσότερων (${number.format(tenders.length)} από ${number.format(totalTenders)})`}
             </button>}
           </>}

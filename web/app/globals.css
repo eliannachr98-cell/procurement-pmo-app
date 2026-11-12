@@ -79,3 +79,10 @@ h1{font-size:22px;letter-spacing:-.5px}.overviewHeading{font-size:16px}.panel h2
 @media(max-width:1100px){.pageTitleRow{flex-direction:column;align-items:stretch}.pageTitleTools{justify-content:flex-start;flex-wrap:wrap}}
 .overviewWrap>.overviewBlock:first-child{margin-top:0}
 .pageTitleTools .overviewScope{display:flex;align-items:center;justify-content:center}.pageTitleTools .overviewScopeToggle{margin:0 auto}
+
+/* tender list toolbar: sort + offers only */
+.tenderToolbar{display:flex;align-items:center;gap:18px;flex-wrap:wrap;margin:0 0 8px;font-size:12px}
+.tenderToolbar label{display:flex;align-items:center;gap:8px;margin:0}
+.tenderToolbar select{width:auto;min-width:210px;font-size:12px;padding:5px 8px}
+.tenderToolbar .checkboxRow{white-space:nowrap}
+.tenderToolbar .checkboxRow.disabled{opacity:.55}

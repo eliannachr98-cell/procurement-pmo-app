@@ -268,6 +268,10 @@ async function computeGet(request: Request) {
       matchingContractAdams = intersect(matchingContractAdams, union(groups.map((item) => item.contractAdams)));
     }
 
+    // An explicit list of ADAMs (e.g. the tenders the user submitted an offer on).
+    const explicitAdams = searchParams.getAll("adams").flatMap((value) => value.split(",")).map((value) => value.trim()).filter((value) => /^[0-9A-Za-z]{6,40}$/.test(value)).slice(0, 200);
+    if (explicitAdams.length) matchingAdams = intersect(matchingAdams, explicitAdams);
+
     if (matchingAdams?.length === 0) {
       return NextResponse.json({ tenders: [], awards: [], contracts: [], meta: { source: "Supabase compact", page, pageSize, total: 0, hasMore: false, loadedAt: new Date().toISOString() } });
     }
@@ -286,7 +290,7 @@ async function computeGet(request: Request) {
     // The general market lists the Διακηρύξεις first (newest publication first);
     // related notices (extension, amendment...) hang under them. A search text
     // or an explicit document type still reaches every kind of notice.
-    else if (!query) filters.push("document_category=eq.declaration");
+    else if (!query && !explicitAdams.length) filters.push("document_category=eq.declaration");
     // Rows with no recorded procedure_type (older data, before this field
     // was captured) get excluded too, not just confirmed direct awards -
     // an acceptable edge case for an opt-in checkbox rather than a real bug.
@@ -745,7 +749,7 @@ async function computeGet(request: Request) {
 // reused until the next data sync.
 export async function GET(request: Request) {
   const url = new URL(request.url);
-  if (url.searchParams.get("q")) return computeGet(request);
+  if (url.searchParams.get("q") || url.searchParams.get("adams")) return computeGet(request);
   const key = [...url.searchParams.entries()].map(([name, value]) => `${name}=${value}`).sort().join("&");
   const state: { failure: Response | null } = { failure: null };
   const body = await cachedScope<unknown>("list", key, async () => {
