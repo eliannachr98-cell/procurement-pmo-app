@@ -56,7 +56,11 @@ export async function GET(request: Request) {
 
     const hasScope = watchCpvs.length > 0 || watchAuthorities.length > 0 || watchContractors.length > 0;
     const plainScope = hasScope && (!authority || authority === "Όλες") && !contractors.length && !cpvs.length && !year && !contractTypes.length;
-    const computeSummary = () => supabaseRpc<unknown>("market_overview", {
+    // market_overview_fast reads the ready-made market_tender_facts /
+    // market_contractor_facts tables (sql/market_facts.sql) - same output as
+    // market_overview, any filter in well under a second. If those tables are
+    // not there yet, fall back to the slow live function.
+    const args = {
       p_year: /^\d{4}$/.test(year) ? year : null,
       p_authority: authority && authority !== "Όλες" ? authority : null,
       p_contract_type: contractTypes.length ? contractTypes : null,
@@ -67,7 +71,14 @@ export async function GET(request: Request) {
       ...(watchNuts.length ? { p_scope_nuts: watchNuts } : {}),
       p_stats_only: true,
       p_track: track.length ? track : null,
-    });
+    };
+    const computeSummary = async () => {
+      try {
+        return await supabaseRpc<unknown>("market_overview_fast", args);
+      } catch {
+        return await supabaseRpc<unknown>("market_overview", args);
+      }
+    };
     const summary = plainScope
       ? await cachedScope(track.length ? "competition" : "market", { c: [...watchCpvs].sort(), a: [...watchAuthorities].sort(), k: [...watchContractors].sort(), n: [...watchNuts].sort(), t: [...track].sort() }, computeSummary)
       : await computeSummary();
