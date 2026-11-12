@@ -632,7 +632,16 @@ async function computeGet(request: Request) {
       for (const peer of sameTender.get(`${tender.authority}|${tender.budget.toFixed(2)}`) ?? []) {
         if (peer === tender || !peer.openingDate || peer.dateIssue) continue;
         if (tender.publicationDate && peer.publicationDate && peer.publicationDate < tender.publicationDate) continue;
-        if (tender.openingDate && peer.openingDate <= tender.openingDate) continue;
+        if (tender.openingDate) {
+          // Same-day changes are not an extension. A real extension is issued
+          // around the original deadline and moves it by weeks, not by
+          // months: a later notice of another tender with the same budget
+          // must not be taken for one.
+          if (peer.openingDate.slice(0, 10) <= tender.openingDate.slice(0, 10)) continue;
+          const original = new Date(tender.openingDate.slice(0, 10)).getTime();
+          if (peer.publicationDate && new Date(peer.publicationDate).getTime() > original + 3 * 86400000) continue;
+          if (new Date(peer.openingDate.slice(0, 10)).getTime() - original > 180 * 86400000) continue;
+        }
         if (!latest || peer.openingDate > latest) latest = peer.openingDate;
       }
       if (latest) {
@@ -779,8 +788,8 @@ async function computeGet(request: Request) {
 export async function GET(request: Request) {
   const url = new URL(request.url);
   if (url.searchParams.get("q") || url.searchParams.get("adams")) return computeGet(request);
-  // "v3" is the result-shape/logic version: bump it to drop cached lists after a change.
-  const key = "v3|" + [...url.searchParams.entries()].map(([name, value]) => `${name}=${value}`).sort().join("&");
+  // "v4" is the result-shape/logic version: bump it to drop cached lists after a change.
+  const key = "v4|" + [...url.searchParams.entries()].map(([name, value]) => `${name}=${value}`).sort().join("&");
   const state: { failure: Response | null } = { failure: null };
   const body = await cachedScope<unknown>("list", key, async () => {
     const response = await computeGet(request);
