@@ -615,7 +615,33 @@ async function computeGet(request: Request) {
     // A tender whose deadline passed is "Σε αξιολόγηση" - unless a related
     // notice of the same tender (same authority and budget, e.g. a Παράταση)
     // gives a later deadline that is still ahead: then it is still open.
-    const underEvaluation = tenders.filter((tender) => tender.status === "Αξιολόγηση" && tender.authority && tender.budget > 0);
+    // First, use the related notices already loaded with the page (same authority
+    // and budget): the latest later opening date among them is the extended
+    // deadline, whether or not the original one has passed.
+    const sameTender = new Map<string, typeof tenders>();
+    for (const tender of tenders) {
+      if (!tender.authority || tender.authority === "—" || tender.budget <= 0) continue;
+      const key = `${tender.authority}|${tender.budget.toFixed(2)}`;
+      const list = sameTender.get(key);
+      if (list) list.push(tender); else sameTender.set(key, [tender]);
+    }
+    const nowIso = new Date().toISOString();
+    for (const tender of tenders) {
+      if (!tender.authority || tender.authority === "—" || tender.budget <= 0) continue;
+      let latest: string | undefined;
+      for (const peer of sameTender.get(`${tender.authority}|${tender.budget.toFixed(2)}`) ?? []) {
+        if (peer === tender || !peer.openingDate || peer.dateIssue) continue;
+        if (tender.publicationDate && peer.publicationDate && peer.publicationDate < tender.publicationDate) continue;
+        if (tender.openingDate && peer.openingDate <= tender.openingDate) continue;
+        if (!latest || peer.openingDate > latest) latest = peer.openingDate;
+      }
+      if (latest) {
+        tender.extendedOpeningDate = latest;
+        if (tender.status === "Αξιολόγηση" && latest > nowIso) tender.status = "Ενεργός";
+      }
+    }
+
+    const underEvaluation = tenders.filter((tender) => tender.status === "Αξιολόγηση" && !tender.extendedOpeningDate && tender.authority && tender.budget > 0);
     if (underEvaluation.length) {
       try {
         const authorities = [...new Set(underEvaluation.map((tender) => tender.authority))];
