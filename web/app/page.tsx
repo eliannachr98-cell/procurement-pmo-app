@@ -409,6 +409,8 @@ export default function Home() {
     const requestId = ++latestRequest.current;
     setLoading(true);
     const params = new URLSearchParams({ page: String(nextPage), pageSize: "100" });
+    // Only the Αγορά page needs the awards/contracts rows of the list.
+    if (page !== "market") params.set("lite", "1");
     if (query.trim()) params.set("q", query.trim());
     if (authority.trim() && authority !== "Όλες") params.set("authority", authority.trim());
     contractor.forEach((item) => params.append("contractor", item));
@@ -448,7 +450,7 @@ export default function Home() {
       .finally(() => {
         if (requestId === latestRequest.current) setLoading(false);
       });
-  }, [query, authority, contractor, cpv, year, contractType, documentType, hideDirectAwards, scopeCodes, scopeAuthorities, scopeContractors, scopeNuts, scopeWaiting]);
+  }, [query, authority, contractor, cpv, year, contractType, documentType, hideDirectAwards, scopeCodes, scopeAuthorities, scopeContractors, scopeNuts, scopeWaiting, page]);
 
   // CPV codes of the profile's interests. Applied to Διαγωνισμοί/Αγορά only
   // while "Τα ενδιαφέροντά μου" is selected; with no interests there is nothing

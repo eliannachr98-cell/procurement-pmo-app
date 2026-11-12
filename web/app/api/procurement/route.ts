@@ -404,7 +404,10 @@ async function computeGet(request: Request) {
     }
     if (documentType) marketNoticeScopeFilters.push(`document_category=eq.${encodeURIComponent(documentType)}`);
     let marketScopeAdams: string[] | null = null;
-    if (marketNoticeScopeFilters.length) {
+    // lite=1: the tender list does not need the awards/contracts market rows
+    // (only the Αγορά page used them); skipping them avoids several heavy queries.
+    const lite = searchParams.get("lite") === "1";
+    if (marketNoticeScopeFilters.length && !lite) {
       // When a contractor/CPV match already narrowed the candidate notices,
       // check the year/document-type condition against exactly that set -
       // otherwise this would need to page through the entire (100k+ row)
@@ -440,7 +443,7 @@ async function computeGet(request: Request) {
     }
     const marketExtraQuery = marketExtraFilters.map((item) => `&${item}`).join("");
     const marketIsNarrowed = Boolean(matchingAwardAdams || matchingContractAdams || marketExtraFilters.length);
-    const [marketAwards, marketContracts] = marketScopeIsEmpty ? [[] as AwardRow[], [] as ContractRow[]] : await Promise.all([
+    const [marketAwards, marketContracts] = (marketScopeIsEmpty || lite) ? [[] as AwardRow[], [] as ContractRow[]] : await Promise.all([
       supabaseGet<AwardRow[]>(
         "awards_compact?select=adam,procurement_adam,title,authority_name,contract_type,award_date,amount_ex_vat,amount_inc_vat,amount_unknown_vat" +
         (matchingAwardAdams ? `&adam=in.(${matchingAwardAdams.map(encodeURIComponent).join(",")})` : "") +
