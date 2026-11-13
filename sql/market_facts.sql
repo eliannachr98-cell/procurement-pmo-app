@@ -121,7 +121,7 @@ begin
 
   create temp table _dc on commit drop as
     select coalesce(nullif(trim(rc.contractor_vat), ''), rc.contractor_name) as ckey,
-           rc.contractor_name, d.n, d.amt, d.kind
+           nullif(regexp_replace(rc.contractor_name, '^[«»"''“”[:space:]]+|[«»"''“”[:space:]]+$', '', 'g'), '') as contractor_name, d.n, d.amt, d.kind
     from _doc d
     join public.record_contractors_compact rc on rc.record_adam = d.adam and rc.record_type = d.kind
     where d.amt > 0;
