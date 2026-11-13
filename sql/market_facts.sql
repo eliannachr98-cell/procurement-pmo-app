@@ -182,6 +182,7 @@ declare
   conditions text[] := array['true'];
   scope_sql text;
   result json;
+  top_n integer := case when coalesce(cardinality(p_track), 0) > 0 then 10 else 500 end;
 begin
   if p_adams is not null then
     conditions := conditions || format('p.adam = any(%L::text[])', p_adams);
@@ -202,7 +203,7 @@ begin
     conditions := conditions || format('p.contract_type = any(%L::text[])', p_contract_type);
   end if;
 
-  execute format($q$
+  execute replace(format($q$
     with matched as (
       select p.* from public.market_tender_facts p where %s
     ),
@@ -216,10 +217,10 @@ begin
              sum(amt) as value
       from mc group by ckey
     ),
-    top_contractors as (select * from contractor_totals order by (awards + contracts) desc, value desc limit 10),
+    top_contractors as (select * from contractor_totals order by (awards + contracts) desc, value desc limit @@TOPN@@),
     authority_totals as (
       select authority_name, count(*) as tenders, sum(awards_value + contracts_value) as value
-      from matched where awards_n + contracts_n > 0
+      from matched
       group by authority_name
     ),
     disc as (select adam, contract_type, discount as dsc from matched where discount is not null),
@@ -256,13 +257,13 @@ begin
       'awardsValue', (select coalesce(sum(awards_value), 0) from matched),
       'contractsValue', (select coalesce(sum(contracts_value), 0) from matched),
       'topContractors', (select coalesce(json_agg(json_build_object('name', name, 'awards', awards, 'contracts', contracts, 'total', awards + contracts, 'value', value) order by (awards + contracts) desc, value desc), '[]'::json) from top_contractors),
-      'topAuthorities', (select coalesce(json_agg(json_build_object('authority', authority_name, 'tenders', tenders, 'value', value) order by tenders desc, value desc), '[]'::json) from (select * from authority_totals order by tenders desc, value desc limit 10) t),
+      'topAuthorities', (select coalesce(json_agg(json_build_object('authority', authority_name, 'tenders', tenders, 'value', value) order by tenders desc, value desc), '[]'::json) from (select * from authority_totals order by tenders desc, value desc limit @@TOPN@@) t),
       'concentrationTop5', (select case when (select sum(value) from contractor_totals) > 0 then (select v from top5) / (select sum(value) from contractor_totals) else null end),
       'discount', (select json_build_object('count', count(*), 'average', avg(dsc) * 100, 'median', percentile_cont(0.5) within group (order by dsc) * 100, 'positiveShare', case when count(*) > 0 then 100.0 * count(*) filter (where dsc > 0.0005) / count(*) else null end) from disc),
       'tracked', (select coalesce(json_agg(json_build_object('key', key, 'name', coalesce(cname, key), 'awards', awards, 'contracts', contracts, 'value', value, 'discount', discount) order by ord), '[]'::json) from tracked),
       'discountByType', (select coalesce(json_agg(json_build_object('type', contract_type, 'count', cnt, 'average', avg_dsc) order by cnt desc), '[]'::json) from (select contract_type, count(*) as cnt, avg(dsc) * 100 as avg_dsc from disc group by contract_type) t)
     )
-  $q$, array_to_string(conditions, ' and '), coalesce(p_track, array[]::text[])) into result;
+  $q$, array_to_string(conditions, ' and '), coalesce(p_track, array[]::text[])), '@@TOPN@@', top_n::text) into result;
 
   return result;
 end;
