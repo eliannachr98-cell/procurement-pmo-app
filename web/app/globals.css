@@ -87,4 +87,9 @@ h1{font-size:22px;letter-spacing:-.5px}.overviewHeading{font-size:16px}.panel h2
 .tenderToolbar .checkboxRow{white-space:nowrap}
 .tenderToolbar .checkboxRow.disabled{opacity:.55}
 /* Αγορά: faint data bars behind the numbers of the top tables. */
-.barCell{background-repeat:no-repeat;background-position:left center;background-size:100% 70%}
+/* Αγορά: all contractors / authorities of the scope in a slightly taller, scrollable table with a pill-shaped data bar. */
+.overviewWrap .overviewTables .tableScroll{max-height:340px}
+.overviewWrap .overviewTables thead th{position:sticky;top:0;z-index:2;background:#f4f8fa}
+.barCell{position:relative}
+.barCell::before{content:"";position:absolute;left:8px;top:22%;bottom:22%;width:calc((100% - 16px) * var(--w,0));border-radius:6px;background:linear-gradient(90deg,rgba(22,140,140,.10),rgba(22,140,140,.30));z-index:0}
+.barCell>*{position:relative;z-index:1}

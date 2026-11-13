@@ -1164,7 +1164,7 @@ function MarketCounts({ data, tenders = true, values = false }: { data: MarketOv
 }
 
 // A faint bar behind a number, as wide as the value relative to the largest in the table.
-const barStyle = (value: number, max: number) => max > 0 ? { backgroundImage: `linear-gradient(90deg, rgba(22,140,140,.28) ${Math.max(4, 100 * value / max)}%, transparent ${Math.max(4, 100 * value / max)}%)` } : undefined;
+const barStyle = (value: number, max: number) => ({ "--w": max > 0 ? Math.max(0.04, value / max).toFixed(3) : "0" }) as React.CSSProperties;
 
 function OverviewMarket({ data, state }: { data: MarketOverview | null; state: "idle" | "loading" | "error" }) {
   if (state === "error") return <p className="noRows">Δεν υπάρχουν ακόμα υπολογισμένα στοιχεία για αυτό το φίλτρο - δοκίμασε άλλο Έτος ή πρόσθεσε Αναθέτουσα/Διενεργούσα Αρχή, CPV ή Ανάδοχο.</p>;
@@ -1175,11 +1175,11 @@ function OverviewMarket({ data, state }: { data: MarketOverview | null; state: "
   return <>
     <MarketCounts data={data} tenders={false} values />
     <div className="overviewTables">
-      <article className="panel"><PanelHeader title="Κορυφαίοι ανάδοχοι" caption="Κατά σύνολο αναθέσεων και συμβάσεων" />
+      <article className="panel"><PanelHeader title="Ανάδοχοι" caption={`${number.format(data.contractors)} ανάδοχοι · κατά σύνολο αναθέσεων και συμβάσεων${data.contractors > data.topContractors.length ? ` · εμφανίζονται οι ${number.format(data.topContractors.length)} πρώτοι` : ""}`} />
         <div className="tableScroll"><table><thead><tr><th>Ανάδοχος</th><th>Σύνολο</th><th>Αναθέσεις</th><th>Συμβάσεις</th><th>Αξία</th></tr></thead>
           <tbody>{data.topContractors.map((item) => { const total = item.total ?? item.awards + item.contracts; return <tr key={item.name}><td>{item.name}</td><td className="barCell" style={barStyle(total, maxContractor)}><b>{number.format(total)}</b></td><td>{number.format(item.awards)}</td><td>{number.format(item.contracts)}</td><td>{euro.format(item.value)}</td></tr>; })}</tbody></table>
           {!data.topContractors.length && <p className="noRows">Δεν υπάρχουν αναθέσεις ή συμβάσεις.</p>}</div></article>
-      <article className="panel"><PanelHeader title="Κορυφαίες αναθέτουσες/διενεργούσες αρχές" caption="Κατά αριθμό διαγωνισμών" />
+      <article className="panel"><PanelHeader title="Αναθέτουσες/Διενεργούσες Αρχές" caption={`${number.format(data.authorities ?? data.topAuthorities.length)} αρχές · κατά αριθμό διαγωνισμών${(data.authorities ?? 0) > data.topAuthorities.length ? ` · εμφανίζονται οι ${number.format(data.topAuthorities.length)} πρώτες` : ""}`} />
         <div className="tableScroll"><table><thead><tr><th>Αναθέτουσα/Διενεργούσα Αρχή</th><th>Διαγωνισμοί</th><th>Αξία</th></tr></thead>
           <tbody>{data.topAuthorities.map((item) => <tr key={item.authority}><td>{item.authority}</td><td className="barCell" style={barStyle(item.tenders, maxAuthority)}><b>{number.format(item.tenders)}</b></td><td>{euro.format(item.value)}</td></tr>)}</tbody></table>
           {!data.topAuthorities.length && <p className="noRows">Δεν υπάρχουν αναθέσεις ή συμβάσεις.</p>}</div></article>
