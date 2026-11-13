@@ -109,3 +109,6 @@ h1{font-size:22px;letter-spacing:-.5px}.overviewHeading{font-size:16px}.panel h2
 @media(max-width:900px){.competitorDetailGrid{grid-template-columns:1fr}}
 .overviewWrap .overviewBigFour .tableScroll{max-height:440px}
 .competitorEmpty{font-weight:400;color:var(--muted);font-size:9px}
+.clientList{max-height:190px;overflow-y:auto;padding-right:4px}
+.competitorItemsBar{margin-top:10px;text-align:left}
+.competitorItems{max-height:300px;margin-top:6px}

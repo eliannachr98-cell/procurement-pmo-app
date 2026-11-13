@@ -127,7 +127,8 @@ type Competitor = {
   key: string; name: string; awards: number; contracts: number; value: number; lastDate: string | null; unionShare: number | null; avgBudget: number | null;
   discount: { count: number; average: number | null; median: number | null; positiveShare: number | null };
   monthly: { month: string; count: number }[];
-  clients: { authority: string; count: number; share: number }[];
+  clients: { authority: string; count: number; awards: number; contracts: number; share: number }[];
+  items: { adam: string | null; tender: string; kind: string; date: string | null; authority: string; amount: number; union: boolean }[];
 };
 type CompetitorData = { competitors: Competitor[]; common: { authority: string; competitors: number; payments: number; keys: string[] }[] };
 
@@ -1188,6 +1189,7 @@ function OverviewMarket({ data, state }: { data: MarketOverview | null; state: "
 
 function OverviewCompetition({ data, state, signedIn, ready, hasKeys, onProfile, labels }: { data: CompetitorData | null; state: "idle" | "loading" | "error"; signedIn: boolean; ready: boolean; hasKeys: boolean; onProfile: () => void; labels: Record<string, string> }) {
   const [open, setOpen] = useState<string | null>(null);
+  const [listFor, setListFor] = useState<string | null>(null);
   if (!signedIn) return <p className="noRows">Συνδέσου και πρόσθεσε αναδόχους στο Προφίλ για να δεις τον ανταγωνισμό τους.</p>;
   if (ready && !hasKeys) return <p className="noRows">Δεν ακολουθείς ακόμα κάποιον ανάδοχο. Πρόσθεσέ τους στο Προφίλ. <button type="button" className="profileLink" onClick={onProfile}>Πήγαινε στο Προφίλ →</button></p>;
   if (state === "error") return <p className="noRows">Δεν φορτώθηκαν τα στοιχεία των αναδόχων - δοκίμασε ξανά.</p>;
@@ -1220,7 +1222,7 @@ function OverviewCompetition({ data, state, signedIn, ready, hasKeys, onProfile,
             </tr>
             {isOpen && <tr className="competitorDetail"><td colSpan={10}><div className="competitorDetailGrid">
               <div><h4>Πελάτες</h4>
-                {item.clients.length === 0 ? <p className="noRows">Δεν υπάρχουν αναθέσεις ή συμβάσεις.</p> : <ul className="clientList">{item.clients.map((client) => <li key={client.authority}><span>{client.authority}</span><b>{number.format(client.count)}</b><em>{percentText(client.share)}</em></li>)}</ul>}
+                {item.clients.length === 0 ? <p className="noRows">Δεν υπάρχουν αναθέσεις ή συμβάσεις.</p> : <ul className="clientList">{item.clients.map((client) => <li key={client.authority} title={`${client.awards} αναθέσεις, ${client.contracts} συμβάσεις`}><span>{client.authority}</span><b>{number.format(client.count)}</b><em>{percentText(client.share)}</em></li>)}</ul>}
               </div>
               <div><h4>Πορεία ανά μήνα <small>(αναθέσεις και συμβάσεις, τελευταίοι 24 μήνες)</small></h4>
                 <div className="miniBars" role="img" aria-label="Αναθέσεις και συμβάσεις ανά μήνα">{months.map((month) => {
@@ -1232,6 +1234,18 @@ function OverviewCompetition({ data, state, signedIn, ready, hasKeys, onProfile,
               <div><h4>Ενώσεις</h4>
                 <p className="competitorUnion">{item.unionShare === null ? "—" : percentText(item.unionShare)} <span>των αναθέσεων και συμβάσεών του έγιναν σε ένωση εταιρειών.</span></p>
               </div>
+            </div>
+            <div className="competitorItemsBar">
+              <button type="button" className="profileLink" onClick={(event) => { event.stopPropagation(); setListFor(listFor === item.key ? null : item.key); }}>{listFor === item.key ? "Απόκρυψη" : "Δες"} όλες τις αναθέσεις και συμβάσεις ({number.format(item.items.length)}) {listFor === item.key ? "▴" : "▾"}</button>
+              {listFor === item.key && <div className="tableScroll competitorItems"><table>
+                <thead><tr><th>Ημερομηνία</th><th>Είδος</th><th>Αναθέτουσα/Διενεργούσα Αρχή</th><th>Ποσό</th><th>ΑΔΑΜ</th></tr></thead>
+                <tbody>{item.items.map((entry, index) => <tr key={`${entry.adam ?? entry.tender}-${index}`}>
+                  <td>{entry.date ? formatDate(entry.date) : "—"}</td>
+                  <td>{entry.kind === "contract" ? "Σύμβαση" : "Ανάθεση"}</td>
+                  <td>{entry.authority}</td>
+                  <td>{euro.format(entry.amount)}{entry.union && <small className="competitorEmpty" title="Το ποσό είναι ολόκληρο, της ένωσης· στα αθροίσματα μοιράζεται στα μέλη"> · ένωση</small>}</td>
+                  <td><AdamCopy adam={entry.adam ?? entry.tender} className="adamCopy" /></td>
+                </tr>)}</tbody></table></div>}
             </div></td></tr>}
           </Fragment>;
         })}</tbody></table></div>
