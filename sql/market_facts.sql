@@ -46,12 +46,14 @@ create table if not exists public.market_contractor_facts (
   members integer not null default 1,
   amt_share numeric,
   doc_date date,
+  doc_adam text,
   primary key (ckey, n, amt)
 );
 
 alter table public.market_contractor_facts add column if not exists members integer not null default 1;
 alter table public.market_contractor_facts add column if not exists amt_share numeric;
 alter table public.market_contractor_facts add column if not exists doc_date date;
+alter table public.market_contractor_facts add column if not exists doc_adam text;
 
 create index if not exists market_contractor_facts_n_idx on public.market_contractor_facts (n);
 create index if not exists market_tender_facts_pub_idx on public.market_tender_facts (publication_date);
@@ -123,7 +125,7 @@ begin
 
   create temp table _dc on commit drop as
     select coalesce(nullif(trim(rc.contractor_vat), ''), rc.contractor_name) as ckey,
-           nullif(regexp_replace(rc.contractor_name, '^[«»"''“”[:space:]]+|[«»"''“”[:space:]]+$', '', 'g'), '') as contractor_name, d.n, d.amt, d.kind, d.dt
+           nullif(regexp_replace(rc.contractor_name, '^[«»"''“”[:space:]]+|[«»"''“”[:space:]]+$', '', 'g'), '') as contractor_name, d.n, d.amt, d.kind, d.dt, d.adam as doc_adam
     from _doc d
     join public.record_contractors_compact rc on rc.record_adam = d.adam and rc.record_type = d.kind
     where d.amt > 0;
@@ -139,7 +141,7 @@ begin
 
   create temp table _byc on commit drop as
     select g.*, count(*) over (partition by g.n, g.amt) as members from (
-    select d.ckey, coalesce(max(nm.contractor_name), max(d.contractor_name)) as contractor_name, d.n, d.amt, min(d.kind) as kind, min(d.dt) as doc_date
+    select d.ckey, coalesce(max(nm.contractor_name), max(d.contractor_name)) as contractor_name, d.n, d.amt, min(d.kind) as kind, min(d.dt) as doc_date, min(d.doc_adam) as doc_adam
     from _dc d
     left join _names nm on nm.ckey = d.ckey
     group by d.ckey, d.n, d.amt
@@ -172,8 +174,8 @@ begin
   left join _disc d on d.adam = m.adam;
 
   delete from public.market_contractor_facts;
-  insert into public.market_contractor_facts (ckey, contractor_name, n, amt, kind, members, amt_share, doc_date)
-  select ckey, contractor_name, n, amt, kind, members, amt / members, doc_date from _byc
+  insert into public.market_contractor_facts (ckey, contractor_name, n, amt, kind, members, amt_share, doc_date, doc_adam)
+  select ckey, contractor_name, n, amt, kind, members, amt / members, doc_date, doc_adam from _byc
   where n in (select adam from _m);
 
   analyze public.market_tender_facts;

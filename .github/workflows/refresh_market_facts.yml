@@ -74,7 +74,7 @@ jobs:
               cur.execute("select round(sum(amt)), round(sum(coalesce(amt_share, amt))), count(*) filter (where members > 1) from public.market_contractor_facts")
               print("contractor amounts: full per member / split by members / rows in unions:", cur.fetchone())
               started = time.time()
-              cur.execute("select public.competitor_overview(%s::text[])", (["091569759", "ΙΝΕΞ"],))
+              cur.execute("select public.competitor_overview(%s::text[])", (["091569759", "ΙΝΕΞ", "ΕΡΝΣΤ ΚΑΙ ΓΙΑΝΓΚ"],))
               out = cur.fetchone()[0]
               print(f"competitor_overview in {time.time() - started:.1f}s")
               for item in out["competitors"]:
@@ -82,3 +82,5 @@ jobs:
                   print("   discount", item["discount"])
                   print("   monthly", item["monthly"][-3:], "clients", item["clients"][:3])
               print("common authorities:", out["common"][:3])
+              for item in out["competitors"]:
+                  print("CHECK", item["name"][:30], "awards+contracts", item["awards"] + item["contracts"], "sum of clients", sum(c["count"] for c in item["clients"]), "clients", len(item["clients"]), "items", len(item["items"]))

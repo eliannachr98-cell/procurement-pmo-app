@@ -26,7 +26,7 @@ begin
   ),
   rws as (
     select k.key, k.ord, f.ckey, f.contractor_name, f.n, f.amt, f.kind, f.members,
-           coalesce(f.amt_share, f.amt) as share, f.doc_date,
+           coalesce(f.amt_share, f.amt) as share, f.doc_date, f.doc_adam,
            t.authority_name, t.publication_date, t.budget, t.discount
     from keys k
     join public.market_contractor_facts f
@@ -61,7 +61,9 @@ begin
     group by 1, 2
   ),
   clients as (
-    select key, authority_name, count(*) as c, sum(share) as v,
+    select key, authority_name, count(*) as c,
+           count(*) filter (where kind = 'award') as a, count(*) filter (where kind = 'contract') as k,
+           sum(share) as v,
            row_number() over (partition by key order by count(*) desc, sum(share) desc) as rn
     from rws group by key, authority_name
   ),
@@ -84,8 +86,10 @@ begin
         'avgBudget', d.avg_budget,
         'discount', json_build_object('count', coalesce(d.cnt, 0), 'average', d.average, 'median', d.median, 'positiveShare', d.positive_share),
         'monthly', coalesce((select json_agg(json_build_object('month', m.m, 'count', m.c) order by m.m) from monthly m where m.key = k.key), '[]'::json),
-        'clients', coalesce((select json_agg(json_build_object('authority', c.authority_name, 'count', c.c, 'share', 100.0 * c.c / nullif(ct.total, 0)) order by c.rn)
-                              from clients c join client_total ct on ct.key = c.key where c.key = k.key and c.rn <= 8), '[]'::json)
+        'clients', coalesce((select json_agg(json_build_object('authority', c.authority_name, 'count', c.c, 'awards', c.a, 'contracts', c.k, 'share', 100.0 * c.c / nullif(ct.total, 0)) order by c.rn)
+                              from clients c join client_total ct on ct.key = c.key where c.key = k.key), '[]'::json),
+        'items', coalesce((select json_agg(json_build_object('adam', r.doc_adam, 'tender', r.n, 'kind', r.kind, 'date', coalesce(r.doc_date, r.publication_date), 'authority', r.authority_name, 'amount', r.amt, 'union', r.members > 1) order by coalesce(r.doc_date, r.publication_date) desc nulls last)
+                            from (select * from rws where rws.key = k.key order by coalesce(rws.doc_date, rws.publication_date) desc nulls last limit 1500) r), '[]'::json)
       ) order by k.ord)
       from keys k left join agg a on a.key = k.key left join disc d on d.key = k.key
     ), '[]'::json),
