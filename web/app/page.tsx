@@ -1181,7 +1181,7 @@ function OverviewMarket({ data, state }: { data: MarketOverview | null; state: "
           {!data.topContractors.length && <p className="noRows">Δεν υπάρχουν αναθέσεις ή συμβάσεις.</p>}</div></article>
       <article className="panel"><PanelHeader title="Αναθέτουσες/Διενεργούσες Αρχές" caption={`${number.format(data.authorities ?? data.topAuthorities.length)} αρχές · κατά αριθμό διαγωνισμών${(data.authorities ?? 0) > data.topAuthorities.length ? ` · εμφανίζονται οι ${number.format(data.topAuthorities.length)} πρώτες` : ""}`} />
         <div className="tableScroll"><table><thead><tr><th>Αναθέτουσα/Διενεργούσα Αρχή</th><th>Διαγωνισμοί</th><th>Αξία</th></tr></thead>
-          <tbody>{data.topAuthorities.map((item) => <tr key={item.authority}><td>{item.authority}</td><td className="barCell" style={barStyle(item.tenders, maxAuthority)}><b>{number.format(item.tenders)}</b></td><td>{euro.format(item.value)}</td></tr>)}</tbody></table>
+          <tbody>{data.topAuthorities.map((item) => <tr key={item.authority}><td>{item.authority}</td><td className="barCell" style={barStyle(item.tenders, maxAuthority)}><b>{number.format(item.tenders)}</b></td><td title={item.value > 0 ? undefined : "Κανένας διαγωνισμός της αρχής δεν έχει ακόμα ανάθεση ή σύμβαση"}>{item.value > 0 ? euro.format(item.value) : "—"}</td></tr>)}</tbody></table>
           {!data.topAuthorities.length && <p className="noRows">Δεν υπάρχουν αναθέσεις ή συμβάσεις.</p>}</div></article>
     </div>
   </>;
