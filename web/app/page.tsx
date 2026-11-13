@@ -761,6 +761,9 @@ export default function Home() {
   // Sorting and the "only tenders I submitted an offer on" view of Διαγωνισμοί.
   const [tenderSort, setTenderSort] = useState<"newest" | "oldest" | "deadlineNear" | "deadlineFar">("newest");
   const [onlyOffers, setOnlyOffers] = useState(false);
+  // Only meaningful in "Η αγορά μου" (signed in); the whole-market view does not offer it.
+  const showOffersFilter = Boolean(team.code) && overviewScope === "mine";
+  useEffect(() => { if (!showOffersFilter) setOnlyOffers(false); }, [showOffersFilter]);
   const [offerTenders, setOfferTenders] = useState<Tender[]>([]);
   const [offerLoading, setOfferLoading] = useState(false);
   useEffect(() => {
@@ -901,7 +904,7 @@ export default function Home() {
                 <option value="deadlineNear">Πιο κοντινή αποσφράγιση</option>
                 <option value="deadlineFar">Πιο μακρινή αποσφράγιση</option>
               </select></label>
-              <label className={`checkboxRow${team.code ? "" : " disabled"}`} title={team.code ? "" : "Συνδέσου για να βλέπεις τις προσφορές σου"}><input type="checkbox" disabled={!team.code} checked={onlyOffers} onChange={(event) => setOnlyOffers(event.target.checked)} />Μόνο όσα έχω υποβάλει προσφορά</label>
+              {showOffersFilter && <label className="checkboxRow"><input type="checkbox" checked={onlyOffers} onChange={(event) => setOnlyOffers(event.target.checked)} />Μόνο όσα έχω υποβάλει προσφορά</label>}
             </div>
             <TenderTable rows={shownTenders} expanded marks={tenderMarks} loading={onlyOffers ? offerLoading : loading} />
             {!onlyOffers && hasMore && <button className="viewAll" disabled={loading} onClick={() => loadTenderPage(loadedPage + 1, true)}>
