@@ -41,6 +41,8 @@ jobs:
               cur.execute("set statement_timeout = 0")
               cur.execute(open("sql/market_facts.sql", encoding="utf-8").read())
               print("sql applied")
+              cur.execute(open("sql/competitor_overview.sql", encoding="utf-8").read())
+              print("competitor_overview applied")
               started = time.time()
               cur.execute("select public.refresh_market_facts()")
               print(f"facts refreshed in {time.time() - started:.0f}s")
@@ -71,3 +73,12 @@ jobs:
                   print(f"{label}: tenders={out['tenders']} awards={out['awards']} contracts={out['contracts']} in {time.time() - started:.1f}s")
               cur.execute("select round(sum(amt)), round(sum(coalesce(amt_share, amt))), count(*) filter (where members > 1) from public.market_contractor_facts")
               print("contractor amounts: full per member / split by members / rows in unions:", cur.fetchone())
+              started = time.time()
+              cur.execute("select public.competitor_overview(%s::text[])", (["091569759", "ΙΝΕΞ"],))
+              out = cur.fetchone()[0]
+              print(f"competitor_overview in {time.time() - started:.1f}s")
+              for item in out["competitors"]:
+                  print(item["key"], item["name"], "awards", item["awards"], "contracts", item["contracts"], "value", round(item["value"] or 0), "last", item["lastDate"], "union%", item["unionShare"], "avgBudget", item["avgBudget"])
+                  print("   discount", item["discount"])
+                  print("   monthly", item["monthly"][-3:], "clients", item["clients"][:3])
+              print("common authorities:", out["common"][:3])
