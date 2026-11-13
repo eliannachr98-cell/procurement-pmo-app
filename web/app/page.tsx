@@ -1163,51 +1163,26 @@ function MarketCounts({ data, tenders = true, values = false }: { data: MarketOv
   </div>;
 }
 
-const SHARE_COLORS = ["#0d4565", "#168c8c", "#dca54a", "#6559a8", "#2e8b57", "#ce5360", "#4f8fc0", "#a3b86c", "#8a6d3b", "#9aa7ae"];
-
-// Donut of the share of the listed rows (the top 10); the colours match the dots in the table.
-function ShareDonut({ items, unit }: { items: { label: string; value: number }[]; unit: string }) {
-  const total = items.reduce((sum, item) => sum + item.value, 0);
-  if (!items.length || total <= 0) return null;
-  const radius = 52;
-  const circumference = 2 * Math.PI * radius;
-  let offset = 0;
-  return <div className="shareDonut">
-    <svg viewBox="0 0 140 140" role="img" aria-label={`Μερίδιο των ${items.length} κορυφαίων`}>
-      <circle cx="70" cy="70" r={radius} fill="none" stroke="#eef3f6" strokeWidth="22" />
-      {items.map((item, index) => {
-        const length = circumference * item.value / total;
-        const slice = <circle key={`${item.label}-${index}`} cx="70" cy="70" r={radius} fill="none" stroke={SHARE_COLORS[index % SHARE_COLORS.length]} strokeWidth="22"
-          strokeDasharray={`${Math.max(length - 1.5, 0.5)} ${circumference}`} strokeDashoffset={-offset} transform="rotate(-90 70 70)">
-          <title>{`${item.label}: ${number.format(item.value)} (${(100 * item.value / total).toFixed(1).replace(".", ",")}%)`}</title>
-        </circle>;
-        offset += length;
-        return slice;
-      })}
-      <text x="70" y="68" textAnchor="middle" className="shareDonutTotal">{number.format(total)}</text>
-      <text x="70" y="82" textAnchor="middle" className="shareDonutUnit">{unit}</text>
-    </svg>
-    <p className="shareDonutNote">Μερίδιο των {items.length} κορυφαίων</p>
-  </div>;
-}
+// A faint bar behind a number, as wide as the value relative to the largest in the table.
+const barStyle = (value: number, max: number) => max > 0 ? { backgroundImage: `linear-gradient(90deg, rgba(22,140,140,.28) ${Math.max(4, 100 * value / max)}%, transparent ${Math.max(4, 100 * value / max)}%)` } : undefined;
 
 function OverviewMarket({ data, state }: { data: MarketOverview | null; state: "idle" | "loading" | "error" }) {
   if (state === "error") return <p className="noRows">Δεν υπάρχουν ακόμα υπολογισμένα στοιχεία για αυτό το φίλτρο - δοκίμασε άλλο Έτος ή πρόσθεσε Αναθέτουσα/Διενεργούσα Αρχή, CPV ή Ανάδοχο.</p>;
   if (!data) return <p className="noRows">{state === "loading" ? "Φόρτωση…" : "Δεν υπάρχουν δεδομένα."}</p>;
   if (data.empty) return <p className="noRows">Δεν υπάρχουν δεδομένα για τα τρέχοντα φίλτρα.</p>;
+  const maxContractor = Math.max(0, ...data.topContractors.map((item) => item.total ?? item.awards + item.contracts));
+  const maxAuthority = Math.max(0, ...data.topAuthorities.map((item) => item.tenders));
   return <>
     <MarketCounts data={data} tenders={false} values />
     <div className="overviewTables">
       <article className="panel"><PanelHeader title="Κορυφαίοι ανάδοχοι" caption="Κατά σύνολο αναθέσεων και συμβάσεων" />
-        <div className="tableWithChart"><div className="tableScroll"><table><thead><tr><th>Ανάδοχος</th><th>Σύνολο</th><th>Αναθέσεις</th><th>Συμβάσεις</th><th>Αξία</th></tr></thead>
-          <tbody>{data.topContractors.map((item, index) => <tr key={item.name}><td><i className="shareDot" style={{ background: SHARE_COLORS[index % SHARE_COLORS.length] }} />{item.name}</td><td><b>{number.format(item.total ?? item.awards + item.contracts)}</b></td><td>{number.format(item.awards)}</td><td>{number.format(item.contracts)}</td><td>{euro.format(item.value)}</td></tr>)}</tbody></table>
-          {!data.topContractors.length && <p className="noRows">Δεν υπάρχουν αναθέσεις ή συμβάσεις.</p>}</div>
-          <ShareDonut unit="αναθέσεις & συμβάσεις" items={data.topContractors.map((item) => ({ label: item.name, value: item.total ?? item.awards + item.contracts }))} /></div></article>
+        <div className="tableScroll"><table><thead><tr><th>Ανάδοχος</th><th>Σύνολο</th><th>Αναθέσεις</th><th>Συμβάσεις</th><th>Αξία</th></tr></thead>
+          <tbody>{data.topContractors.map((item) => { const total = item.total ?? item.awards + item.contracts; return <tr key={item.name}><td>{item.name}</td><td className="barCell" style={barStyle(total, maxContractor)}><b>{number.format(total)}</b></td><td>{number.format(item.awards)}</td><td>{number.format(item.contracts)}</td><td>{euro.format(item.value)}</td></tr>; })}</tbody></table>
+          {!data.topContractors.length && <p className="noRows">Δεν υπάρχουν αναθέσεις ή συμβάσεις.</p>}</div></article>
       <article className="panel"><PanelHeader title="Κορυφαίες αναθέτουσες/διενεργούσες αρχές" caption="Κατά αριθμό διαγωνισμών" />
-        <div className="tableWithChart"><div className="tableScroll"><table><thead><tr><th>Αναθέτουσα/Διενεργούσα Αρχή</th><th>Διαγωνισμοί</th><th>Αξία</th></tr></thead>
-          <tbody>{data.topAuthorities.map((item, index) => <tr key={item.authority}><td><i className="shareDot" style={{ background: SHARE_COLORS[index % SHARE_COLORS.length] }} />{item.authority}</td><td>{number.format(item.tenders)}</td><td>{euro.format(item.value)}</td></tr>)}</tbody></table>
-          {!data.topAuthorities.length && <p className="noRows">Δεν υπάρχουν αναθέσεις ή συμβάσεις.</p>}</div>
-          <ShareDonut unit="διαγωνισμοί" items={data.topAuthorities.map((item) => ({ label: item.authority, value: item.tenders }))} /></div></article>
+        <div className="tableScroll"><table><thead><tr><th>Αναθέτουσα/Διενεργούσα Αρχή</th><th>Διαγωνισμοί</th><th>Αξία</th></tr></thead>
+          <tbody>{data.topAuthorities.map((item) => <tr key={item.authority}><td>{item.authority}</td><td className="barCell" style={barStyle(item.tenders, maxAuthority)}><b>{number.format(item.tenders)}</b></td><td>{euro.format(item.value)}</td></tr>)}</tbody></table>
+          {!data.topAuthorities.length && <p className="noRows">Δεν υπάρχουν αναθέσεις ή συμβάσεις.</p>}</div></article>
     </div>
   </>;
 }

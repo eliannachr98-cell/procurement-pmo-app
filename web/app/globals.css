@@ -86,20 +86,5 @@ h1{font-size:22px;letter-spacing:-.5px}.overviewHeading{font-size:16px}.panel h2
 .tenderToolbar select{width:auto;min-width:210px;font-size:12px;padding:5px 8px}
 .tenderToolbar .checkboxRow{white-space:nowrap}
 .tenderToolbar .checkboxRow.disabled{opacity:.55}
-/* Αγορά: the two tables (top contractors / top authorities) are as wide and as tall as the Διαγωνισμοί table - stacked, full width, no inner scroll box. */
-.overviewWrap .overviewTables{grid-template-columns:1fr;gap:14px}
-.overviewWrap .overviewTables .tableScroll{max-height:none;overflow:visible}
-.overviewWrap .overviewTables td{padding:5px 5px}.overviewWrap .overviewTables th{padding:5px 5px}
-.overviewWrap .overviewTables table{table-layout:fixed;width:100%}
-.overviewWrap .overviewTables table th:first-child{width:46%}
-/* Αγορά: narrower tables with a donut (share of the top 10) beside each. */
-.tableWithChart{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(190px,1fr);gap:18px;align-items:center;padding:0 14px 12px}
-.tableWithChart .tableScroll{min-width:0}
-.shareDot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:7px;vertical-align:middle;flex:none}
-.shareDonut{display:grid;justify-items:center;gap:4px}
-.shareDonut svg{width:100%;max-width:190px;height:auto}
-.shareDonutTotal{font-size:18px;font-weight:700;fill:var(--ink)}
-.shareDonutUnit{font-size:7px;fill:var(--muted)}
-.shareDonutNote{margin:0;font-size:10px;color:var(--muted);text-align:center}
-@media(max-width:900px){.tableWithChart{grid-template-columns:1fr}}
-.overviewWrap .overviewTables table th:first-child{width:auto}
+/* Αγορά: faint data bars behind the numbers of the top tables. */
+.barCell{background-repeat:no-repeat;background-position:left center;background-size:100% 70%}
