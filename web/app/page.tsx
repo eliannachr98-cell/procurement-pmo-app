@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type RefObject, type SyntheticEvent } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type RefObject, type SyntheticEvent } from "react";
 import "leaflet/dist/leaflet.css";
 import { LayoutGrid, ClipboardList, TrendingUp, CircleUserRound, Tags, MapPin, Building2, Trophy } from "lucide-react";
 import { captureChartImage, downloadExcel, downloadPdf, type ExportPayload } from "@/lib/exports";
@@ -123,6 +123,14 @@ type DashboardBreakdown = {
 };
 const emptyDashboard: DashboardBreakdown = { total: 0, status: [], cpv: [], cpvTotal: 0, nuts: [], monthly: [] };
 
+type Competitor = {
+  key: string; name: string; awards: number; contracts: number; value: number; lastDate: string | null; unionShare: number | null; avgBudget: number | null;
+  discount: { count: number; average: number | null; median: number | null; positiveShare: number | null };
+  monthly: { month: string; count: number }[];
+  clients: { authority: string; count: number; share: number }[];
+};
+type CompetitorData = { competitors: Competitor[]; common: { authority: string; competitors: number; payments: number; keys: string[] }[] };
+
 type MarketOverview = {
   empty?: boolean;
   tenders: number;
@@ -184,7 +192,7 @@ export default function Home() {
   const [watchlistReady, setWatchlistReady] = useState(false);
   const [contractorWatch, setContractorWatch] = useState<{ contractor_key: string; contractor_label: string | null }[]>([]);
   const [authorityWatch, setAuthorityWatch] = useState<{ authority_name: string }[]>([]);
-  const [competition, setCompetition] = useState<MarketOverview | null>(null);
+  const [competition, setCompetition] = useState<CompetitorData | null>(null);
   const [competitionState, setCompetitionState] = useState<"idle" | "loading" | "error">("idle");
   const [alertsNutsFilter, setAlertsNutsFilter] = useState<NutsFilterItem[]>([]);
   // Same reasoning for Αγορά & Ανταγωνισμός's own local state (drill-down
@@ -504,25 +512,16 @@ export default function Home() {
       });
   }, [authority, contractor, cpv, year, contractType, scopeCodes, scopeAuthorities, scopeContractors, scopeNuts, scopeWaiting]);
 
-  // Ανταγωνισμός is always about the interests. When the switch is on "Τα
-  // ενδιαφέροντά μου" it reuses the Αγορά data; otherwise it fetches its own.
-  const hasInterests = mineCodes.length > 0 || mineAuthorities.length > 0 || trackKeys.length > 0;
-  const competitionNeedsOwnFetch = page === "overview" && Boolean(team.code) && overviewScope === "mine" && watchlistReady && hasInterests;
+  // Ανταγωνισμός is only about the contractors the profile follows (set in Προφίλ),
+  // over the whole market - it does not depend on the CPV / region scope.
+  const competitionNeedsFetch = page === "overview" && Boolean(team.code) && watchlistReady && trackKeys.length > 0;
   const loadCompetition = useCallback(() => {
     const requestId = ++latestCompetitionRequest.current;
     const params = new URLSearchParams();
-    if (authority.trim() && authority !== "Όλες") params.set("authority", authority.trim());
-    contractor.forEach((item) => params.append("contractor", item));
-    cpv.forEach((item) => params.append("cpv", item));
-    mineCodes.forEach((item) => params.append("watchCpv", item));
-    if (mineCodes.length === 0) mineAuthorities.forEach((item) => params.append("watchAuthority", item));
-    trackKeys.forEach((item) => params.append("track", item));
-    if (mineCodes.length === 0) trackKeys.forEach((item) => params.append("watchContractor", item));
-    mineNuts.forEach((item) => params.append("watchNuts", item));
+    trackKeys.forEach((item) => params.append("key", item));
     if (year !== "Όλα") params.set("year", year);
-    contractType.forEach((item) => params.append("contractType", item));
     setCompetitionState("loading");
-    fetch(`/api/market-overview?${params.toString()}`)
+    fetch(`/api/competitors?${params.toString()}`)
       .then((response) => response.ok ? response.json() : Promise.reject(new Error("competition request failed")))
       .then((payload) => {
         if (requestId !== latestCompetitionRequest.current) return;
@@ -534,12 +533,12 @@ export default function Home() {
         setCompetition(null);
         setCompetitionState("error");
       });
-  }, [authority, contractor, cpv, year, contractType, mineCodes, mineAuthorities, trackKeys, mineNuts]);
+  }, [year, trackKeys]);
   useEffect(() => {
-    if (!competitionNeedsOwnFetch || dashboardLoading) return;
-    const timer = window.setTimeout(loadCompetition, 500);
+    if (!competitionNeedsFetch) return;
+    const timer = window.setTimeout(loadCompetition, 300);
     return () => window.clearTimeout(timer);
-  }, [competitionNeedsOwnFetch, loadCompetition, dashboardLoading]);
+  }, [competitionNeedsFetch, loadCompetition]);
 
   useEffect(() => {
     if (page !== "profile" || !team.code || !watchlistReady || !visitBaseline) return;
@@ -894,12 +893,8 @@ export default function Home() {
             <div className="overviewBlock">
             <h2 className="overviewHeading overviewBlockTitle">Αγορά &amp; Ανταγωνισμός</h2>
             <section className="overviewSection"><h3 className="overviewSubheading">Αγορά</h3><OverviewMarket data={marketOverview} state={marketOverviewState} /></section>
-            <section className="overviewSection"><h3 className="overviewSubheading">Ανταγωνισμός <span className="overviewHeadingNote">{team.code && overviewScope === "mine" ? "για όσα ακολουθείς" : ""}</span></h3>
-              {!team.code || overviewScope === "all"
-                ? <OverviewCompetition data={marketOverview} state={marketOverviewState} />
-                : watchlistReady && !hasInterests
-                  ? <p className="noRows">Δεν ακολουθείς ακόμα CPV, αναθέτουσες/διενεργούσες αρχές ή αναδόχους. Πρόσθεσέ τα στο Προφίλ για να δεις τον ανταγωνισμό σου. <button type="button" className="profileLink" onClick={() => setPage("profile")}>Πήγαινε στο Προφίλ →</button></p>
-                  : <OverviewCompetition data={competition} state={competitionState} />}
+            <section className="overviewSection"><h3 className="overviewSubheading">Ανταγωνισμός <span className="overviewHeadingNote">για τους αναδόχους που ακολουθείς</span></h3>
+              <OverviewCompetition data={competition} state={competitionState} signedIn={Boolean(team.code)} ready={watchlistReady} hasKeys={trackKeys.length > 0} onProfile={() => setPage("profile")} />
             </section>
             <div className="overviewJump"><button type="button" onClick={() => setPage("market")}>Δες Αγορά &amp; Ανταγωνισμός →</button></div>
             </div>
@@ -1186,24 +1181,57 @@ function OverviewMarket({ data, state }: { data: MarketOverview | null; state: "
   </>;
 }
 
-function OverviewCompetition({ data, state }: { data: MarketOverview | null; state: "idle" | "loading" | "error" }) {
-  if (state === "error") return <p className="noRows">Δεν υπάρχουν ακόμα υπολογισμένα στοιχεία για αυτό το φίλτρο - δοκίμασε άλλο Έτος ή πρόσθεσε Αναθέτουσα/Διενεργούσα Αρχή, CPV ή Ανάδοχο.</p>;
-  if (!data) return <p className="noRows">{state === "loading" ? "Φόρτωση…" : "Δεν υπάρχουν δεδομένα."}</p>;
-  if (data.empty) return <p className="noRows">Δεν υπάρχουν δεδομένα για τα τρέχοντα φίλτρα.</p>;
-  const discount = data.discount;
+function OverviewCompetition({ data, state, signedIn, ready, hasKeys, onProfile }: { data: CompetitorData | null; state: "idle" | "loading" | "error"; signedIn: boolean; ready: boolean; hasKeys: boolean; onProfile: () => void }) {
+  const [open, setOpen] = useState<string | null>(null);
+  if (!signedIn) return <p className="noRows">Συνδέσου και πρόσθεσε αναδόχους στο Προφίλ για να δεις τον ανταγωνισμό τους.</p>;
+  if (ready && !hasKeys) return <p className="noRows">Δεν ακολουθείς ακόμα κάποιον ανάδοχο. Πρόσθεσέ τους στο Προφίλ. <button type="button" className="profileLink" onClick={onProfile}>Πήγαινε στο Προφίλ →</button></p>;
+  if (state === "error") return <p className="noRows">Δεν φορτώθηκαν τα στοιχεία των αναδόχων - δοκίμασε ξανά.</p>;
+  if (!data) return <p className="noRows">Φόρτωση…</p>;
+  const total = data.competitors.reduce((sum, item) => sum + item.value, 0);
+  const nameOf = (key: string) => data.competitors.find((item) => item.key === key)?.name ?? key;
+  // The last 24 months, oldest first, so every row's mini chart lines up.
+  const months = Array.from({ length: 24 }, (_, index) => {
+    const date = new Date();
+    date.setDate(1);
+    date.setMonth(date.getMonth() - (23 - index));
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+  });
   return <>
-    <MarketCounts data={data} />
-    <div className="metrics statusMetrics">
-      <Metric label="Μέση έκπτωση" value={percentText(discount.average)} tone="sky" />
-      <Metric label="Διάμεση έκπτωση" value={percentText(discount.median)} tone="mint" />
-      <Metric label="Με έκπτωση πάνω από 0%" value={percentText(discount.positiveShare)} tone="lilac" />
-      <Metric label="Μερίδιο 5 κορυφαίων" value={data.concentrationTop5 === null ? "—" : percentText(data.concentrationTop5 * 100)} tone="sand" />
-    </div>
-    {data.tracked !== undefined && <article className="panel overviewBigFour"><PanelHeader title="Ανταγωνιστές που ακολουθείς" caption="Αναθέσεις, συμβάσεις, αξία και μέση έκπτωση για τα τρέχοντα φίλτρα και τα CPV/αρχές σου" />
-      {data.tracked.length === 0
-        ? <p className="noRows">Δεν ακολουθείς κάποιον ανάδοχο ακόμα. Πρόσθεσέ τους στο Προφίλ.</p>
-        : <div className="tableScroll"><table><thead><tr><th>Ανάδοχος</th><th>Αναθέσεις</th><th>Συμβάσεις</th><th>Αξία</th><th>Μέση έκπτωση</th></tr></thead>
-          <tbody>{data.tracked.map((item) => <tr key={item.key}><td><b>{item.name}</b></td><td>{number.format(item.awards)}</td><td>{number.format(item.contracts)}</td><td>{euro.format(item.value)}</td><td>{percentText(item.discount)}</td></tr>)}</tbody></table></div>}
+    <article className="panel overviewBigFour"><PanelHeader title="Ανάδοχοι που ακολουθείς" caption="Σε όλη την αγορά · η αξία των ενώσεων μοιράζεται στα μέλη · πάτα μια γραμμή για λεπτομέρειες" />
+      <div className="tableScroll"><table><thead><tr><th>Ανάδοχος</th><th>Αναθέσεις</th><th>Συμβάσεις</th><th>Αξία</th><th title="Μερίδιο στην αξία των αναδόχων που ακολουθείς">Μερίδιο</th><th title="Μέσος όρος έκπτωσης σε σχέση με τον Π/Υ, όπου υπολογίζεται">Μέση έκπτωση</th><th>Διάμεση</th><th title="Ποσοστό των διαγωνισμών του με έκπτωση πάνω από 0%">Με έκπτωση</th><th>Μέσος Π/Υ</th><th>Τελευταία</th></tr></thead>
+        <tbody>{data.competitors.map((item) => {
+          const isOpen = open === item.key;
+          const counts = new Map(item.monthly.map((entry) => [entry.month, entry.count]));
+          const maxCount = Math.max(1, ...months.map((month) => counts.get(month) ?? 0));
+          return <Fragment key={item.key}>
+            <tr className="competitorRow" onClick={() => setOpen(isOpen ? null : item.key)} aria-expanded={isOpen}>
+              <td><b>{isOpen ? "▾ " : "▸ "}{item.name}</b></td>
+              <td>{number.format(item.awards)}</td><td>{number.format(item.contracts)}</td><td>{item.value > 0 ? euro.format(item.value) : "—"}</td>
+              <td>{total > 0 ? percentText(100 * item.value / total) : "—"}</td>
+              <td>{percentText(item.discount.average)}</td><td>{percentText(item.discount.median)}</td><td>{percentText(item.discount.positiveShare)}</td>
+              <td>{item.avgBudget ? euro.format(item.avgBudget) : "—"}</td><td>{item.lastDate ? formatDate(item.lastDate) : "—"}</td>
+            </tr>
+            {isOpen && <tr className="competitorDetail"><td colSpan={10}><div className="competitorDetailGrid">
+              <div><h4>Πελάτες</h4>
+                {item.clients.length === 0 ? <p className="noRows">Δεν υπάρχουν αναθέσεις ή συμβάσεις.</p> : <ul className="clientList">{item.clients.map((client) => <li key={client.authority}><span>{client.authority}</span><b>{number.format(client.count)}</b><em>{percentText(client.share)}</em></li>)}</ul>}
+              </div>
+              <div><h4>Πορεία ανά μήνα <small>(αναθέσεις και συμβάσεις, τελευταίοι 24 μήνες)</small></h4>
+                <div className="miniBars" role="img" aria-label="Αναθέσεις και συμβάσεις ανά μήνα">{months.map((month) => {
+                  const count = counts.get(month) ?? 0;
+                  return <i key={month} title={`${monthLabel(month)}: ${number.format(count)}`} style={{ height: `${count === 0 ? 2 : Math.max(8, 100 * count / maxCount)}%` }} />;
+                })}</div>
+                <p className="miniBarsAxis"><span>{monthLabel(months[0])}</span><span>{monthLabel(months[months.length - 1])}</span></p>
+              </div>
+              <div><h4>Ενώσεις</h4>
+                <p className="competitorUnion">{item.unionShare === null ? "—" : percentText(item.unionShare)} <span>των αναθέσεων και συμβάσεών του έγιναν σε ένωση εταιρειών.</span></p>
+              </div>
+            </div></td></tr>}
+          </Fragment>;
+        })}</tbody></table></div>
+    </article>
+    {data.competitors.length > 1 && <article className="panel overviewBigFour"><PanelHeader title="Κοινές αρχές" caption="Αρχές όπου κέρδισαν δύο ή περισσότεροι από όσους ακολουθείς - εκεί ανταγωνίζονται άμεσα" />
+      {data.common.length === 0 ? <p className="noRows">Δεν υπάρχουν αρχές όπου κέρδισαν περισσότεροι από ένας.</p> : <div className="tableScroll"><table><thead><tr><th>Αναθέτουσα/Διενεργούσα Αρχή</th><th>Ανάδοχοι</th><th>Αναθέσεις/Συμβάσεις</th></tr></thead>
+        <tbody>{data.common.map((item) => <tr key={item.authority}><td>{item.authority}</td><td>{item.keys.map(nameOf).join(" · ")}</td><td>{number.format(item.payments)}</td></tr>)}</tbody></table></div>}
     </article>}
   </>;
 }
