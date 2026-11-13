@@ -69,3 +69,5 @@ jobs:
                   cur.execute(f"select public.market_overview_fast({args})", (cpv2,))
                   out = cur.fetchone()[0]
                   print(f"{label}: tenders={out['tenders']} awards={out['awards']} contracts={out['contracts']} in {time.time() - started:.1f}s")
+              cur.execute("select round(sum(amt)), round(sum(coalesce(amt_share, amt))), count(*) filter (where members > 1) from public.market_contractor_facts")
+              print("contractor amounts: full per member / split by members / rows in unions:", cur.fetchone())

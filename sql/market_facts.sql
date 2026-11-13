@@ -43,8 +43,13 @@ create table if not exists public.market_contractor_facts (
   n text not null,
   amt numeric not null,
   kind text not null,
+  members integer not null default 1,
+  amt_share numeric,
   primary key (ckey, n, amt)
 );
+
+alter table public.market_contractor_facts add column if not exists members integer not null default 1;
+alter table public.market_contractor_facts add column if not exists amt_share numeric;
 
 create index if not exists market_contractor_facts_n_idx on public.market_contractor_facts (n);
 create index if not exists market_tender_facts_pub_idx on public.market_tender_facts (publication_date);
@@ -115,6 +120,7 @@ begin
   create index on _da (n);
 
   create temp table _byc on commit drop as
+    select g.*, count(*) over (partition by g.n, g.amt) as members from (
     select ckey, max(contractor_name) as contractor_name, n, amt, min(kind) as kind
     from (
       select coalesce(nullif(trim(rc.contractor_vat), ''), rc.contractor_name) as ckey,
@@ -124,7 +130,8 @@ begin
       where d.amt > 0
     ) dc
     where ckey is not null
-    group by ckey, n, amt;
+    group by ckey, n, amt
+    ) g;
 
   create temp table _disc on commit drop as
     select m.adam, 1 - (min(d.amt) / m.budget) as dsc
@@ -153,8 +160,8 @@ begin
   left join _disc d on d.adam = m.adam;
 
   delete from public.market_contractor_facts;
-  insert into public.market_contractor_facts (ckey, contractor_name, n, amt, kind)
-  select ckey, contractor_name, n, amt, kind from _byc
+  insert into public.market_contractor_facts (ckey, contractor_name, n, amt, kind, members, amt_share)
+  select ckey, contractor_name, n, amt, kind, members, amt / members from _byc
   where n in (select adam from _m);
 
   analyze public.market_tender_facts;
@@ -214,7 +221,7 @@ begin
       select ckey, max(contractor_name) as name,
              count(*) filter (where kind = 'award') as awards,
              count(*) filter (where kind = 'contract') as contracts,
-             sum(amt) as value
+             sum(coalesce(amt_share, amt)) as value
       from mc group by ckey
     ),
     top_contractors as (select * from contractor_totals order by (awards + contracts) desc, value desc limit @@TOPN@@),
@@ -229,7 +236,7 @@ begin
       select k.key, k.ord from unnest(%L::text[]) with ordinality as k(key, ord)
     ),
     track_rows as (
-      select tk.key, d.n, d.amt, min(d.kind) as kind, max(d.contractor_name) as cname
+      select tk.key, d.n, d.amt, sum(coalesce(d.amt_share, d.amt)) as share, min(d.kind) as kind, max(d.contractor_name) as cname
       from track_keys tk
       join mc d on (tk.key ~ '^[0-9]{9}$' and d.ckey = tk.key)
                 or (tk.key !~ '^[0-9]{9}$' and position(translate(upper(tk.key), 'ΆΈΉΊΌΎΏΪΫ', 'ΑΕΗΙΟΥΩΙΥ') in translate(upper(d.contractor_name), 'ΆΈΉΊΌΎΏΪΫ', 'ΑΕΗΙΟΥΩΙΥ')) > 0)
@@ -240,7 +247,7 @@ begin
              max(r.cname) as cname,
              count(*) filter (where r.kind = 'award') as awards,
              count(*) filter (where r.kind = 'contract') as contracts,
-             coalesce(sum(r.amt), 0) as value,
+             coalesce(sum(r.share), 0) as value,
              (select avg(d2.dsc) * 100 from (select distinct r2.n from track_rows r2 where r2.key = tk.key) q join disc d2 on d2.adam = q.n) as discount
       from track_keys tk
       left join track_rows r on r.key = tk.key
