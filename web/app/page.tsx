@@ -611,15 +611,26 @@ export default function Home() {
       setMarked((current) => { const next = new Set(current); if (wasMarked) next.add(adam); else next.delete(adam); return next; });
     });
   };
+  // "Παρακολουθώ": anyone can follow a tender. Signed in, it is saved to the account
+  // (the same table as the old "Ενδιαφέρον", shared by the team) and drives the updates
+  // in Προφίλ; signed out, it is kept in this browser only and moved to the account on sign-in.
+  const [guestFollowed, setGuestFollowed] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    try { const raw = window.localStorage.getItem("tenderscope_followed"); if (raw) setGuestFollowed(new Set(JSON.parse(raw) as string[])); } catch { /* storage unavailable */ }
+  }, []);
+  const followed = team.code ? markedInterested : guestFollowed;
+  const toggleFollow = (adam: string) => {
+    if (team.code) { toggleMark("interest", adam); return; }
+    setGuestFollowed((current) => {
+      const next = new Set(current);
+      if (next.has(adam)) next.delete(adam); else next.add(adam);
+      try { window.localStorage.setItem("tenderscope_followed", JSON.stringify([...next])); } catch { /* storage unavailable */ }
+      return next;
+    });
+  };
   const tenderMarks: TenderMarks = {
-    signedIn: Boolean(team.code),
-    // Offers can be marked only when signed in and looking at "Η Αγορά μου"; the whole-market view has no such column.
-    canMark: Boolean(team.code) && overviewScope === "mine",
-    interested: markedInterested,
-    submitted: markedSubmitted,
-    onInterest: (adam) => toggleMark("interest", adam),
-    onSubmitted: (adam) => toggleMark("submitted", adam),
-    // ΝΕΟ only in "Η Αγορά μου" (signed in); never in "Όλη η Αγορά"
+    followed,
+    onFollow: toggleFollow,
     isNew: (tender) => Boolean(scopeOn && team.code && visitBaseline && tender.publicationDate && tender.publicationDate >= visitBaseline.slice(0, 10)),
   };
 
@@ -630,6 +641,17 @@ export default function Home() {
     headers: { "x-alert-code": team.code ?? "", ...(body ? { "Content-Type": "application/json" } : {}) },
     body: body ? JSON.stringify(body) : undefined,
   }).then((response) => { if (response.status === 401) team.onUnauthorized(); return response.ok; });
+  // On sign-in, what was followed while signed out is moved to the account.
+  useEffect(() => {
+    if (!team.code || guestFollowed.size === 0) return;
+    const adams = [...guestFollowed];
+    Promise.all(adams.map((adam) => interestFetch("/api/alert-interests", "POST", { adam }))).then(() => {
+      setMarkedInterested((current) => new Set([...current, ...adams]));
+      setGuestFollowed(new Set());
+      try { window.localStorage.removeItem("tenderscope_followed"); } catch { /* storage unavailable */ }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [team.code]);
   const addInterestCpv = (option: { value: string; label: string }) => {
     if (alertsWatchlist.some((item) => item.cpv_code === option.value)) return;
     interestFetch("/api/watchlist", "POST", { cpv_code: option.value, cpv_label: option.label })
@@ -760,29 +782,26 @@ export default function Home() {
       (!hideDirectAwards || tender.procedureType !== DIRECT_AWARD_PROCEDURE);
   }), [tenders, query, status, authority, year, contractType, documentType, hideDirectAwards, page]);
 
-  // Sorting and the "only tenders I submitted an offer on" view of Διαγωνισμοί.
+  // Sorting and the "only tenders I follow" view of Διαγωνισμοί.
   const [tenderSort, setTenderSort] = useState<"newest" | "oldest" | "deadlineNear" | "deadlineFar">("newest");
-  const [onlyOffers, setOnlyOffers] = useState(false);
-  // Only meaningful in "Η αγορά μου" (signed in); the whole-market view does not offer it.
-  const showOffersFilter = Boolean(team.code) && overviewScope === "mine";
-  useEffect(() => { if (!showOffersFilter) setOnlyOffers(false); }, [showOffersFilter]);
-  const [offerTenders, setOfferTenders] = useState<Tender[]>([]);
-  const [offerLoading, setOfferLoading] = useState(false);
+  const [onlyFollowed, setOnlyFollowed] = useState(false);
+  const [followedTenders, setFollowedTenders] = useState<Tender[]>([]);
+  const [followedLoading, setFollowedLoading] = useState(false);
   useEffect(() => {
-    if (!onlyOffers || page !== "tenders") return;
-    const adams = [...markedSubmitted].slice(0, 100);
-    if (!adams.length) { setOfferTenders([]); return; }
+    if (!onlyFollowed || page !== "tenders") return;
+    const adams = [...followed].slice(0, 100);
+    if (!adams.length) { setFollowedTenders([]); return; }
     let cancelled = false;
-    setOfferLoading(true);
+    setFollowedLoading(true);
     fetch(`/api/procurement?page=1&pageSize=100&adams=${encodeURIComponent(adams.join(","))}`)
       .then((response) => response.ok ? response.json() : Promise.reject(new Error("offers")))
-      .then((payload) => { if (!cancelled) setOfferTenders(payload.tenders ?? []); })
-      .catch(() => { if (!cancelled) setOfferTenders([]); })
-      .finally(() => { if (!cancelled) setOfferLoading(false); });
+      .then((payload) => { if (!cancelled) setFollowedTenders(payload.tenders ?? []); })
+      .catch(() => { if (!cancelled) setFollowedTenders([]); })
+      .finally(() => { if (!cancelled) setFollowedLoading(false); });
     return () => { cancelled = true; };
-  }, [onlyOffers, page, markedSubmitted]);
+  }, [onlyFollowed, page, followed]);
   const shownTenders = useMemo(() => {
-    const source = onlyOffers ? offerTenders.filter((tender) => markedSubmitted.has(tender.adam)) : filtered;
+    const source = onlyFollowed ? followedTenders.filter((tender) => followed.has(tender.adam)) : filtered;
     const opening = (tender: Tender) => tender.openingDate && !tender.dateIssue ? tender.openingDate : "";
     const published = (tender: Tender) => tender.publicationDate ?? "";
     const desc = (a: string, b: string) => b.localeCompare(a);
@@ -800,7 +819,7 @@ export default function Home() {
       if (tenderSort === "deadlineFar") return byOpening(a, b, -1) || desc(published(a), published(b));
       return desc(published(a), published(b)) || byOpening(a, b, -1);
     });
-  }, [filtered, onlyOffers, offerTenders, markedSubmitted, tenderSort]);
+  }, [filtered, onlyFollowed, followedTenders, followed, tenderSort]);
 
   const documentTypes = Object.entries(documentTypeLabels);
   const statusCount = (value: Status) => dashboard.status.find((item) => item.status === value)?.count ?? 0;
@@ -911,10 +930,10 @@ export default function Home() {
                 <option value="deadlineNear">Πιο κοντινή αποσφράγιση</option>
                 <option value="deadlineFar">Πιο μακρινή αποσφράγιση</option>
               </select></label>
-              {showOffersFilter && <label className="checkboxRow"><input type="checkbox" checked={onlyOffers} onChange={(event) => setOnlyOffers(event.target.checked)} />Μόνο όσα έχω υποβάλει προσφορά</label>}
+              <label className="checkboxRow"><input type="checkbox" checked={onlyFollowed} onChange={(event) => setOnlyFollowed(event.target.checked)} />Μόνο όσα παρακολουθώ</label>
             </div>
-            <TenderTable rows={shownTenders} expanded marks={tenderMarks} loading={onlyOffers ? offerLoading : loading} />
-            {!onlyOffers && hasMore && <button className="viewAll" disabled={loading} onClick={() => loadTenderPage(loadedPage + 1, true)}>
+            <TenderTable rows={shownTenders} expanded marks={tenderMarks} loading={onlyFollowed ? followedLoading : loading} />
+            {!onlyFollowed && hasMore && <button className="viewAll" disabled={loading} onClick={() => loadTenderPage(loadedPage + 1, true)}>
               {loading ? "Φόρτωση…" : `Φόρτωση περισσότερων (${number.format(tenders.length)} από ${number.format(totalTenders)})`}
             </button>}
           </>}
@@ -1232,12 +1251,8 @@ function MonthlyTable({ months }: { months: { month: string; count: number; budg
 }
 
 type TenderMarks = {
-  signedIn: boolean;
-  canMark: boolean;
-  interested: Set<string>;
-  submitted: Set<string>;
-  onInterest: (adam: string) => void;
-  onSubmitted: (adam: string) => void;
+  followed: Set<string>;
+  onFollow: (adam: string) => void;
   isNew: (tender: Tender) => boolean;
 };
 
@@ -1261,8 +1276,8 @@ function TenderTable({ rows, expanded = false, title = "Λίστα διαγων�
     const result: { item: Tender; child: boolean; grouped: boolean; first: boolean; last: boolean; key: string; relatedCount: number }[] = [];
     order.forEach((key) => {
       const members = byKey.get(key) ?? [];
-      const lead = members.find((tender) => marks?.submitted.has(tender.adam))
-        ?? members.find((tender) => marks?.interested.has(tender.adam))
+      const lead = members.find((tender) => marks?.followed.has(tender.adam))
+        ?? members.find((tender) => marks?.followed.has(tender.adam))
         ?? [...members].sort((a, b) => (a.documentType === "declaration" ? 0 : 1) - (b.documentType === "declaration" ? 0 : 1) || byPublication(a, b))[0];
       result.push({ item: lead, child: false, grouped: members.length > 1, first: true, last: members.length === 1, key, relatedCount: members.length - 1 });
       members.filter((tender) => tender !== lead).sort(byPublication).forEach((tender, index, all) => result.push({ item: tender, child: true, grouped: true, first: false, last: index === all.length - 1, key, relatedCount: 0 }));
@@ -1271,7 +1286,7 @@ function TenderTable({ rows, expanded = false, title = "Λίστα διαγων�
   }, [rows, marks]);
   const visibleRows = grouped.filter((entry) => !entry.child || openGroups.has(entry.key));
   if (selected) return <TenderDetail tender={selected} onBack={() => setSelected(null)} />;
-  return <article className={`panel tablePanel ${expanded ? "expanded" : ""}`}><PanelHeader title={title} caption={caption ?? `${number.format(rows.length)} εγγραφές μετά τα φίλτρα`} onDownload={{ filename: title, title, headers: ["ΑΔΑΜ", "Τίτλος", "Αναθέτουσα/Διενεργούσα Αρχή", "CPV", "Περιγραφή CPV", "Π/Υ", "Τύπος σύμβασης", "Τύπος διαδικασίας", "Τύπος εγγράφου", "Κατάσταση", "Δημοσίευση"], rows: rows.map((item) => [item.adam, item.title, item.authority, item.cpv, item.cpvDescription ?? "", item.budget, item.contractType ?? "", item.procedureType ?? "", documentTypeLabels[item.documentType ?? ""] ?? item.documentType ?? "", item.status, item.publicationDate ?? ""]), columnTypes: ["text", "text", "text", "text", "text", "currency", "text", "text", "text", "text", "date"] }} /><div className={`tableScroll${loading ? " tableLoading" : ""}`}>{loading && <div className="tableLoadingNote">Φόρτωση…</div>}<table className="tendersTable"><thead><tr><th>ΑΔΑΜ</th><th>Τίτλος</th><th>Αναθέτουσα/Διενεργούσα Αρχή</th><th>Π/Υ</th><th>Κατάσταση</th><th>Δημοσίευση</th><th>Αποσφράγιση</th>{marks?.canMark && <th>Προσφορά</th>}<th /></tr></thead><tbody>{visibleRows.map(({ item, child, grouped: inGroup, first, key, relatedCount }, index) => { const styled = inGroup && openGroups.has(key); const isLast = visibleRows[index + 1]?.key !== key; return <tr key={item.adam} className={[styled ? "groupRow" : "soloRow", child ? "relatedRow" : "", styled && first ? "groupFirst" : "", isLast ? "groupLast" : ""].filter(Boolean).join(" ")}><td>{child && <small className="relatedLabel" title="Σχετική ειδοποίηση του ίδιου διαγωνισμού">↳ {documentTypeLabels[item.documentType ?? ""] ?? "Σχετικό"}</small>}{!child && relatedCount > 0 && <button type="button" className="groupArrow" aria-expanded={openGroups.has(key)} title={openGroups.has(key) ? "Απόκρυψη σχετικών ειδοποιήσεων" : "Εμφάνιση σχετικών ειδοποιήσεων (παράταση, τροποποίηση)"} onClick={() => toggleGroup(key)}>{openGroups.has(key) ? "▾" : "▸"} {relatedCount}</button>}<AdamCopy adam={item.adam} className="adam adamCopy" />{marks?.isNew(item) && <b className="newBadge">ΝΕΟ</b>}{item.procedureType === DIRECT_AWARD_PROCEDURE && <b className="directAwardBadge directAwardBadgeAdam" title="Απευθείας ανάθεση - όχι ανοιχτός διαγωνισμός">Απευθείας</b>}</td><td>{item.title}</td><td>{item.authority}</td><td>{euro.format(item.budget)}</td><td><span className={`status ${statusTone[item.status]}`}>{item.status}</span></td><td>{formatDate(item.publicationDate)}</td><td>{item.openingDate ? formatDate(item.openingDate) : "—"}{!child && item.extendedOpeningDate && <small className="extendedNote" title="Μετατέθηκε με παράταση">→ {formatDate(item.extendedOpeningDate)}</small>}{item.dateIssue && <span className="dateWarn" title="Η ημερομηνία αποσφράγισης δεν φαίνεται σωστή (πριν τη δημοσίευση ή πάνω από 365 ημέρες μετά)">⚠</span>}</td>{marks?.canMark && <td className="markCell">{!child && <button type="button" className={`tickCircle${marks.submitted.has(item.adam) ? " active" : ""}`} disabled={!marks.signedIn} aria-pressed={marks.submitted.has(item.adam)} aria-label="Υποβλήθηκε προσφορά" title={marks.signedIn ? (marks.submitted.has(item.adam) ? "Υποβλήθηκε προσφορά (πάτα για αναίρεση)" : "Σήμανση ότι υποβλήθηκε προσφορά") : "Συνδέσου για να σημειώσεις προσφορά"} onClick={() => marks.onSubmitted(item.adam)}>{marks.submitted.has(item.adam) ? "✓" : ""}</button>}</td>}<td>{!child && <button className="view" aria-label={`Προβολή ${item.adam}`} onClick={() => setSelected(item)}>→</button>}</td></tr>; })}</tbody></table></div>{!rows.length && <p className="noRows">Δεν βρέθηκαν διαγωνισμοί για τα επιλεγμένα φίλτρα.</p>}{onViewAll && <button className="viewAll" onClick={onViewAll}>Προβολή όλων των διαγωνισμών →</button>}</article>;
+  return <article className={`panel tablePanel ${expanded ? "expanded" : ""}`}><PanelHeader title={title} caption={caption ?? `${number.format(rows.length)} εγγραφές μετά τα φίλτρα`} onDownload={{ filename: title, title, headers: ["ΑΔΑΜ", "Τίτλος", "Αναθέτουσα/Διενεργούσα Αρχή", "CPV", "Περιγραφή CPV", "Π/Υ", "Τύπος σύμβασης", "Τύπος διαδικασίας", "Τύπος εγγράφου", "Κατάσταση", "Δημοσίευση"], rows: rows.map((item) => [item.adam, item.title, item.authority, item.cpv, item.cpvDescription ?? "", item.budget, item.contractType ?? "", item.procedureType ?? "", documentTypeLabels[item.documentType ?? ""] ?? item.documentType ?? "", item.status, item.publicationDate ?? ""]), columnTypes: ["text", "text", "text", "text", "text", "currency", "text", "text", "text", "text", "date"] }} /><div className={`tableScroll${loading ? " tableLoading" : ""}`}>{loading && <div className="tableLoadingNote">Φόρτωση…</div>}<table className="tendersTable"><thead><tr><th>ΑΔΑΜ</th><th>Τίτλος</th><th>Αναθέτουσα/Διενεργούσα Αρχή</th><th>Π/Υ</th><th>Κατάσταση</th><th>Δημοσίευση</th><th>Αποσφράγιση</th>{marks && <th title="Παρακολουθώ">★</th>}<th /></tr></thead><tbody>{visibleRows.map(({ item, child, grouped: inGroup, first, key, relatedCount }, index) => { const styled = inGroup && openGroups.has(key); const isLast = visibleRows[index + 1]?.key !== key; return <tr key={item.adam} className={[styled ? "groupRow" : "soloRow", child ? "relatedRow" : "", styled && first ? "groupFirst" : "", isLast ? "groupLast" : ""].filter(Boolean).join(" ")}><td>{child && <small className="relatedLabel" title="Σχετική ειδοποίηση του ίδιου διαγωνισμού">↳ {documentTypeLabels[item.documentType ?? ""] ?? "Σχετικό"}</small>}{!child && relatedCount > 0 && <button type="button" className="groupArrow" aria-expanded={openGroups.has(key)} title={openGroups.has(key) ? "Απόκρυψη σχετικών ειδοποιήσεων" : "Εμφάνιση σχετικών ειδοποιήσεων (παράταση, τροποποίηση)"} onClick={() => toggleGroup(key)}>{openGroups.has(key) ? "▾" : "▸"} {relatedCount}</button>}<AdamCopy adam={item.adam} className="adam adamCopy" />{marks?.isNew(item) && <b className="newBadge">ΝΕΟ</b>}{item.procedureType === DIRECT_AWARD_PROCEDURE && <b className="directAwardBadge directAwardBadgeAdam" title="Απευθείας ανάθεση - όχι ανοιχτός διαγωνισμός">Απευθείας</b>}</td><td>{item.title}</td><td>{item.authority}</td><td>{euro.format(item.budget)}</td><td><span className={`status ${statusTone[item.status]}`}>{item.status}</span></td><td>{formatDate(item.publicationDate)}</td><td>{item.openingDate ? formatDate(item.openingDate) : "—"}{!child && item.extendedOpeningDate && <small className="extendedNote" title="Μετατέθηκε με παράταση">→ {formatDate(item.extendedOpeningDate)}</small>}{item.dateIssue && <span className="dateWarn" title="Η ημερομηνία αποσφράγισης δεν φαίνεται σωστή (πριν τη δημοσίευση ή πάνω από 365 ημέρες μετά)">⚠</span>}</td>{marks && <td className="markCell">{!child && <button type="button" className={`tickCircle starBtn${marks.followed.has(item.adam) ? " active" : ""}`} aria-pressed={marks.followed.has(item.adam)} aria-label="Παρακολουθώ" title={marks.followed.has(item.adam) ? "Παρακολουθείς αυτόν τον διαγωνισμό (πάτα για διακοπή)" : "Παρακολούθηση διαγωνισμού"} onClick={() => marks.onFollow(item.adam)}>{marks.followed.has(item.adam) ? "★" : "☆"}</button>}</td>}<td>{!child && <button className="view" aria-label={`Προβολή ${item.adam}`} onClick={() => setSelected(item)}>→</button>}</td></tr>; })}</tbody></table></div>{!rows.length && <p className="noRows">Δεν βρέθηκαν διαγωνισμοί για τα επιλεγμένα φίλτρα.</p>}{onViewAll && <button className="viewAll" onClick={onViewAll}>Προβολή όλων των διαγωνισμών →</button>}</article>;
 }
 
 function TenderDetail({ tender, onBack }: { tender: Tender; onBack: () => void }) {

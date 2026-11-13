@@ -89,3 +89,7 @@ h1{font-size:22px;letter-spacing:-.5px}.overviewHeading{font-size:16px}.panel h2
 /* Αγορά: all contractors / authorities of the scope in a slightly taller, scrollable table with a pill-shaped data bar. */
 .overviewWrap .overviewTables .tableScroll{max-height:340px}
 .overviewWrap .overviewTables thead th{position:sticky;top:0;z-index:2;background:#f4f8fa}
+/* Παρακολουθώ star in the tender list */
+.tickCircle.starBtn{color:#9aa7ae;font-size:14px;border-width:1.5px}
+.tickCircle.starBtn:hover{border-color:#d7952f;color:#d7952f}
+.tickCircle.starBtn.active{background:#fff6e2;border-color:#d7952f;color:#d7952f}
