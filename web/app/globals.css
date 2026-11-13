@@ -86,14 +86,6 @@ h1{font-size:22px;letter-spacing:-.5px}.overviewHeading{font-size:16px}.panel h2
 .tenderToolbar select{width:auto;min-width:210px;font-size:12px;padding:5px 8px}
 .tenderToolbar .checkboxRow{white-space:nowrap}
 .tenderToolbar .checkboxRow.disabled{opacity:.55}
-/* Αγορά: faint data bars behind the numbers of the top tables. */
 /* Αγορά: all contractors / authorities of the scope in a slightly taller, scrollable table with a pill-shaped data bar. */
 .overviewWrap .overviewTables .tableScroll{max-height:340px}
 .overviewWrap .overviewTables thead th{position:sticky;top:0;z-index:2;background:#f4f8fa}
-.barCell{position:relative}
-.barCell::before{content:"";position:absolute;left:8px;top:22%;bottom:22%;width:calc((100% - 16px) * var(--w,0));border-radius:6px;background:linear-gradient(90deg,rgba(22,140,140,.10),rgba(22,140,140,.30));z-index:0}
-.barCell>*{position:relative;z-index:1}
-/* Αγορά: a thin line under the name, as long as the main number relative to the largest row (replaces the pill behind the number). */
-.overviewWrap .overviewTables td.nameBar{position:relative;padding-bottom:8px}
-.overviewWrap .overviewTables td.nameBar::after{content:"";position:absolute;left:8px;bottom:3px;height:3px;width:calc((100% - 16px) * var(--w,0));border-radius:3px;background:linear-gradient(90deg,#7fc4c4,#168c8c)}
-.barCell::before{display:none}
