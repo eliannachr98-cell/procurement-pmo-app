@@ -86,3 +86,9 @@ h1{font-size:22px;letter-spacing:-.5px}.overviewHeading{font-size:16px}.panel h2
 .tenderToolbar select{width:auto;min-width:210px;font-size:12px;padding:5px 8px}
 .tenderToolbar .checkboxRow{white-space:nowrap}
 .tenderToolbar .checkboxRow.disabled{opacity:.55}
+/* Αγορά: the two tables (top contractors / top authorities) are as wide and as tall as the Διαγωνισμοί table - stacked, full width, no inner scroll box. */
+.overviewWrap .overviewTables{grid-template-columns:1fr;gap:14px}
+.overviewWrap .overviewTables .tableScroll{max-height:none;overflow:visible}
+.overviewWrap .overviewTables td{padding:5px 5px}.overviewWrap .overviewTables th{padding:5px 5px}
+.overviewWrap .overviewTables table{table-layout:fixed;width:100%}
+.overviewWrap .overviewTables table th:first-child{width:46%}
