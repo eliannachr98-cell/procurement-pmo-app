@@ -1,1 +1,0 @@
-select ckey, contractor_name, count(*) as rows_n from public.market_contractor_facts where contractor_name ilike '%ΣΕΛΙ%' or contractor_name ilike '%ΦΟΙ ΣΕΛ%' group by ckey, contractor_name order by rows_n desc limit 10;

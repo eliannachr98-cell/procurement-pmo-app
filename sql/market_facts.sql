@@ -119,18 +119,28 @@ begin
     select n, amt, min(kind) as kind from _doc where amt > 0 group by n, amt;
   create index on _da (n);
 
+  create temp table _dc on commit drop as
+    select coalesce(nullif(trim(rc.contractor_vat), ''), rc.contractor_name) as ckey,
+           rc.contractor_name, d.n, d.amt, d.kind
+    from _doc d
+    join public.record_contractors_compact rc on rc.record_adam = d.adam and rc.record_type = d.kind
+    where d.amt > 0;
+  delete from _dc where ckey is null;
+
+  -- One company is often spelled in many ways in the source (full name, "Α.Ε.",
+  -- typos). The name shown is the most frequent spelling per key, not the
+  -- alphabetically last one.
+  create temp table _names on commit drop as
+    select distinct on (ckey) ckey, contractor_name
+    from (select ckey, contractor_name, count(*) as c from _dc where contractor_name is not null group by ckey, contractor_name) x
+    order by ckey, c desc, length(contractor_name), contractor_name;
+
   create temp table _byc on commit drop as
     select g.*, count(*) over (partition by g.n, g.amt) as members from (
-    select ckey, max(contractor_name) as contractor_name, n, amt, min(kind) as kind
-    from (
-      select coalesce(nullif(trim(rc.contractor_vat), ''), rc.contractor_name) as ckey,
-             rc.contractor_name, d.n, d.amt, d.kind
-      from _doc d
-      join public.record_contractors_compact rc on rc.record_adam = d.adam and rc.record_type = d.kind
-      where d.amt > 0
-    ) dc
-    where ckey is not null
-    group by ckey, n, amt
+    select d.ckey, coalesce(max(nm.contractor_name), max(d.contractor_name)) as contractor_name, d.n, d.amt, min(d.kind) as kind
+    from _dc d
+    left join _names nm on nm.ckey = d.ckey
+    group by d.ckey, d.n, d.amt
     ) g;
 
   create temp table _disc on commit drop as
