@@ -1,11 +1,13 @@
-select 'multi-contractor records (award)' as what, count(*) as n from (select record_adam from public.record_contractors_compact where record_type = 'award' group by record_adam having count(*) > 1) t
+select 'contractor rows (n, amt, contractor)' as what, count(*) as n from public.market_contractor_facts
 union all
-select 'multi-contractor records (contract)', count(*) from (select record_adam from public.record_contractors_compact where record_type = 'contract' group by record_adam having count(*) > 1) t
+select 'distinct (n, amt) payments', count(*) from (select 1 from public.market_contractor_facts group by n, amt) t
 union all
-select 'single-row records (award+contract)', count(*) from (select record_adam from public.record_contractors_compact group by record_adam having count(*) = 1) t
+select '(n, amt) with more than one contractor', count(*) from (select 1 from public.market_contractor_facts group by n, amt having count(*) > 1) t
 union all
-select 'names with ΕΝΩΣΗ/ΚΟΙΝΟΠΡΑΞΙΑ/Κ/Ξ/ΣΥΜΠΡΑΞΗ', count(*) from public.record_contractors_compact where contractor_name ~* '(ΕΝΩΣΗ|ΚΟΙΝΟΠΡΑΞΙΑ|Κ/Ξ|ΣΥΜΠΡΑΞΗ|JOINT VENTURE)'
+select 'rows with ΕΝΩΣΗ/ΚΟΙΝΟΠΡΑΞΙΑ/Κ/Ξ/ΣΥΜΠΡΑΞΗ in name', count(*) from public.market_contractor_facts where contractor_name ~* '(ΕΝΩΣΗ|ΚΟΙΝΟΠΡΑΞΙΑ|Κ/Ξ|ΣΥΜΠΡΑΞΗ|JOINT VENTURE)'
 union all
-select 'distinct such names', count(distinct contractor_name) from public.record_contractors_compact where contractor_name ~* '(ΕΝΩΣΗ|ΚΟΙΝΟΠΡΑΞΙΑ|Κ/Ξ|ΣΥΜΠΡΑΞΗ|JOINT VENTURE)'
+select 'such rows whose key is not a 9-digit VAT', count(*) from public.market_contractor_facts where contractor_name ~* '(ΕΝΩΣΗ|ΚΟΙΝΟΠΡΑΞΙΑ|Κ/Ξ|ΣΥΜΠΡΑΞΗ|JOINT VENTURE)' and ckey !~ '^[0-9]{9}$'
 union all
-select 'union-named rows without VAT', count(*) from public.record_contractors_compact where contractor_name ~* '(ΕΝΩΣΗ|ΚΟΙΝΟΠΡΑΞΙΑ|Κ/Ξ|ΣΥΜΠΡΑΞΗ|JOINT VENTURE)' and (contractor_vat is null or trim(contractor_vat) = '');
+select 'sum of amounts counted per contractor', round(sum(amt)) from public.market_contractor_facts
+union all
+select 'sum of amounts counted once per payment', round(sum(a)) from (select max(amt) as a from public.market_contractor_facts group by n, amt) t;
