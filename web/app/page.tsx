@@ -807,15 +807,20 @@ export default function Home() {
   const statusBudget = (value: Status) => dashboard.status.find((item) => item.status === value)?.budget ?? 0;
   const totalBudget = dashboard.status.reduce((sum, item) => sum + item.budget, 0);
 
-  const scopeBar = team.code ? (
+  // The switch is always shown. "Η Αγορά μου" needs a sign-in and saved CPV preferences; until then the whole market is shown with a note saying why.
+  const scopeNote = overviewScope !== "mine" ? null
+    : !team.code ? <>Συνδέσου για να δεις την Αγορά σου, με βάση τα CPV και τις περιοχές που αποθηκεύεις στο Προφίλ. Μέχρι τότε εμφανίζεται όλη η αγορά.</>
+    : watchlistReady && alertsWatchlist.length === 0 ? <>{mineNuts.length > 0 ? "Έχεις αποθηκεύσει περιοχές αλλά κανένα CPV." : "Δεν έχεις αποθηκεύσει προτιμήσεις (CPV και περιοχές)."} Πρόσθεσέ τες στο Προφίλ για να δεις την Αγορά σου. Μέχρι τότε εμφανίζεται όλη η αγορά. <button type="button" className="profileLink" onClick={() => setPage("profile")}>Πήγαινε στο Προφίλ →</button></>
+    : null;
+  const scopeBar = (
             <div className="overviewScope">
               <div className="overviewScopeToggle" data-scope={overviewScope} role="group" aria-label="Εύρος Διαγωνισμών και Αγοράς"><span className="scopeThumb" aria-hidden="true" />
                 <button type="button" className={overviewScope === "all" ? "active" : ""} onClick={() => setOverviewScope("all")}>Όλη η Αγορά</button>
                 <button type="button" className={overviewScope === "mine" ? "active" : ""} onClick={() => setOverviewScope("mine")}>Η Αγορά μου</button>
               </div>
-              {overviewScope === "mine" && watchlistReady && alertsWatchlist.length === 0 && <p className="overviewScopeNote">Δεν έχεις ορίσει CPV: εμφανίζεται όλη η αγορά.</p>}
+              {scopeNote && <p className="overviewScopeNote">{scopeNote}</p>}
             </div>
-  ) : null;
+  );
 
   return (
     <main className="shell">
