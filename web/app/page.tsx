@@ -514,7 +514,7 @@ export default function Home() {
 
   // Ανταγωνισμός is only about the contractors the profile follows (set in Προφίλ),
   // over the whole market - it does not depend on the CPV / region scope.
-  const competitionNeedsFetch = page === "overview" && Boolean(team.code) && watchlistReady && trackKeys.length > 0;
+  const competitionNeedsFetch = page === "overview" && overviewScope === "mine" && Boolean(team.code) && watchlistReady && trackKeys.length > 0;
   const loadCompetition = useCallback(() => {
     const requestId = ++latestCompetitionRequest.current;
     const params = new URLSearchParams();
@@ -893,9 +893,9 @@ export default function Home() {
             <div className="overviewBlock">
             <h2 className="overviewHeading overviewBlockTitle">Αγορά &amp; Ανταγωνισμός</h2>
             <section className="overviewSection"><h3 className="overviewSubheading">Αγορά</h3><OverviewMarket data={marketOverview} state={marketOverviewState} /></section>
-            <section className="overviewSection"><h3 className="overviewSubheading">Ανταγωνισμός <span className="overviewHeadingNote">για τους αναδόχους που ακολουθείς</span></h3>
+            {overviewScope === "mine" && <section className="overviewSection"><h3 className="overviewSubheading">Ανταγωνισμός <span className="overviewHeadingNote">για τους αναδόχους που ακολουθείς</span></h3>
               <OverviewCompetition data={competition} state={competitionState} signedIn={Boolean(team.code)} ready={watchlistReady} hasKeys={trackKeys.length > 0} onProfile={() => setPage("profile")} />
-            </section>
+            </section>}
             <div className="overviewJump"><button type="button" onClick={() => setPage("market")}>Δες Αγορά &amp; Ανταγωνισμός →</button></div>
             </div>
             </div>
