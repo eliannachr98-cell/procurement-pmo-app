@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject, type SyntheticEvent } from "react";
 import "leaflet/dist/leaflet.css";
-import { LayoutGrid, ClipboardList, TrendingUp, Bell, CircleUserRound, Tags, MapPin, Building2, Trophy } from "lucide-react";
+import { LayoutGrid, ClipboardList, TrendingUp, CircleUserRound, Tags, MapPin, Building2, Trophy } from "lucide-react";
 import { captureChartImage, downloadExcel, downloadPdf, type ExportPayload } from "@/lib/exports";
 import type { Apodeltiosi } from "@/lib/apodeltiosi";
 
@@ -84,7 +84,6 @@ const navItems = [
   ["overview", LayoutGrid, "Επισκόπηση"],
   ["tenders", ClipboardList, "Διαγωνισμοί"],
   ["market", TrendingUp, "Αγορά & Ανταγωνισμός"],
-  ["alerts", Bell, "Παρακολούθηση"],
   ["profile", CircleUserRound, "Προφίλ"],
 ] as const;
 
@@ -227,17 +226,14 @@ export default function Home() {
   // AlertsPanelContent's own load() already uses. The same response also
   // feeds the nav bell badge (count of matches published in the last 7
   // days, not yet awarded - the same window the "Πρόσφατοι" tab uses).
-  const [recentAlertCount, setRecentAlertCount] = useState(0);
   // Submitted/interested counts and the email recipient list are also only
   // ever loaded inside AlertsPanelContent otherwise - fetched here too so
   // Προφίλ has them without requiring a prior visit to Παρακολούθηση.
-  const [submittedCount, setSubmittedCount] = useState(0);
   const [interestedCount, setInterestedCount] = useState(0);
-  const [profileRecipients, setProfileRecipients] = useState<{ email: string }[]>([]);
   useEffect(() => {
     if (!team.code) {
-      setAlertsWatchlist([]); setAlertsNutsFilter([]); setRecentAlertCount(0);
-      setSubmittedCount(0); setInterestedCount(0); setProfileRecipients([]);
+      setAlertsWatchlist([]); setAlertsNutsFilter([]);
+      setInterestedCount(0);
       setWatchlistReady(false); setContractorWatch([]); setAuthorityWatch([]);
       return;
     }
@@ -262,11 +258,6 @@ export default function Home() {
       .then((payload) => {
         if (payload.watchlist?.length) setAlertsWatchlist(payload.watchlist);
         setAlertsNutsFilter(payload.nutsFilter ?? []);
-        const sevenDaysAgo = Date.now() - 7 * 86400000;
-        const count = (payload.alerts ?? []).filter((item: { hasAward: boolean; publicationDate: string | null }) =>
-          !item.hasAward && item.publicationDate && new Date(item.publicationDate).getTime() >= sevenDaysAgo,
-        ).length;
-        setRecentAlertCount(count);
       })
       .catch(() => {});
     // A single real tender is often published as BOTH a Διακήρυξη and a
@@ -283,7 +274,7 @@ export default function Home() {
       const submittedAdamsList: string[] = (submissions.items ?? []).map((item: { adam: string }) => item.adam);
       const interestedAdamsList: string[] = (interests.items ?? []).map((item: { adam: string }) => item.adam);
       const allAdams = [...new Set([...submittedAdamsList, ...interestedAdamsList])];
-      if (!allAdams.length) { setSubmittedCount(0); setInterestedCount(0); return; }
+      if (!allAdams.length) { setInterestedCount(0); return; }
       const params = new URLSearchParams();
       allAdams.forEach((adam) => params.append("adam", adam));
       fetch(`/api/alert-tenders?${params.toString()}`)
@@ -295,15 +286,10 @@ export default function Home() {
             const keys = new Set(items.filter((item) => submittedSet.has(item.adam)).map((item) => `${item.authority}|${item.budget}`));
             return keys.size;
           };
-          setSubmittedCount(distinctTenderKey(submittedAdamsList));
           setInterestedCount(distinctTenderKey(interestedAdamsList));
         })
         .catch(() => {});
     }).catch(() => {});
-    fetch("/api/alert-recipients", { headers })
-      .then((response) => response.ok ? response.json() : { items: [] })
-      .then((payload) => setProfileRecipients(payload.items ?? []))
-      .catch(() => {});
   // Re-runs on login AND every time Προφίλ is opened (not just once) -
   // otherwise a submission/interest marked elsewhere mid-session left these
   // counts stuck at whatever they were when she first logged in.
@@ -712,7 +698,6 @@ export default function Home() {
   // database is not asked for three heavy things at once. dashboardLoading is
   // raised right away so the other blocks wait for it.
   useEffect(() => {
-    if (pageRef.current === "alerts") return;
     setDashboardLoading(true);
     const timer = window.setTimeout(loadDashboard, 500);
     return () => window.clearTimeout(timer);
@@ -854,7 +839,6 @@ export default function Home() {
               <button key={id} className={page === id ? "active" : ""} onClick={() => setPage(id)}>
                 <span>
                   <Icon size={16} strokeWidth={2.25} />
-                  {id === "alerts" && recentAlertCount > 0 && <i className="navBadge">{recentAlertCount > 9 ? "9+" : recentAlertCount}</i>}
                 </span>{label}
               </button>
             ))}
@@ -882,7 +866,7 @@ export default function Home() {
           {(page === "overview" || page === "tenders") && scopeBar}
         </div>
       </div>
-      <div className={`workspace${page === "alerts" || page === "profile" ? " workspaceFull" : ""}${page === "tenders" || page === "overview" ? " tendersWorkspace" : ""}`}>
+      <div className={`workspace${page === "profile" ? " workspaceFull" : ""}${page === "tenders" || page === "overview" ? " tendersWorkspace" : ""}`}>
         <section className="content">
           {loading && tenders.length === 0 && <div className="dataBanner">Φόρτωση πραγματικών δεδομένων από Supabase…</div>}
           {dataError && <div className="dataBanner error">{dataError} · εμφανίζεται προσωρινό δείγμα.</div>}
@@ -938,7 +922,6 @@ export default function Home() {
             </button>}
           </>}
           {page === "market" && <MarketPanel awards={awards} contracts={contracts} cpv={cpv} contractor={contractor} authority={authority} year={year} contractType={contractType} documentType={documentType} loadedCount={tenders.length} totalCount={totalTenders} stillLoading={hasMore && loading} locked={!team.code} selectedContractor={marketSelectedContractor} setSelectedContractor={setMarketSelectedContractor} contractorSearch={marketContractorSearch} setContractorSearch={setMarketContractorSearch} visibleCount={marketVisibleCount} setVisibleCount={setMarketVisibleCount} />}
-          {page === "alerts" && <AlertsPanelContent key={team.code ?? "free"} code={team.code ?? null} onEditInterests={() => setPage("profile")} onUnauthorized={team.onUnauthorized} watchlist={alertsWatchlist} setWatchlist={setAlertsWatchlist} nutsFilter={alertsNutsFilter} setNutsFilter={setAlertsNutsFilter} />}
           {page === "profile" && <div className="profileGrid">
             <article className="panel profileCard profileAccountCard">
               <p className="eyebrow">ΛΟΓΑΡΙΑΣΜΟΣ</p>
@@ -1036,26 +1019,17 @@ export default function Home() {
                 <div className="profileDivider" />
                 <p className="eyebrow">ΔΡΑΣΤΗΡΙΟΤΗΤΑ</p>
                 <div className="metrics profileMetrics">
-                  <Metric label="Υποβεβλημένες προσφορές" value={number.format(submittedCount)} tone="sand" />
-                  <Metric label="Ενδιαφέρον συμμετοχής" value={number.format(interestedCount)} tone="lilac" />
+                  <Metric label="Διαγωνισμοί που παρακολουθώ" value={number.format(interestedCount)} tone="lilac" />
                 </div>
-                <button type="button" className="profileLink" onClick={() => setPage("alerts")}>Πήγαινε στην Παρακολούθηση →</button>
               </> : <p className="watchlistCaption">Συνδέσου για να ορίσεις τι ακολουθείς.</p>}
             </article>
-            <article className="panel profileCard profileEmailCard">
-              <p className="eyebrow">EMAIL</p>
-              <h2>Παραλήπτες ειδοποιήσεων</h2>
-              {team.code ? (profileRecipients.length > 0 ? <ul className="savedViewsList">
-                {profileRecipients.map((item) => <li key={item.email}><span className="profileStat">{item.email}</span></li>)}
-              </ul> : <p className="noRows">Δεν έχει προστεθεί κανένα email ακόμη.</p>) : <p className="watchlistCaption">Συνδέσου για να δεις τους παραλήπτες.</p>}
-              {team.code && <button type="button" className="profileLink" onClick={() => setPage("alerts")}>Διαχείριση παραληπτών →</button>}
-            </article>
+            <ProfileTools code={team.code ?? null} onUnauthorized={team.onUnauthorized} />
           </div>}
         </section>
 
         {/* Ειδοποιήσεις is a CPV watch-list/alert feed, not a filtered view of the
             database - the regular filters don't apply to it at all. */}
-        {page !== "alerts" && page !== "profile" && <aside className="filters">
+        {page !== "profile" && <aside className="filters">
           <div className="filterHeading"><div><span>Φίλτρα</span><small>{page === "overview" ? `${number.format(dashboard.total || totalTenders)} διαγωνισμοί` : `${number.format(tenders.length)} φορτωμένα · ${number.format(dashboard.total || totalTenders)} συνολικά`}</small></div><button title={loading ? "Φόρτωση…" : "Επαναφορά φίλτρων"} onClick={() => { setStatus("Όλες"); setAuthority(""); setContractor([]); setCpv([]); setQuery(""); setYear("Όλα"); setContractType([]); setDocumentType("Όλοι"); setHideDirectAwards(false); }}><span className={loading ? "spinIcon" : ""}>↻</span></button></div>
           <label>Έτος<select value={year} onChange={(event) => setYear(event.target.value)}><option>Όλα</option>{years.map((item) => <option key={item}>{item}</option>)}</select></label>
           <SingleSearchInput label="Αναθέτουσα/Διενεργούσα Αρχή" type="authority" value={authority === "Όλες" ? "" : authority} onChange={setAuthority} placeholder="Γράψε ή επίλεξε αρχή" />
@@ -2219,12 +2193,7 @@ function TeamCodeBar({ team }: { team: ReturnType<typeof useTeamCode> }) {
 // instead of being cleared. watchlist/nutsFilter are passed in from Home
 // instead, so they're unaffected by this remount and by switching tabs away
 // and back.
-function AlertsPanelContent({ code, onUnauthorized, watchlist, setWatchlist, nutsFilter, setNutsFilter, onEditInterests }: {
-  onEditInterests?: () => void;
-  code: string | null; onUnauthorized: () => void;
-  watchlist: WatchlistItem[]; setWatchlist: (value: WatchlistItem[] | ((current: WatchlistItem[]) => WatchlistItem[])) => void;
-  nutsFilter: NutsFilterItem[]; setNutsFilter: (value: NutsFilterItem[] | ((current: NutsFilterItem[]) => NutsFilterItem[])) => void;
-}) {
+function ProfileTools({ code, onUnauthorized }: { code: string | null; onUnauthorized: () => void }) {
   const authFetch = useCallback((url: string, init: RequestInit = {}) => {
     return fetch(url, { ...init, headers: { ...(init.headers as Record<string, string> ?? {}), "x-alert-code": code ?? "" } })
       .then((response) => {
@@ -2233,17 +2202,6 @@ function AlertsPanelContent({ code, onUnauthorized, watchlist, setWatchlist, nut
       });
   }, [code, onUnauthorized]);
 
-  const [alerts, setAlerts] = useState<AlertItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  // Defaults to "recent" (not "active") so landing here from the nav bell
-  // badge - which counts exactly this tab's items - shows what it was
-  // counting immediately, instead of needing an extra click past "Ενεργοί".
-  const [alertTab, setAlertTab] = useState<"recent" | "active" | "inactive">("recent");
-  const [authorityFilter, setAuthorityFilter] = useState<string[]>([]);
-  const [hideDirectAwards, setHideDirectAwards] = useState(false);
-  const [error, setError] = useState("");
-  const [selectedTender, setSelectedTender] = useState<Tender | null>(null);
-  const [loadingTender, setLoadingTender] = useState(false);
   const [recipients, setRecipients] = useState<{ email: string }[]>([]);
   const [newEmail, setNewEmail] = useState("");
   const [recipientError, setRecipientError] = useState("");
@@ -2252,78 +2210,6 @@ function AlertsPanelContent({ code, onUnauthorized, watchlist, setWatchlist, nut
   const [apodeltiosiLoading, setApodeltiosiLoading] = useState(false);
   const [apodeltiosiError, setApodeltiosiError] = useState("");
   const [apodeltiosiResult, setApodeltiosiResult] = useState<Apodeltiosi | null>(null);
-  const [submittedAdams, setSubmittedAdams] = useState<Set<string>>(new Set());
-  const [interestedAdams, setInterestedAdams] = useState<Set<string>>(new Set());
-  const [trackedItems, setTrackedItems] = useState<AlertItem[]>([]);
-
-  const loadSubmissions = useCallback(() => {
-    if (!code) return; // free mode: nothing to load, state starts empty every visit
-    authFetch("/api/alert-submissions")
-      .then((response) => response.ok ? response.json() : { items: [] })
-      .then((payload) => setSubmittedAdams(new Set((payload.items ?? []).map((item: { adam: string }) => item.adam))))
-      .catch(() => setSubmittedAdams(new Set()));
-  }, [authFetch, code]);
-
-  useEffect(() => { loadSubmissions(); }, [loadSubmissions]);
-
-  const toggleSubmitted = (adam: string) => {
-    const isMarked = submittedAdams.has(adam);
-    setSubmittedAdams((current) => {
-      const next = new Set(current);
-      if (isMarked) next.delete(adam); else next.add(adam);
-      return next;
-    });
-    if (!code) return; // free mode: state above is the only record, nothing persisted
-    if (isMarked) {
-      authFetch(`/api/alert-submissions?adam=${encodeURIComponent(adam)}`, { method: "DELETE" }).then(loadSubmissions);
-    } else {
-      authFetch("/api/alert-submissions", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ adam }) }).then(loadSubmissions);
-    }
-  };
-
-  const loadInterests = useCallback(() => {
-    if (!code) return;
-    authFetch("/api/alert-interests")
-      .then((response) => response.ok ? response.json() : { items: [] })
-      .then((payload) => setInterestedAdams(new Set((payload.items ?? []).map((item: { adam: string }) => item.adam))))
-      .catch(() => setInterestedAdams(new Set()));
-  }, [authFetch, code]);
-
-  useEffect(() => { loadInterests(); }, [loadInterests]);
-
-  const toggleInterested = (adam: string) => {
-    const isMarked = interestedAdams.has(adam);
-    setInterestedAdams((current) => {
-      const next = new Set(current);
-      if (isMarked) next.delete(adam); else next.add(adam);
-      return next;
-    });
-    if (!code) return;
-    if (isMarked) {
-      authFetch(`/api/alert-interests?adam=${encodeURIComponent(adam)}`, { method: "DELETE" }).then(loadInterests);
-    } else {
-      authFetch("/api/alert-interests", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ adam }) }).then(loadInterests);
-    }
-  };
-
-  // "Υποβεβλημένες προσφορές"/"Ενδιαφέρον για συμμετοχή" are the user's own
-  // tracked ADAMs, looked up directly - unlike `alerts` (below), which is
-  // scoped to whatever CPVs are currently on the watchlist within a recent
-  // window, so it would otherwise make an already-tracked tender vanish from
-  // these lists the moment its CPV is unwatched.
-  useEffect(() => {
-    const adams = [...new Set([...submittedAdams, ...interestedAdams])];
-    if (!adams.length) { setTrackedItems([]); return; }
-    const params = new URLSearchParams();
-    adams.forEach((adam) => params.append("adam", adam));
-    // Not team-gated: resolving already-known ADAMs to their public ΚΗΜΔΗΣ
-    // details reveals nothing about who's tracking what, so this works the
-    // same in local mode as it does for the team.
-    fetch(`/api/alert-tenders?${params.toString()}`)
-      .then((response) => response.ok ? response.json() : { items: [] })
-      .then((payload) => setTrackedItems(payload.items ?? []))
-      .catch(() => setTrackedItems([]));
-  }, [submittedAdams, interestedAdams]);
 
   const loadRecipients = useCallback(() => {
     if (!code) { setRecipients([]); return; }
@@ -2355,74 +2241,6 @@ function AlertsPanelContent({ code, onUnauthorized, watchlist, setWatchlist, nut
     authFetch(`/api/alert-recipients?email=${encodeURIComponent(email)}`, { method: "DELETE" }).then(loadRecipients);
   };
 
-  // Team mode: single source of truth is the server (/api/alerts with no
-  // params reads the shared watchlist/region tables and returns them
-  // alongside the matching feed) - watchlist/nutsFilter state here just
-  // mirrors whatever it last returned.
-  const load = useCallback(() => {
-    // A cold Vercel/Supabase connection occasionally 500s the first request
-    // right after a page load; one silent retry clears most of those.
-    const attemptFetch = (attempt: number) => {
-      setLoading(true);
-      authFetch("/api/alerts")
-        .then((response) => response.ok ? response.json() : Promise.reject(new Error("alerts request failed")))
-        .then((payload) => { setWatchlist(payload.watchlist ?? []); setNutsFilter(payload.nutsFilter ?? []); setAlerts(payload.alerts ?? []); setError(""); setLoading(false); })
-        .catch(() => {
-          if (attempt < 2) { window.setTimeout(() => attemptFetch(attempt + 1), 900); return; }
-          setError("Δεν ήταν δυνατή η φόρτωση των ειδοποιήσεων.");
-          setLoading(false);
-        });
-    };
-    attemptFetch(0);
-  }, [authFetch]);
-
-  useEffect(() => { if (code) load(); }, [code, load]);
-
-  // Free mode: watchlist/nutsFilter state IS the source of truth (nothing
-  // persisted, nothing to read back) - only the matching-notice feed itself
-  // needs the server, computed straight from whatever's currently in state.
-  // Runs automatically whenever that state changes, so adding/removing a CPV
-  // or region refreshes the results without a separate reload call.
-  const loadLocalAlerts = useCallback(() => {
-    if (!watchlist.length) { setAlerts([]); setError(""); setLoading(false); return; }
-    setLoading(true);
-    const params = new URLSearchParams();
-    watchlist.forEach((item) => params.append("cpv", item.cpv_code));
-    nutsFilter.forEach((item) => params.append("nuts", item.nuts_code));
-    fetch(`/api/alerts?${params.toString()}`)
-      .then((response) => response.ok ? response.json() : Promise.reject(new Error("alerts request failed")))
-      .then((payload) => { setAlerts(payload.alerts ?? []); setError(""); setLoading(false); })
-      .catch(() => { setError("Δεν ήταν δυνατή η φόρτωση των ειδοποιήσεων."); setLoading(false); });
-  }, [watchlist, nutsFilter]);
-
-  useEffect(() => { if (!code) loadLocalAlerts(); }, [code, watchlist, nutsFilter, loadLocalAlerts]);
-
-  // The refresh (↻) button needs one function regardless of mode.
-  const refresh = code ? load : loadLocalAlerts;
-
-  const removeCpv = (cpvCode: string) => {
-    setWatchlist((current) => current.filter((item) => item.cpv_code !== cpvCode));
-    if (!code) return; // free mode: the state update above is the whole story
-    authFetch(`/api/watchlist?cpv_code=${encodeURIComponent(cpvCode)}`, { method: "DELETE" }).then(load);
-  };
-
-  const removeNutsFilter = (nutsCode: string) => {
-    setNutsFilter((current) => current.filter((item) => item.nuts_code !== nutsCode));
-    if (!code) return;
-    authFetch(`/api/alert-nuts-filter?nuts_code=${encodeURIComponent(nutsCode)}`, { method: "DELETE" }).then(load);
-  };
-
-  const openTender = (adam: string) => {
-    setLoadingTender(true);
-    fetch(`/api/procurement?q=${encodeURIComponent(adam)}&pageSize=5`)
-      .then((response) => response.ok ? response.json() : { tenders: [] })
-      .then((payload) => setSelectedTender((payload.tenders ?? []).find((item: Tender) => item.adam === adam) ?? null))
-      .catch(() => setSelectedTender(null))
-      .finally(() => setLoadingTender(false));
-  };
-
-  // Team-only (paid-tier candidate): sends the raw PDF to Claude to read and
-  // extract into the same 6-section structure as the sample doc she supplied.
   const runApodeltiosi = () => {
     if (!apodeltiosiFile) return;
     setApodeltiosiLoading(true);
@@ -2457,107 +2275,7 @@ function AlertsPanelContent({ code, onUnauthorized, watchlist, setWatchlist, nut
       .catch(() => setApodeltiosiError("Η λήψη απέτυχε - δοκίμασε ξανά."));
   };
 
-  if (selectedTender) return <TenderDetail tender={selectedTender} onBack={() => setSelectedTender(null)} />;
-
-  const submittedItems = trackedItems.filter((item) => submittedAdams.has(item.adam));
-  const interestedItems = trackedItems.filter((item) => interestedAdams.has(item.adam));
-
   return <>
-    <div className="alertsTopGrid">
-    <div className="alertsLeftCol">
-    <article className="panel watchlistPanel">
-      <div className="watchlistRow cpvWatchRow">
-        <div className="filterHeading"><div><p className="eyebrow">CPV ALERTS</p><h2>Παρακολούθηση CPV</h2></div><button type="button" title={loading ? "Φόρτωση…" : "Ανανέωση ειδοποιήσεων"} onClick={refresh}><span className={loading ? "spinIcon" : ""}>↻</span></button></div>
-        {code && <div className="interestsReadonly">
-          <p>{watchlist.length ? watchlist.map((item) => item.cpv_label ? `${item.cpv_code} · ${item.cpv_label}` : item.cpv_code).join("  |  ") : "Δεν έχεις ορίσει CPV."}</p>
-          {nutsFilter.length > 0 && <p>Περιοχές: {nutsFilter.map((item) => item.nuts_name ?? item.nuts_code).join(", ")}</p>}
-          <button type="button" className="profileLink" onClick={() => onEditInterests?.()}>Αλλαγή στο Προφίλ →</button>
-        </div>}
-        {!code && <div className="cpvNutsRow">
-          <MultiSearchInput
-            label="CPV"
-            type="cpv"
-            values={watchlist.map((item) => item.cpv_code)}
-            initialLabels={Object.fromEntries(watchlist.map((item) => [item.cpv_code, item.cpv_label ?? item.cpv_code]))}
-            onChange={(nextValues) => {
-              const removed = watchlist.map((item) => item.cpv_code).find((code) => !nextValues.includes(code));
-              if (removed) removeCpv(removed);
-            }}
-            onSelectOption={(option) => {
-              if (!code) {
-                setWatchlist((current) => current.some((item) => item.cpv_code === option.value)
-                  ? current
-                  : [...current, { cpv_code: option.value, cpv_label: option.label }]);
-                return;
-              }
-              authFetch("/api/watchlist", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ cpv_code: option.value, cpv_label: option.label }) })
-                .then(load);
-            }}
-            placeholder="Αναζήτησε κωδικό ή περιγραφή CPV"
-          />
-          <MultiSearchInput
-            label="Περιοχή"
-            type="nuts"
-            values={nutsFilter.map((item) => item.nuts_code)}
-            initialLabels={Object.fromEntries(nutsFilter.map((item) => [item.nuts_code, item.nuts_name ?? item.nuts_code]))}
-            onChange={(nextValues) => {
-              const removed = nutsFilter.map((item) => item.nuts_code).find((code) => !nextValues.includes(code));
-              if (removed) removeNutsFilter(removed);
-            }}
-            onSelectOption={(option) => {
-              if (!code) {
-                setNutsFilter((current) => current.some((item) => item.nuts_code === option.value)
-                  ? current
-                  : [...current, { nuts_code: option.value, nuts_name: option.label }]);
-                return;
-              }
-              authFetch("/api/alert-nuts-filter", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ nuts_code: option.value, nuts_name: option.label }) })
-                .then(load);
-            }}
-            placeholder="π.χ. Αττική - αφήστε κενό για όλη τη χώρα"
-          />
-        </div>}
-      </div>
-      <p className="watchlistCaption">Οι νέοι διαγωνισμοί που δημοσιεύονται σε αυτά τα CPV εμφανίζονται παρακάτω, με αποδελτίωση των βασικών στοιχείων{nutsFilter.length > 0 && ", περιορισμένοι στην περιοχή που επέλεξες"}.</p>
-    </article>
-    <article className="panel submittedPanel">
-      <p className="eyebrow">ΚΑΤΑΤΕΘΕΙΜΕΝΕΣ</p>
-      <h2>Υποβεβλημένες προσφορές</h2>
-      {!submittedItems.length && <p className="noRows">Δεν έχεις σημειώσει ακόμη κάποιον διαγωνισμό ως υποβεβλημένο. Πάτησε «Σήμανση προσφοράς» σε μια κάρτα παρακάτω.</p>}
-      {submittedItems.length > 0 && <ul className="submittedList">
-        {submittedItems.map((item) => <li key={item.adam}>
-          <button type="button" className="submittedTitle" onClick={() => openTender(item.adam)}>{item.title}</button>
-          <span className="submittedMeta">{item.authority}</span>
-          <span className="submittedFacts">
-            <span><b>Τύπος</b>{item.documentType ? (documentTypeLabels[item.documentType] ?? item.documentType) : "—"}</span>
-            <span><b>Π/Υ</b>{euro.format(item.budget)}</span>
-            <span><b>Αποσφράγιση</b>{formatDate(item.openingDate ?? undefined)}</span>
-            <AdamCopy adam={item.adam} label="ΑΔΑΜ" />
-          </span>
-          <button type="button" className="submittedUnmark" onClick={() => toggleSubmitted(item.adam)} aria-label={`Αναίρεση σήμανσης ${item.title}`}>Αναίρεση</button>
-        </li>)}
-      </ul>}
-      <div className="panelDivider">
-        <p className="eyebrow">ΕΝΔΙΑΦΕΡΟΝ</p>
-        <h2>Ενδιαφέρον για συμμετοχή</h2>
-        {!interestedItems.length && <p className="noRows">Δεν έχεις σημειώσει ακόμη κάποιον διαγωνισμό ως ενδιαφέροντα. Πάτησε «Σήμανση ενδιαφέροντος» σε μια κάρτα παρακάτω.</p>}
-        {interestedItems.length > 0 && <ul className="submittedList">
-          {interestedItems.map((item) => <li key={item.adam}>
-            <button type="button" className="submittedTitle" onClick={() => openTender(item.adam)}>{item.title}</button>
-            <span className="submittedMeta">{item.authority}</span>
-            <span className="submittedFacts">
-              <span><b>Τύπος</b>{item.documentType ? (documentTypeLabels[item.documentType] ?? item.documentType) : "—"}</span>
-              <span><b>Π/Υ</b>{euro.format(item.budget)}</span>
-              <span><b>Αποσφράγιση</b>{formatDate(item.openingDate ?? undefined)}</span>
-              <AdamCopy adam={item.adam} label="ΑΔΑΜ" />
-            </span>
-            <button type="button" className="submittedUnmark" onClick={() => toggleInterested(item.adam)} aria-label={`Αναίρεση σήμανσης ${item.title}`}>Αναίρεση</button>
-          </li>)}
-        </ul>}
-      </div>
-    </article>
-    </div>
-    <div className="alertsRightCol">
     {code ? <article className="panel emailPanel">
       <p className="eyebrow">EMAIL</p>
       <h2><span className="emailIcon" aria-hidden="true">✉</span>Ειδοποιήσεις μέσω email</h2>
@@ -2596,8 +2314,6 @@ function AlertsPanelContent({ code, onUnauthorized, watchlist, setWatchlist, nut
       <h2>Ανάλυση Διακήρυξης</h2>
       <p className="watchlistCaption">Για να ανεβάζεις Διακηρύξεις και να παίρνεις αυτόματη αποδελτίωση, συνδέσου ή εγγράψου.</p>
     </article>}
-    </div>
-    </div>
     {apodeltiosiResult && <article className="panel apodeltiosiPanel apodeltiosiResultPanel">
       <div className="apodeltiosiResultHeader">
         <div>
@@ -2679,107 +2395,5 @@ function AlertsPanelContent({ code, onUnauthorized, watchlist, setWatchlist, nut
         <ul className="apodeltiosiList">{apodeltiosiResult.epishmanseis.map((item, i) => <li key={i}>{item}</li>)}</ul>
       </>}
     </article>}
-    {!loading && !watchlist.length && <article className="panel empty"><span>♢</span><h2>Δεν παρακολουθείς κανένα CPV</h2><p>Πρόσθεσε έναν ή περισσότερους κωδικούς CPV παραπάνω για να ξεκινήσεις να βλέπεις εδώ τους νέους διαγωνισμούς που ταιριάζουν.</p></article>}
-    {error && <div className="dataBanner error">{error}</div>}
-    {watchlist.length > 0 && (() => {
-      const isWithinDays = (item: AlertItem, days: number) => item.publicationDate ? (Date.now() - new Date(item.publicationDate).getTime()) < days * 86400000 : false;
-      const authorityTerms = authorityFilter.map((item) => item.toLocaleLowerCase("el"));
-      const scoped = alerts
-        .filter((item) => !authorityTerms.length || authorityTerms.some((term) => item.authority.toLocaleLowerCase("el").includes(term)))
-        .filter((item) => !hideDirectAwards || item.procedureType !== DIRECT_AWARD_PROCEDURE);
-      // Πρόσφατοι = published in the last week (with a ΝΕΟ badge for the
-      // last-3-days sub-tier within it), Ενεργοί = everything else still
-      // open (colored by how close its αποσφράγιση is), Ανενεργοί = passed.
-      // A notice's own opening_at can be stale once ΚΗΜΔΗΣ moves on - a
-      // tender that already has an award (see sql/alerts_feed.sql) is
-      // concluded regardless of what its deadline still claims, so it's
-      // always treated as passed instead of misreading as still open.
-      const isConcluded = (item: AlertItem) => item.hasAward || alertUrgency(item.openingDate) === "passed";
-      const passed = scoped.filter(isConcluded);
-      // Newest publication first within Πρόσφατα - the rest of the app
-      // sorts by αποσφράγιση, but "recent" is specifically about what just
-      // got published, so it needs its own sort key.
-      const recent = scoped
-        .filter((item) => !isConcluded(item) && isWithinDays(item, 7))
-        .sort((a, b) => (b.publicationDate ?? "").localeCompare(a.publicationDate ?? ""));
-      const active = scoped.filter((item) => !isConcluded(item) && !isWithinDays(item, 7));
-      const tabs: { key: "recent" | "active" | "inactive"; label: string; items: AlertItem[] }[] = [
-        { key: "recent", label: "Πρόσφατοι", items: recent },
-        { key: "active", label: "Ενεργοί", items: active },
-        { key: "inactive", label: "Ανενεργοί", items: passed },
-      ];
-      const shownItems = tabs.find((tab) => tab.key === alertTab)?.items ?? [];
-
-      const renderCard = (item: AlertItem) => {
-        // A tender can carry many CPVs, most of them irrelevant - lead
-        // with the ones that actually matched the watchlist, and fall
-        // back to the full list only if none matched for some reason.
-        const relevantCpvs = item.cpvs.filter((cpv) => item.matchedCpv.includes(cpv.code));
-        const shownCpvs = relevantCpvs.length ? relevantCpvs : item.cpvs;
-        const colorClass = alertTab === "recent" ? "is-recent"
-          : alertTab === "inactive" ? "is-passed"
-          : alertUrgency(item.openingDate) === "urgent" ? "is-active-urgent" : "is-active-open";
-        const isMarked = submittedAdams.has(item.adam);
-        const isInterestedMarked = interestedAdams.has(item.adam);
-        return <button type="button" className={`alertCard ${colorClass} ${isMarked ? "isSubmitted" : ""} ${isInterestedMarked ? "isInterested" : ""}`} key={item.adam} onClick={() => openTender(item.adam)}>
-        <span className="markToggleRow">
-          <span
-            className="markToggle interest"
-            role="button"
-            tabIndex={0}
-            title={isInterestedMarked ? "Υπό εξέταση για συμμετοχή - πάτησε για αναίρεση" : "Σημείωσε ότι μας ενδιαφέρει / σκεφτόμαστε συμμετοχή"}
-            onClick={(event) => { event.stopPropagation(); toggleInterested(item.adam); }}
-            onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); event.stopPropagation(); toggleInterested(item.adam); } }}
-          >{isInterestedMarked ? "★ Ενδιαφέρον" : "Σήμανση ενδιαφέροντος"}</span>
-          <span
-            className="markToggle"
-            role="button"
-            tabIndex={0}
-            title={isMarked ? "Έχει κατατεθεί προσφορά - πάτησε για αναίρεση" : "Σημείωσε ότι κατατέθηκε προσφορά"}
-            onClick={(event) => { event.stopPropagation(); toggleSubmitted(item.adam); }}
-            onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); event.stopPropagation(); toggleSubmitted(item.adam); } }}
-          >{isMarked ? "✓ Υποβλήθηκε" : "Σήμανση προσφοράς"}</span>
-        </span>
-        <span className="alertCardHead"><strong>{item.title}</strong><span>{alertTab === "recent" && isWithinDays(item, 3) && <b className="newBadge">ΝΕΟ</b>}{item.procedureType === DIRECT_AWARD_PROCEDURE && <b className="directAwardBadge" title="Απευθείας ανάθεση - όχι ανοιχτός διαγωνισμός">Απευθείας ανάθεση</b>}{formatDate(item.publicationDate ?? undefined)}</span></span>
-        <span className="alertCardAuthority">{item.authority}</span>
-        <span className="alertCardFacts">
-          <AdamCopy adam={item.adam} label="ΑΔΑΜ" />
-          <span title={item.cpvs.map((cpv) => cpv.code).join(", ")}><b>CPV</b>{shownCpvs.map((cpv) => cpv.code).join(", ") || "—"}</span>
-          <span><b>Π/Υ</b>{euro.format(item.budget)}</span>
-          <span><b>Αποσφράγιση</b>{formatDate(item.openingDate ?? undefined)}</span>
-          <span><b>Τύπος σύμβασης</b>{item.contractType ?? "—"}</span>
-          <span><b>Τύπος εγγράφου</b>{item.documentType ? (documentTypeLabels[item.documentType] ?? item.documentType) : "—"}</span>
-        </span>
-      </button>;
-      };
-
-      return <article className="panel tablePanel">
-      <PanelHeader title="Νέοι διαγωνισμοί" caption={`${number.format(recent.length + active.length + passed.length)} διαγωνισμοί από τις αρχές του 2026 στα CPV που παρακολουθείς`} onDownload={{ filename: "neoi-diagonismoi", title: "Νέοι διαγωνισμοί", headers: ["ΑΔΑΜ", "Τίτλος", "Αναθέτουσα/Διενεργούσα Αρχή", "Π/Υ", "Αποσφράγιση", "Τύπος σύμβασης", "Τύπος εγγράφου"], rows: shownItems.map((item) => [item.adam, item.title, item.authority, item.budget, item.openingDate ?? "", item.contractType ?? "", item.documentType ? (documentTypeLabels[item.documentType] ?? item.documentType) : ""]), columnTypes: ["text", "text", "text", "currency", "date", "text", "text"] }} />
-      <div className="alertAuthorityFilter">
-        <MultiSearchInput
-          label="Αναθέτουσα/Διενεργούσα Αρχή"
-          type="authority"
-          values={authorityFilter}
-          onChange={setAuthorityFilter}
-          placeholder="Αναζητήστε Αναθέτουσα/Διενεργούσα Αρχή"
-        />
-        <label className="alertDirectAwardToggle">
-          <input type="checkbox" checked={hideDirectAwards} onChange={(event) => setHideDirectAwards(event.target.checked)} />
-          Απόκρυψη απευθείας αναθέσεων
-        </label>
-      </div>
-      <div className="alertTabs">
-        {tabs.map((tab) => <button type="button" key={tab.key} className={`alertTabBtn ${alertTab === tab.key ? "active" : ""}`} onClick={() => setAlertTab(tab.key)}>
-          {tab.label} <span className="alertTabCount">{number.format(tab.items.length)}</span>
-        </button>)}
-      </div>
-      {loading && <p className="noRows">Φόρτωση ειδοποιήσεων…</p>}
-      {!loading && !alerts.length && <p className="noRows">Δεν βρέθηκαν νέοι διαγωνισμοί ακόμη.</p>}
-      {!loading && alerts.length > 0 && !shownItems.length && <p className="noRows">Δεν υπάρχουν διαγωνισμοί σε αυτή την κατηγορία.</p>}
-      {!loading && shownItems.length > 0 && <div className="alertList">{shownItems.map(renderCard)}</div>}
-      {loadingTender && <p className="noRows">Φόρτωση στοιχείων διαγωνισμού…</p>}
-    </article>;
-    })()}
   </>;
 }
-
