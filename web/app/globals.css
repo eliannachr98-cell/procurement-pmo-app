@@ -108,3 +108,4 @@ h1{font-size:22px;letter-spacing:-.5px}.overviewHeading{font-size:16px}.panel h2
 .competitorUnion{margin:0;font-size:22px;font-weight:700;color:var(--ink)}.competitorUnion span{display:block;font-size:10px;font-weight:400;color:var(--muted);margin-top:2px}
 @media(max-width:900px){.competitorDetailGrid{grid-template-columns:1fr}}
 .overviewWrap .overviewBigFour .tableScroll{max-height:440px}
+.competitorEmpty{font-weight:400;color:var(--muted);font-size:9px}

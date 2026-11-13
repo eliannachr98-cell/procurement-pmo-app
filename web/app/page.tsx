@@ -390,6 +390,7 @@ export default function Home() {
   const mineCodes = useMemo(() => team.code ? alertsWatchlist.map((item) => item.cpv_code) : [], [team.code, alertsWatchlist]);
   const mineAuthorities = useMemo(() => team.code ? authorityWatch.map((item) => item.authority_name) : [], [team.code, authorityWatch]);
   const trackKeys = useMemo(() => team.code ? contractorWatch.map((item) => item.contractor_key) : [], [team.code, contractorWatch]);
+  const competitorLabels = useMemo(() => Object.fromEntries(contractorWatch.map((item) => [item.contractor_key, item.contractor_label ?? item.contractor_key])) as Record<string, string>, [contractorWatch]);
   const mineNuts = useMemo(() => team.code ? alertsNutsFilter.map((item) => item.nuts_code) : [], [team.code, alertsNutsFilter]);
   const scopeOn = (page === "overview" || page === "tenders") && overviewScope === "mine";
   const scopeCodes = useMemo(() => scopeOn ? mineCodes : [], [scopeOn, mineCodes]);
@@ -893,9 +894,13 @@ export default function Home() {
             <div className="overviewBlock">
             <h2 className="overviewHeading overviewBlockTitle">Αγορά &amp; Ανταγωνισμός</h2>
             <section className="overviewSection"><h3 className="overviewSubheading">Αγορά</h3><OverviewMarket data={marketOverview} state={marketOverviewState} /></section>
-            {overviewScope === "mine" && <section className="overviewSection"><h3 className="overviewSubheading">Ανταγωνισμός <span className="overviewHeadingNote">για τους αναδόχους που ακολουθείς</span></h3>
-              <OverviewCompetition data={competition} state={competitionState} signedIn={Boolean(team.code)} ready={watchlistReady} hasKeys={trackKeys.length > 0} onProfile={() => setPage("profile")} />
-            </section>}
+            <section className="overviewSection"><h3 className="overviewSubheading">Ανταγωνισμός <span className="overviewHeadingNote">για τους αναδόχους που ακολουθείς</span></h3>
+              {overviewScope === "mine"
+                ? <OverviewCompetition data={competition} state={competitionState} signedIn={Boolean(team.code)} ready={watchlistReady} hasKeys={trackKeys.length > 0} onProfile={() => setPage("profile")} labels={competitorLabels} />
+                : <p className="noRows">{team.code
+                  ? <>Επίλεξε αναδόχους στο Προφίλ για να δεις τον ανταγωνισμό τους. <button type="button" className="profileLink" onClick={() => setPage("profile")}>Πήγαινε στο Προφίλ →</button>{trackKeys.length > 0 && <> Ο ανταγωνισμός των αναδόχων που ακολουθείς φαίνεται στη «Η Αγορά μου». <button type="button" className="profileLink" onClick={() => setOverviewScope("mine")}>Δες τον →</button></>}</>
+                  : <>Συνδέσου και επίλεξε αναδόχους στο Προφίλ για να δεις τον ανταγωνισμό τους.</>}</p>}
+            </section>
             <div className="overviewJump"><button type="button" onClick={() => setPage("market")}>Δες Αγορά &amp; Ανταγωνισμός →</button></div>
             </div>
             </div>
@@ -1181,14 +1186,16 @@ function OverviewMarket({ data, state }: { data: MarketOverview | null; state: "
   </>;
 }
 
-function OverviewCompetition({ data, state, signedIn, ready, hasKeys, onProfile }: { data: CompetitorData | null; state: "idle" | "loading" | "error"; signedIn: boolean; ready: boolean; hasKeys: boolean; onProfile: () => void }) {
+function OverviewCompetition({ data, state, signedIn, ready, hasKeys, onProfile, labels }: { data: CompetitorData | null; state: "idle" | "loading" | "error"; signedIn: boolean; ready: boolean; hasKeys: boolean; onProfile: () => void; labels: Record<string, string> }) {
   const [open, setOpen] = useState<string | null>(null);
   if (!signedIn) return <p className="noRows">Συνδέσου και πρόσθεσε αναδόχους στο Προφίλ για να δεις τον ανταγωνισμό τους.</p>;
   if (ready && !hasKeys) return <p className="noRows">Δεν ακολουθείς ακόμα κάποιον ανάδοχο. Πρόσθεσέ τους στο Προφίλ. <button type="button" className="profileLink" onClick={onProfile}>Πήγαινε στο Προφίλ →</button></p>;
   if (state === "error") return <p className="noRows">Δεν φορτώθηκαν τα στοιχεία των αναδόχων - δοκίμασε ξανά.</p>;
   if (!data) return <p className="noRows">Φόρτωση…</p>;
   const total = data.competitors.reduce((sum, item) => sum + item.value, 0);
-  const nameOf = (key: string) => data.competitors.find((item) => item.key === key)?.name ?? key;
+  // A followed contractor with no awards/contracts yet comes back without a name (just its key): use the label saved in Προφίλ.
+  const displayName = (item: Competitor) => item.name !== item.key ? item.name : (labels[item.key] ?? item.name);
+  const nameOf = (key: string) => { const item = data.competitors.find((entry) => entry.key === key); return item ? displayName(item) : (labels[key] ?? key); };
   // The last 24 months, oldest first, so every row's mini chart lines up.
   const months = Array.from({ length: 24 }, (_, index) => {
     const date = new Date();
@@ -1205,7 +1212,7 @@ function OverviewCompetition({ data, state, signedIn, ready, hasKeys, onProfile 
           const maxCount = Math.max(1, ...months.map((month) => counts.get(month) ?? 0));
           return <Fragment key={item.key}>
             <tr className="competitorRow" onClick={() => setOpen(isOpen ? null : item.key)} aria-expanded={isOpen}>
-              <td><b>{isOpen ? "▾ " : "▸ "}{item.name}</b></td>
+              <td><b>{isOpen ? "▾ " : "▸ "}{displayName(item)}</b>{item.awards + item.contracts === 0 && <small className="competitorEmpty"> · καμία ανάθεση ή σύμβαση ακόμα</small>}</td>
               <td>{number.format(item.awards)}</td><td>{number.format(item.contracts)}</td><td>{item.value > 0 ? euro.format(item.value) : "—"}</td>
               <td>{total > 0 ? percentText(100 * item.value / total) : "—"}</td>
               <td>{percentText(item.discount.average)}</td><td>{percentText(item.discount.median)}</td><td>{percentText(item.discount.positiveShare)}</td>
