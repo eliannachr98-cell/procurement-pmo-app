@@ -26,7 +26,7 @@ declare
 begin
   if p_adams is not null and cardinality(p_adams) > 0 then
     with t as (
-      select p.adam, p.title, p.authority_name, p.publication_date, p.cancelled_at,
+      select p.adam, p.title, p.authority_name, p.publication_date, p.cancelled_at, p.opening_at,
              coalesce(nullif(p.budget_inc_vat, 0), nullif(p.budget_ex_vat, 0), nullif(p.budget_unknown_vat, 0)) as budget
       from public.procurements_compact p
       where p.adam = any(p_adams)
@@ -65,11 +65,11 @@ begin
       ) u
     )
     select coalesce(json_agg(x order by x.last_date desc), '[]'::json) into tenders from (
-      select t.adam, t.title, t.authority_name as authority, max(ev.dt) as last_date,
+      select t.adam, t.title, t.authority_name as authority, t.opening_at as opening, max(ev.dt) as last_date,
              json_agg(json_build_object('kind', ev.kind, 'date', ev.dt, 'adam', ev.doc, 'title', ev.doc_title,
                                         'opening', ev.opening, 'amount', ev.amount) order by ev.dt desc) as events
       from t join ev on ev.tender = t.adam
-      group by t.adam, t.title, t.authority_name
+      group by t.adam, t.title, t.authority_name, t.opening_at
     ) x;
   end if;
 
