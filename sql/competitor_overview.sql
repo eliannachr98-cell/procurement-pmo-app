@@ -72,7 +72,8 @@ begin
     select authority_name, count(distinct key) as competitors, count(*) as payments,
            array_agg(distinct key) as keys
     from rws group by authority_name having count(distinct key) >= 2
-  )
+  ),
+  pooled as (select distinct n, discount from won where discount is not null)
   select json_build_object(
     'competitors', coalesce((
       select json_agg(json_build_object(
@@ -96,7 +97,8 @@ begin
     'common', coalesce((
       select json_agg(json_build_object('authority', authority_name, 'competitors', competitors, 'payments', payments, 'keys', keys) order by competitors desc, payments desc)
       from (select * from common order by competitors desc, payments desc limit 10) x
-    ), '[]'::json)
+    ), '[]'::json),
+    'summary', json_build_object('discount', (select json_build_object('count', count(*), 'median', percentile_cont(0.5) within group (order by discount) * 100, 'average', avg(discount) * 100) from pooled))
   ) into result;
   return result;
 end;

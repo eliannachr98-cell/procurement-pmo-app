@@ -84,3 +84,4 @@ jobs:
               print("common authorities:", out["common"][:3])
               for item in out["competitors"]:
                   print("CHECK", item["name"][:30], "awards+contracts", item["awards"] + item["contracts"], "sum of clients", sum(c["count"] for c in item["clients"]), "clients", len(item["clients"]), "items", len(item["items"]))
+              print("SUMMARY", out["summary"])
