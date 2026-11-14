@@ -98,7 +98,7 @@ begin
     ), '[]'::json),
     'common', coalesce((
       select json_agg(json_build_object('authority', authority_name, 'competitors', competitors, 'payments', payments, 'keys', keys, 'by', by) order by competitors desc, payments desc)
-      from (select * from common order by competitors desc, payments desc limit 25) x
+      from (select * from common order by competitors desc, payments desc limit 150) x
     ), '[]'::json),
     'summary', json_build_object('discount', (select json_build_object('count', count(*), 'median', percentile_cont(0.5) within group (order by discount) * 100, 'average', avg(discount) * 100) from pooled))
   ) into result;
