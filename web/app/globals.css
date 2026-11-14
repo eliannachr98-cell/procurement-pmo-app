@@ -261,3 +261,13 @@ h1{font-size:22px;letter-spacing:-.5px}.overviewHeading{font-size:16px}.panel h2
 .interestBox .chipCode{color:var(--tone-ink);width:auto}
 .interestBox .chipDesc{color:#52646f;font-weight:500}
 @media(max-width:900px){.interestGrid{grid-template-columns:1fr}}
+/* Προφίλ: the summary chips use the same colours as the four cards below, each with its emoji */
+.profileStats .toneCpv{--tone:#168c8c;--tone-soft:#e3f3f0;--tone-ink:#0f6e6e}
+.profileStats .toneNuts{--tone:#2a78d6;--tone-soft:#e5f1f8;--tone-ink:#1c4a68}
+.profileStats .toneAuth{--tone:#6250d6;--tone-soft:#ece9f7;--tone-ink:#3f3470}
+.profileStats .toneComp{--tone:#d7952f;--tone-soft:#fbf0da;--tone-ink:#6b4f10}
+.profileStats .toneStar{--tone:#eb6834;--tone-soft:#fbe9e1;--tone-ink:#7a3418}
+.profileStats div{grid-template-rows:auto auto auto;gap:1px;min-width:84px;padding:8px 14px 7px;background:var(--tone-soft);border:1px solid transparent;border-top:3px solid var(--tone)}
+.profileStats div i{font-style:normal;font-size:17px;line-height:1.2}
+.profileStats div b{color:var(--tone-ink);font-size:19px}
+.profileStats div span{color:var(--tone-ink);opacity:.85;font-size:10px;font-weight:600}
