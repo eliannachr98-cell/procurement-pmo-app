@@ -127,7 +127,7 @@ type Competitor = {
   key: string; name: string; awards: number; contracts: number; value: number; lastDate: string | null; unionShare: number | null; avgBudget: number | null;
   discount: { count: number; average: number | null; median: number | null; positiveShare: number | null };
   monthly: { month: string; count: number }[];
-  clients: { authority: string; count: number; awards: number; contracts: number; share: number }[];
+  clients: { authority: string; count: number; awards: number; contracts: number; value?: number; share: number }[];
 };
 type CompetitorData = { competitors: Competitor[]; common: { authority: string; competitors: number; payments: number; keys: string[]; by?: { key: string; count: number }[] }[]; summary?: { discount: { count: number; median: number | null; average: number | null } } };
 
@@ -1203,7 +1203,9 @@ function shortName(name: string) {
 
 function OverviewCompetition({ data, state, signedIn, ready, hasKeys, onProfile, labels }: { data: CompetitorData | null; state: "idle" | "loading" | "error"; signedIn: boolean; ready: boolean; hasKeys: boolean; onProfile: () => void; labels: Record<string, string> }) {
   const [open, setOpen] = useState<string | null>(null);
-  const [commonFor, setCommonFor] = useState<string | null>(null);
+  const [picked, setPicked] = useState<string[]>([]);
+  const [compare, setCompare] = useState(false);
+  const [onlyCommon, setOnlyCommon] = useState(false);
   if (!signedIn) return <p className="noRows">Συνδέσου και πρόσθεσε αναδόχους στο Προφίλ για να δεις τον ανταγωνισμό τους.</p>;
   if (ready && !hasKeys) return <p className="noRows">Δεν ακολουθείς ακόμα κάποιον ανάδοχο. Πρόσθεσέ τους στο Προφίλ. <button type="button" className="profileLink" onClick={onProfile}>Πήγαινε στο Προφίλ →</button></p>;
   if (state === "error") return <p className="noRows">Δεν φορτώθηκαν τα στοιχεία των αναδόχων - δοκίμασε ξανά.</p>;
@@ -1212,18 +1214,41 @@ function OverviewCompetition({ data, state, signedIn, ready, hasKeys, onProfile,
   // A followed contractor with no awards/contracts yet comes back without a name (just its key): use the label saved in Προφίλ.
   const displayName = (item: Competitor) => item.name !== item.key ? item.name : (labels[item.key] ?? item.name);
   const nameOf = (key: string) => { const item = data.competitors.find((entry) => entry.key === key); return item ? displayName(item) : (labels[key] ?? key); };
-  // Κοινές αρχές for one chosen contractor: the authorities where he won together with at least one other followed contractor.
-  const selKey = data.competitors.some((item) => item.key === commonFor) ? (commonFor as string) : (data.competitors[0]?.key ?? "");
-  const selRows = data.common
-    .map((entry) => {
-      const mine = (entry.by ?? []).find((item) => item.key === selKey);
-      return { authority: entry.authority, own: mine?.count ?? 0, rivals: (entry.by ?? []).filter((item) => item.key !== selKey), found: Boolean(mine) };
-    })
-    .filter((row) => row.found && row.rivals.length > 0)
-    .sort((a, b) => b.rivals.length - a.rivals.length || b.own - a.own);
-  const rivalFrequency = new Map<string, number>();
-  selRows.forEach((row) => row.rivals.forEach((rival) => rivalFrequency.set(rival.key, (rivalFrequency.get(rival.key) ?? 0) + 1)));
-  const topRival = [...rivalFrequency.entries()].sort((a, b) => b[1] - a[1])[0];
+  // Ανά αναθέτουσα αρχή: one table for the chosen contractor(s); two chosen contractors can be compared side by side.
+  const chosen = picked.filter((key) => data.competitors.some((item) => item.key === key));
+  const scopeKeys = chosen.length > 0 ? chosen : data.competitors.map((item) => item.key);
+  type AuthorityTotals = { awards: number; contracts: number; value: number };
+  const totalsFor = (keys: string[]) => {
+    const map = new Map<string, AuthorityTotals>();
+    for (const item of data.competitors) {
+      if (!keys.includes(item.key)) continue;
+      for (const client of item.clients) {
+        const current = map.get(client.authority) ?? { awards: 0, contracts: 0, value: 0 };
+        current.awards += client.awards;
+        current.contracts += client.contracts;
+        current.value += client.value ?? 0;
+        map.set(client.authority, current);
+      }
+    }
+    return map;
+  };
+  const comparing = compare && chosen.length === 2;
+  const mapA = totalsFor(comparing ? [chosen[0]] : scopeKeys);
+  const mapB = comparing ? totalsFor([chosen[1]]) : new Map<string, AuthorityTotals>();
+  const empty: AuthorityTotals = { awards: 0, contracts: 0, value: 0 };
+  const authorityRows = [...new Set([...mapA.keys(), ...mapB.keys()])]
+    .filter((authority) => !comparing || !onlyCommon || (mapA.has(authority) && mapB.has(authority)))
+    .map((authority) => ({ authority, a: mapA.get(authority) ?? empty, b: mapB.get(authority) ?? empty }))
+    .sort((x, y) => (y.a.value + y.b.value) - (x.a.value + x.b.value) || (y.a.awards + y.a.contracts + y.b.awards + y.b.contracts) - (x.a.awards + x.a.contracts + x.b.awards + x.b.contracts));
+  const sumOf = (side: "a" | "b") => authorityRows.reduce((sum, row) => ({ awards: sum.awards + row[side].awards, contracts: sum.contracts + row[side].contracts, value: sum.value + row[side].value }), { ...empty });
+  const totalA = sumOf("a");
+  const totalB = sumOf("b");
+  const togglePick = (key: string) => {
+    if (!compare) { setPicked(picked.length === 1 && picked[0] === key ? [] : [key]); return; }
+    setPicked(picked.includes(key) ? picked.filter((item) => item !== key) : [...picked, key].slice(-2));
+  };
+  const nameA = comparing ? shortName(nameOf(chosen[0])) : "";
+  const nameB = comparing ? shortName(nameOf(chosen[1])) : "";
   // The last 24 months, oldest first, so every row's mini chart lines up.
   const months = Array.from({ length: 24 }, (_, index) => {
     const date = new Date();
@@ -1276,20 +1301,39 @@ function OverviewCompetition({ data, state, signedIn, ready, hasKeys, onProfile,
           </Fragment>;
         })}</tbody></table></div>
     </article>
-    {data.competitors.length > 1 && <article className="panel overviewBigFour"><PanelHeader title="Κοινές αρχές" caption="Διάλεξε έναν ανάδοχο: δες σε ποιες αρχές κέρδισε και ποιοι άλλοι από όσους ακολουθείς κέρδισαν εκεί" />
-      <div className="commonPicker">
-        <label>Ανάδοχος<select value={selKey} onChange={(event) => setCommonFor(event.target.value)}>{data.competitors.map((item) => <option key={item.key} value={item.key}>{shortName(displayName(item))}</option>)}</select></label>
-        <span className="commonSummary">{selRows.length === 0
-          ? "Δεν υπάρχει αρχή όπου κέρδισε μαζί με άλλον από όσους ακολουθείς."
-          : <>Συναντά άλλους από όσους ακολουθείς σε <b>{number.format(selRows.length)}</b> {selRows.length === 1 ? "αρχή" : "αρχές"}{topRival ? <>. Πιο συχνός αντίπαλος: <b>{shortName(nameOf(topRival[0]))}</b> ({number.format(topRival[1])} {topRival[1] === 1 ? "αρχή" : "αρχές"})</> : null}.</>}</span>
+    <article className="panel overviewBigFour"><PanelHeader title="Ανά αναθέτουσα/διενεργούσα αρχή" caption="Πάτα έναν ανάδοχο για να δεις μόνο τα δικά του · με «Σύγκριση» διάλεξε δύο και δες τους δίπλα-δίπλα" />
+      <div className="authorityFilter">
+        <div className="authorityPills" role="group" aria-label="Ανάδοχοι">
+          <button type="button" className={`authorityPill${chosen.length === 0 ? " active" : ""}`} onClick={() => setPicked([])}>Όλοι</button>
+          {data.competitors.map((item) => <button type="button" key={item.key} title={displayName(item)} className={`authorityPill${chosen.includes(item.key) ? " active" : ""}`} onClick={() => togglePick(item.key)}>{shortName(displayName(item))}</button>)}
+        </div>
+        {data.competitors.length > 1 && <div className="authorityCompare">
+          <label className="checkboxRow"><input type="checkbox" checked={compare} onChange={(event) => { setCompare(event.target.checked); setPicked(event.target.checked ? picked.slice(0, 2) : picked.slice(0, 1)); }} />Σύγκριση δύο αναδόχων</label>
+          {comparing && <label className="checkboxRow"><input type="checkbox" checked={onlyCommon} onChange={(event) => setOnlyCommon(event.target.checked)} />Μόνο κοινές αρχές</label>}
+        </div>}
       </div>
-      {selRows.length > 0 && <div className="tableScroll"><table className="commonTable"><thead><tr><th>Αναθέτουσα/Διενεργούσα Αρχή</th><th>Ο ίδιος</th><th>Ποιοι άλλοι κέρδισαν εκεί</th></tr></thead>
-        <tbody>{selRows.map((row) => <tr key={row.authority}>
-          <td>{row.authority}</td>
-          <td><b>{number.format(row.own)}</b></td>
-          <td><ul className="rivalList">{row.rivals.map((rival) => <li key={rival.key} title={nameOf(rival.key)}><span>{shortName(nameOf(rival.key))}</span><b>{number.format(rival.count)}</b></li>)}</ul></td>
-        </tr>)}</tbody></table></div>}
-    </article>}
+      {compare && !comparing ? <p className="noRows">Διάλεξε δύο αναδόχους από τα κουμπιά για να τους συγκρίνεις{chosen.length === 1 ? ` - έχεις διαλέξει τον ${shortName(nameOf(chosen[0]))}` : ""}.</p>
+        : authorityRows.length === 0 ? <p className="noRows">Δεν υπάρχουν αναθέσεις ή συμβάσεις.</p>
+        : <div className="tableScroll"><table className="authorityTable">
+          <thead>
+            {comparing && <tr className="groupHead"><th rowSpan={2}>Αναθέτουσα/Διενεργούσα Αρχή</th><th colSpan={3}>{nameA}</th><th colSpan={3}>{nameB}</th></tr>}
+            <tr>{!comparing && <th>Αναθέτουσα/Διενεργούσα Αρχή</th>}
+              <th>Αναθέσεις</th><th>Συμβάσεις</th><th>Αξία</th>
+              {comparing && <><th>Αναθέσεις</th><th>Συμβάσεις</th><th>Αξία</th></>}
+            </tr>
+          </thead>
+          <tbody>
+            {authorityRows.map((row) => <tr key={row.authority}>
+              <td>{row.authority}</td>
+              <td>{number.format(row.a.awards)}</td><td>{number.format(row.a.contracts)}</td><td>{row.a.value > 0 ? euro.format(row.a.value) : "—"}</td>
+              {comparing && <><td>{number.format(row.b.awards)}</td><td>{number.format(row.b.contracts)}</td><td>{row.b.value > 0 ? euro.format(row.b.value) : "—"}</td></>}
+            </tr>)}
+            <tr className="tableTotal"><td>Σύνολο ({number.format(authorityRows.length)} αρχές)</td>
+              <td>{number.format(totalA.awards)}</td><td>{number.format(totalA.contracts)}</td><td>{euro.format(totalA.value)}</td>
+              {comparing && <><td>{number.format(totalB.awards)}</td><td>{number.format(totalB.contracts)}</td><td>{euro.format(totalB.value)}</td></>}
+            </tr>
+          </tbody></table></div>}
+    </article>
   </>;
 }
 

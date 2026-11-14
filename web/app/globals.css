@@ -127,3 +127,16 @@ h1{font-size:22px;letter-spacing:-.5px}.overviewHeading{font-size:16px}.panel h2
 .commonTable td:nth-child(2),.commonTable th:nth-child(2){width:80px;text-align:center!important}
 .rivalList{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:2px 16px;font-size:10px}
 .rivalList li{display:inline-flex;gap:6px;align-items:baseline}.rivalList li b{color:var(--ink)}
+/* Ανά αναθέτουσα αρχή: contractor filter + comparison */
+.authorityFilter{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 18px;padding:0 16px 10px}
+.authorityPills{display:flex;flex-wrap:wrap;gap:6px}
+.authorityPill{padding:4px 11px;border-radius:999px;border:1px solid #c3d6de;background:#fff;color:#33566a;font-size:11px;font-weight:600;cursor:pointer}
+.authorityPill:hover{border-color:#168c8c}
+.authorityPill.active{background:#168c8c;border-color:#168c8c;color:#fff}
+.authorityCompare{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:11px}
+.authorityCompare .checkboxRow{display:flex;align-items:center;gap:6px;margin:0;white-space:nowrap}
+.authorityTable td:first-child{white-space:normal}
+.authorityTable .groupHead th{text-align:center!important;border-bottom:0}
+.authorityTable .groupHead th:first-child{text-align:left!important}
+.authorityTable .groupHead th:nth-child(3){border-left:1px solid var(--line)}
+.authorityTable.compared td:nth-child(5),.authorityTable.compared th:nth-child(4){border-left:1px solid var(--line)}
