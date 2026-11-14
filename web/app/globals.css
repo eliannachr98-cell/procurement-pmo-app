@@ -112,3 +112,4 @@ h1{font-size:22px;letter-spacing:-.5px}.overviewHeading{font-size:16px}.panel h2
 .clientList{max-height:190px;overflow-y:auto;padding-right:4px}
 .competitorSubhead{margin-top:12px!important}
 .competitorDiscount{margin:0;font-size:12px;color:var(--ink)}.competitorDiscount span{display:block;font-size:10px;color:var(--muted);margin-top:2px}
+.metric .metricMain span{text-align:center;line-height:1.25}
