@@ -129,7 +129,7 @@ type Competitor = {
   monthly: { month: string; count: number }[];
   clients: { authority: string; count: number; awards: number; contracts: number; share: number }[];
 };
-type CompetitorData = { competitors: Competitor[]; common: { authority: string; competitors: number; payments: number; keys: string[] }[]; summary?: { discount: { count: number; median: number | null; average: number | null } } };
+type CompetitorData = { competitors: Competitor[]; common: { authority: string; competitors: number; payments: number; keys: string[]; by?: { key: string; count: number }[] }[]; summary?: { discount: { count: number; median: number | null; average: number | null } } };
 
 type MarketOverview = {
   empty?: boolean;
@@ -1186,6 +1186,21 @@ function OverviewMarket({ data, state }: { data: MarketOverview | null; state: "
   </>;
 }
 
+// A contractor's short name: everything before the first legal-form word
+// ("ΑΝΩΝΥΜΗ", "ΜΟΝΟΠΡΟΣΩΠΗ", "ΑΕ", "ΟΡΚΩΤΟΙ", "ΣΥΜΒΟΥΛΟΙ" ...), e.g.
+// "KPMG ΟΡΚΩΤΟΙ ΕΛΕΓΚΤΕΣ ΑΝΩΝΥΜΗ ΕΤΑΙΡΕΙΑ" -> "KPMG".
+const LEGAL_WORDS = new Set(["ΑΝΩΝΥΜΗ", "ΑΝΩΝΥΜΟΣ", "ΜΟΝΟΠΡΟΣΩΠΗ", "ΕΤΑΙΡΕΙΑ", "ΕΤΑΙΡΙΑ", "ΑΕ", "AE", "ΑΕΒΕ", "ΟΕ", "ΕΠΕ", "ΙΚΕ", "ΟΡΚΩΤΟΙ", "ΟΡΚΩΤΩΝ", "ΣΥΜΒΟΥΛΟΙ", "ΠΑΡΟΧΗΣ", "ΛΟΓΙΣΤΕΣ"]);
+function shortName(name: string) {
+  const kept: string[] = [];
+  for (const word of name.replace(/\s+/g, " ").trim().split(" ")) {
+    const bare = word.toLocaleUpperCase("el").replace(/[.,]/g, "");
+    if (kept.length > 0 && LEGAL_WORDS.has(bare)) break;
+    kept.push(word);
+  }
+  const short = kept.join(" ").replace(/[\s,\-–]+$/, "").trim();
+  return short || name;
+}
+
 function OverviewCompetition({ data, state, signedIn, ready, hasKeys, onProfile, labels }: { data: CompetitorData | null; state: "idle" | "loading" | "error"; signedIn: boolean; ready: boolean; hasKeys: boolean; onProfile: () => void; labels: Record<string, string> }) {
   const [open, setOpen] = useState<string | null>(null);
   if (!signedIn) return <p className="noRows">Συνδέσου και πρόσθεσε αναδόχους στο Προφίλ για να δεις τον ανταγωνισμό τους.</p>;
@@ -1248,9 +1263,13 @@ function OverviewCompetition({ data, state, signedIn, ready, hasKeys, onProfile,
           </Fragment>;
         })}</tbody></table></div>
     </article>
-    {data.competitors.length > 1 && <article className="panel overviewBigFour"><PanelHeader title="Κοινές αρχές" caption="Αρχές όπου κέρδισαν δύο ή περισσότεροι από όσους ακολουθείς - εκεί ανταγωνίζονται άμεσα" />
-      {data.common.length === 0 ? <p className="noRows">Δεν υπάρχουν αρχές όπου κέρδισαν περισσότεροι από ένας.</p> : <div className="tableScroll"><table><thead><tr><th>Αναθέτουσα/Διενεργούσα Αρχή</th><th>Ανάδοχοι</th><th>Αναθέσεις/Συμβάσεις</th></tr></thead>
-        <tbody>{data.common.map((item) => <tr key={item.authority}><td>{item.authority}</td><td>{item.keys.map(nameOf).join(" · ")}</td><td>{number.format(item.payments)}</td></tr>)}</tbody></table></div>}
+    {data.competitors.length > 1 && <article className="panel overviewBigFour"><PanelHeader title="Κοινές αρχές" caption="Αρχές όπου κέρδισαν δύο ή περισσότεροι από όσους ακολουθείς - εκεί ανταγωνίζονται άμεσα · σε κάθε ετικέτα ο αριθμός αναθέσεων και συμβάσεων" />
+      {data.common.length === 0 ? <p className="noRows">Δεν υπάρχουν αρχές όπου κέρδισαν περισσότεροι από ένας.</p> : <div className="tableScroll"><table className="commonTable"><thead><tr><th>Αναθέτουσα/Διενεργούσα Αρχή</th><th>Ανάδοχοι</th><th>Σύνολο</th></tr></thead>
+        <tbody>{data.common.map((item) => <tr key={item.authority}>
+          <td>{item.authority}</td>
+          <td><div className="chipRow">{(item.by ?? item.keys.map((key) => ({ key, count: 0 }))).map((entry) => <span className="competitorChip" key={entry.key} title={`${nameOf(entry.key)}: ${number.format(entry.count)} αναθέσεις και συμβάσεις`}>{shortName(nameOf(entry.key))}{entry.count > 0 && <b>{number.format(entry.count)}</b>}</span>)}</div></td>
+          <td><b>{number.format(item.payments)}</b></td>
+        </tr>)}</tbody></table></div>}
     </article>}
   </>;
 }
