@@ -1,3 +1,3 @@
-with s as (select adam from public.procurements_compact where document_category = 'declaration' and publication_date >= current_date - 150 order by publication_date desc limit 300),
-q as (select public.follow_updates((select array_agg(adam) from s), array['091569759', 'ΙΝΕΞ'], array['ΔΗΜΟΣ ΑΧΑΡΝΩΝ'], current_date - 45) as r)
-select json_array_length(r->'tenders') as tenders_with_events, json_array_length(r->'contractors') as contractors, json_array_length(r->'authorities') as authority_rows, left((r->'tenders'->0)::text, 700) as sample_tender, left((r->'contractors'->0)::text, 400) as sample_contractor from q;
+explain analyze select public.follow_updates((select array_agg(adam) from (select adam from public.procurements_compact where document_category = 'declaration' and publication_date >= current_date - 150 order by publication_date desc limit 10) s), null, null, current_date - 45);
+explain analyze select public.follow_updates(null, array['091569759', 'ΙΝΕΞ'], null, current_date - 45);
+explain analyze select public.follow_updates(null, null, array['ΔΗΜΟΣ ΑΧΑΡΝΩΝ'], current_date - 45)
