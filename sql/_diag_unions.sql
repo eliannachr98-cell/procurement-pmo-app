@@ -1,3 +1,3 @@
 explain analyze select public.follow_updates((select array_agg(adam) from (select adam from public.procurements_compact where document_category = 'declaration' and publication_date >= current_date - 150 order by publication_date desc limit 10) s), null, null, current_date - 45);
-explain analyze select public.follow_updates(null, array['091569759', 'ΙΝΕΞ'], null, current_date - 45);
-explain analyze select public.follow_updates(null, null, array['ΔΗΜΟΣ ΑΧΑΡΝΩΝ'], current_date - 45)
+explain analyze select public.follow_updates((select array_agg(adam) from (select adam from public.procurements_compact where document_category = 'declaration' and publication_date >= current_date - 150 order by publication_date desc limit 40) s), null, null, current_date - 45);
+explain analyze select public.follow_updates(null, array['091569759', 'ΙΝΕΞ', '094428065', 'ΚΡΜG'], null, current_date - 45)

@@ -50,9 +50,14 @@ begin
         union all
         select t.adam, 'contract', c.signed_date::date, c.adam, c.title, null::timestamptz,
                coalesce(nullif(c.amount_inc_vat, 0), nullif(c.amount_ex_vat, 0), nullif(c.amount_unknown_vat, 0))
-        from t join public.contracts_compact c
-          on c.procurement_adam = t.adam
-          or c.award_adam in (select a2.adam from public.awards_compact a2 where a2.procurement_adam = t.adam)
+        from t join public.contracts_compact c on c.procurement_adam = t.adam
+        where c.signed_date >= p_since
+        union all
+        select t.adam, 'contract', c.signed_date::date, c.adam, c.title, null::timestamptz,
+               coalesce(nullif(c.amount_inc_vat, 0), nullif(c.amount_ex_vat, 0), nullif(c.amount_unknown_vat, 0))
+        from t
+        join public.awards_compact a2 on a2.procurement_adam = t.adam
+        join public.contracts_compact c on c.award_adam = a2.adam
         where c.signed_date >= p_since
         union all
         select t.adam, 'cancelled', t.cancelled_at::date, t.adam, t.title, null::timestamptz, null::numeric
@@ -70,16 +75,25 @@ begin
 
   if p_contractors is not null and cardinality(p_contractors) > 0 then
     with keys as (select k.key, k.ord from unnest(p_contractors) with ordinality as k(key, ord)),
+    rws0 as (
+      -- 9-digit VAT keys: a direct (indexed) match on the contractor key
+      select k.key, k.ord, f.contractor_name, f.kind, f.doc_date, f.doc_adam, f.n, f.amt, f.members
+      from keys k join public.market_contractor_facts f on f.ckey = k.key
+      where k.key ~ '^[0-9]{9}$'
+      union all
+      -- name keys: a part of the name (accents ignored)
+      select k.key, k.ord, f.contractor_name, f.kind, f.doc_date, f.doc_adam, f.n, f.amt, f.members
+      from keys k join public.market_contractor_facts f
+        on position(translate(upper(k.key), 'ΆΈΉΊΌΎΏΪΫ', 'ΑΕΗΙΟΥΩΙΥ') in translate(upper(f.contractor_name), 'ΆΈΉΊΌΎΏΪΫ', 'ΑΕΗΙΟΥΩΙΥ')) > 0
+      where k.key !~ '^[0-9]{9}$'
+    ),
     rws as (
-      select k.key, k.ord, f.contractor_name, f.kind, coalesce(f.doc_date, t.publication_date) as dt,
-             f.doc_adam, f.n, f.amt, f.members, t.authority_name,
-             row_number() over (partition by k.key order by coalesce(f.doc_date, t.publication_date) desc nulls last) as rn
-      from keys k
-      join public.market_contractor_facts f
-        on (k.key ~ '^[0-9]{9}$' and f.ckey = k.key)
-        or (k.key !~ '^[0-9]{9}$' and position(translate(upper(k.key), 'ΆΈΉΊΌΎΏΪΫ', 'ΑΕΗΙΟΥΩΙΥ') in translate(upper(f.contractor_name), 'ΆΈΉΊΌΎΏΪΫ', 'ΑΕΗΙΟΥΩΙΥ')) > 0)
-      join public.market_tender_facts t on t.adam = f.n
-      where coalesce(f.doc_date, t.publication_date) >= p_since
+      select r.key, r.ord, r.contractor_name, r.kind, coalesce(r.doc_date, t.publication_date) as dt,
+             r.doc_adam, r.n, r.amt, r.members, t.authority_name,
+             row_number() over (partition by r.key order by coalesce(r.doc_date, t.publication_date) desc nulls last) as rn
+      from rws0 r
+      join public.market_tender_facts t on t.adam = r.n
+      where coalesce(r.doc_date, t.publication_date) >= p_since
     )
     select coalesce(json_agg(json_build_object(
              'key', key, 'name', name, 'total', total, 'items', items) order by ord), '[]'::json) into contractors
