@@ -89,7 +89,7 @@ begin
         'avgBudget', d.avg_budget,
         'discount', json_build_object('count', coalesce(d.cnt, 0), 'average', d.average, 'median', d.median, 'positiveShare', d.positive_share),
         'monthly', coalesce((select json_agg(json_build_object('month', m.m, 'count', m.c) order by m.m) from monthly m where m.key = k.key), '[]'::json),
-        'clients', coalesce((select json_agg(json_build_object('authority', c.authority_name, 'count', c.c, 'awards', c.a, 'contracts', c.k, 'share', 100.0 * c.c / nullif(ct.total, 0)) order by c.rn)
+        'clients', coalesce((select json_agg(json_build_object('authority', c.authority_name, 'count', c.c, 'awards', c.a, 'contracts', c.k, 'value', c.v, 'share', 100.0 * c.c / nullif(ct.total, 0)) order by c.rn)
                               from clients c join client_total ct on ct.key = c.key where c.key = k.key), '[]'::json),
         'items', coalesce((select json_agg(json_build_object('adam', r.doc_adam, 'tender', r.n, 'kind', r.kind, 'date', coalesce(r.doc_date, r.publication_date), 'authority', r.authority_name, 'amount', r.amt, 'union', r.members > 1) order by coalesce(r.doc_date, r.publication_date) desc nulls last)
                             from (select * from rws where rws.key = k.key order by coalesce(rws.doc_date, rws.publication_date) desc nulls last limit 1500) r), '[]'::json)
