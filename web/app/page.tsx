@@ -922,7 +922,9 @@ export default function Home() {
             </button>}
           </>}
           {page === "market" && <MarketPanel awards={awards} contracts={contracts} cpv={cpv} contractor={contractor} authority={authority} year={year} contractType={contractType} documentType={documentType} loadedCount={tenders.length} totalCount={totalTenders} stillLoading={hasMore && loading} locked={!team.code} selectedContractor={marketSelectedContractor} setSelectedContractor={setMarketSelectedContractor} contractorSearch={marketContractorSearch} setContractorSearch={setMarketContractorSearch} visibleCount={marketVisibleCount} setVisibleCount={setMarketVisibleCount} />}
-          {page === "profile" && <div className="profileGrid">
+          {page === "profile" && <>
+          <ProfileUpdates code={team.code ?? null} baseline={visitBaseline} onUnauthorized={team.onUnauthorized} />
+          <div className="profileGrid">
             <article className="panel profileCard profileAccountCard">
               <p className="eyebrow">ΛΟΓΑΡΙΑΣΜΟΣ</p>
               <div className="profileHeaderMain">
@@ -1024,7 +1026,7 @@ export default function Home() {
               </> : <p className="watchlistCaption">Συνδέσου για να ορίσεις τι ακολουθείς.</p>}
             </article>
             <ProfileTools code={team.code ?? null} onUnauthorized={team.onUnauthorized} />
-          </div>}
+          </div></>}
         </section>
 
         {/* Ειδοποιήσεις is a CPV watch-list/alert feed, not a filtered view of the
@@ -2365,6 +2367,101 @@ function TeamCodeBar({ team }: { team: ReturnType<typeof useTeamCode> }) {
 // instead of being cleared. watchlist/nutsFilter are passed in from Home
 // instead, so they're unaffected by this remount and by switching tabs away
 // and back.
+type UpdateEvent = { kind: string; date: string; adam: string | null; title: string | null; opening: string | null; amount: number | null };
+type FollowUpdates = {
+  since: string;
+  followed: { tenders: number; contractors: number; authorities: number };
+  tenders: { adam: string; title: string; authority: string; last_date: string; events: UpdateEvent[] }[];
+  contractors: { key: string; name: string; total: number; items: { kind: string; date: string; adam: string | null; tender: string; authority: string; amount: number; union: boolean }[] }[];
+  authorities: { authority: string; adam: string; title: string; date: string; budget: number | null }[];
+};
+const UPDATE_LABELS: Record<string, string> = {
+  clarification: "Διευκρίνιση", extension: "Παράταση", amendment: "Τροποποίηση", decision: "Απόφαση", summary: "Περίληψη",
+  award: "Ανάθεση", contract: "Σύμβαση", cancelled: "Ακύρωση",
+};
+// Kinds that change the tender itself (deadline, rules, outcome) get a stronger tone than the rest.
+const UPDATE_TONES: Record<string, string> = { extension: "warn", amendment: "warn", cancelled: "bad", award: "good", contract: "good", clarification: "info", decision: "info", summary: "info" };
+
+// The "Ενημερώσεις" of the Προφίλ: what happened to the tenders, contractors and authorities followed.
+function ProfileUpdates({ code, baseline, onUnauthorized }: { code: string | null; baseline: string | null; onUnauthorized: () => void }) {
+  const [days, setDays] = useState(30);
+  const [data, setData] = useState<FollowUpdates | null>(null);
+  const [state, setState] = useState<"loading" | "idle" | "error">("loading");
+  const unauthorizedRef = useRef(onUnauthorized);
+  unauthorizedRef.current = onUnauthorized;
+  useEffect(() => {
+    if (!code) return;
+    let cancelled = false;
+    setState("loading");
+    fetch(`/api/updates?days=${days}`, { headers: { "x-alert-code": code } })
+      .then((response) => { if (response.status === 401) unauthorizedRef.current(); return response.ok ? response.json() : Promise.reject(new Error("updates")); })
+      .then((payload) => { if (!cancelled) { setData(payload); setState("idle"); } })
+      .catch(() => { if (!cancelled) setState("error"); });
+    return () => { cancelled = true; };
+  }, [code, days]);
+  if (!code) return null;
+  const since = baseline ? baseline.slice(0, 10) : null;
+  const isNew = (date?: string | null) => Boolean(since && date && date.slice(0, 10) >= since);
+  const newCount = data ? data.tenders.reduce((sum, tender) => sum + tender.events.filter((event) => isNew(event.date)).length, 0)
+    + data.contractors.reduce((sum, contractor) => sum + contractor.items.filter((item) => isNew(item.date)).length, 0)
+    + data.authorities.filter((item) => isNew(item.date)).length : 0;
+  const total = data ? data.tenders.reduce((sum, tender) => sum + tender.events.length, 0)
+    + data.contractors.reduce((sum, contractor) => sum + contractor.total, 0) + data.authorities.length : 0;
+  const followedAnything = data ? data.followed.tenders + data.followed.contractors + data.followed.authorities > 0 : true;
+  return <article className="panel updatesPanel">
+    <div className="updatesHead">
+      <div><p className="eyebrow">ΕΝΗΜΕΡΩΣΕΙΣ</p><h2>Τι νέο στα όσα ακολουθείς</h2></div>
+      <label className="updatesRange">Περίοδος<select value={days} onChange={(event) => setDays(Number(event.target.value))}>
+        <option value={7}>Τελευταίες 7 ημέρες</option><option value={30}>Τελευταίες 30 ημέρες</option><option value={90}>Τελευταίες 90 ημέρες</option>
+      </select></label>
+    </div>
+    {state === "loading" && !data && <p className="noRows">Φόρτωση…</p>}
+    {state === "error" && <p className="noRows">Δεν φορτώθηκαν οι ενημερώσεις - δοκίμασε ξανά.</p>}
+    {data && !followedAnything && <p className="noRows">Δεν ακολουθείς ακόμα τίποτα. Πάτα ★ σε διαγωνισμούς και πρόσθεσε αναδόχους ή αρχές παρακάτω.</p>}
+    {data && followedAnything && total === 0 && <p className="noRows">Δεν υπάρχουν εξελίξεις στις τελευταίες {days} ημέρες.</p>}
+    {data && total > 0 && <>
+      <p className="updatesSummary"><b>{number.format(total)}</b> εξελίξεις στις τελευταίες {days} ημέρες{newCount > 0 && <> · <b className="updatesNewCount">{number.format(newCount)} νέες</b> από την τελευταία σου επίσκεψη</>}</p>
+      {data.tenders.length > 0 && <section className="updatesSection"><h3>Διαγωνισμοί που παρακολουθείς</h3>
+        {data.tenders.map((tender) => <div className="updatesItem" key={tender.adam}>
+          <div className="updatesItemHead"><b title={tender.title}>{tender.title}</b><span>{tender.authority}</span><AdamCopy adam={tender.adam} className="adamCopy" /></div>
+          <ul className="updatesEvents">{tender.events.map((event, index) => <li key={`${event.kind}-${event.adam}-${index}`}>
+            <span className="updatesDate">{formatDate(event.date)}</span>
+            <span className={`updatesBadge ${UPDATE_TONES[event.kind] ?? "info"}`}>{UPDATE_LABELS[event.kind] ?? event.kind}</span>
+            <span className="updatesText">
+              {event.kind === "extension" && event.opening ? <>Νέα καταληκτική: <b>{formatDate(event.opening)}</b></> : null}
+              {(event.kind === "award" || event.kind === "contract") && event.amount ? <b>{euro.format(event.amount)}</b> : null}
+              {event.title && event.kind !== "award" && event.kind !== "contract" && !(event.kind === "extension" && event.opening) ? <span className="updatesDocTitle" title={event.title}>{event.title}</span> : null}
+            </span>
+            {event.adam && event.adam !== tender.adam && <AdamCopy adam={event.adam} className="adamCopy" />}
+            {isNew(event.date) && <b className="newBadge">ΝΕΟ</b>}
+          </li>)}</ul>
+        </div>)}
+      </section>}
+      {data.contractors.length > 0 && <section className="updatesSection"><h3>Ανάδοχοι που ακολουθείς</h3>
+        {data.contractors.map((contractor) => <div className="updatesItem" key={contractor.key}>
+          <div className="updatesItemHead"><b>{contractor.name}</b><span>{number.format(contractor.total)} νέες αναθέσεις και συμβάσεις{contractor.total > contractor.items.length ? ` (εμφανίζονται οι ${contractor.items.length} πιο πρόσφατες)` : ""}</span></div>
+          <ul className="updatesEvents">{contractor.items.map((item, index) => <li key={`${item.adam}-${index}`}>
+            <span className="updatesDate">{formatDate(item.date)}</span>
+            <span className={`updatesBadge ${item.kind === "contract" ? "good" : "info"}`}>{item.kind === "contract" ? "Σύμβαση" : "Ανάθεση"}</span>
+            <span className="updatesText"><span className="updatesDocTitle" title={item.authority}>{item.authority}</span><b>{euro.format(item.amount)}</b>{item.union && <small className="competitorEmpty"> · ένωση</small>}</span>
+            {item.adam && <AdamCopy adam={item.adam} className="adamCopy" />}
+            {isNew(item.date) && <b className="newBadge">ΝΕΟ</b>}
+          </li>)}</ul>
+        </div>)}
+      </section>}
+      {data.authorities.length > 0 && <section className="updatesSection"><h3>Νέοι διαγωνισμοί από αρχές που ακολουθείς</h3>
+        <ul className="updatesEvents">{data.authorities.map((item) => <li key={item.adam}>
+          <span className="updatesDate">{formatDate(item.date)}</span>
+          <span className="updatesBadge info">Διακήρυξη</span>
+          <span className="updatesText"><span className="updatesDocTitle" title={item.title}>{item.title}</span><span className="updatesAuthority">{item.authority}</span>{item.budget ? <b>{euro.format(item.budget)}</b> : null}</span>
+          <AdamCopy adam={item.adam} className="adamCopy" />
+          {isNew(item.date) && <b className="newBadge">ΝΕΟ</b>}
+        </li>)}</ul>
+      </section>}
+    </>}
+  </article>;
+}
+
 function ProfileTools({ code, onUnauthorized }: { code: string | null; onUnauthorized: () => void }) {
   const authFetch = useCallback((url: string, init: RequestInit = {}) => {
     return fetch(url, { ...init, headers: { ...(init.headers as Record<string, string> ?? {}), "x-alert-code": code ?? "" } })
