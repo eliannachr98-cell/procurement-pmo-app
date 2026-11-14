@@ -991,7 +991,7 @@ export default function Home() {
               {team.code ? <>
                 <p className="watchlistCaption">Όσα ορίσεις εδώ καθορίζουν την Επισκόπηση («Η αγορά μου», Ανταγωνισμός) και τις ειδοποιήσεις.</p>
                 <div className="interestGrid">
-                  <section className="interestBox">
+                  <section className="interestBox toneCpv">
                     <header className="interestBoxHead"><span className="interestIcon"><Tags size={18} /></span><div><h3>CPV</h3><p>Κατηγορίες διαγωνισμών</p></div><span className="interestMeta"><em>{newsLabel(interestNews?.cpv)}</em>{syncShort && <small>Ενημ. {syncShort}</small>}</span><b className="interestCount">{number.format(alertsWatchlist.length)}</b></header>
                     <MultiSearchInput
                       label="Προσθήκη"
@@ -1006,7 +1006,7 @@ export default function Home() {
                       placeholder="Κωδικός ή περιγραφή CPV"
                     />
                   </section>
-                  <section className="interestBox">
+                  <section className="interestBox toneNuts">
                     <header className="interestBoxHead"><span className="interestIcon"><MapPin size={18} /></span><div><h3>Περιοχές</h3><p>Για τις ειδοποιήσεις</p></div><span className="interestMeta">{syncShort && <small>Ενημ. {syncShort}</small>}</span><b className="interestCount">{number.format(alertsNutsFilter.length)}</b></header>
                     <MultiSearchInput
                       label="Προσθήκη"
@@ -1021,7 +1021,7 @@ export default function Home() {
                       placeholder="π.χ. Αττική (κενό = όλη η χώρα)"
                     />
                   </section>
-                  <section className="interestBox">
+                  <section className="interestBox toneAuth">
                     <header className="interestBoxHead"><span className="interestIcon"><Building2 size={18} /></span><div><h3>Αναθέτουσες αρχές</h3><p>Παρακολούθηση αρχών (θα φαίνονται στην Αγορά)</p></div><span className="interestMeta"><em>{newsLabel(interestNews?.authorities)}</em>{syncShort && <small>Ενημ. {syncShort}</small>}</span><b className="interestCount">{number.format(authorityWatch.length)}</b></header>
                     <MultiSearchInput
                       label="Προσθήκη"
@@ -1035,7 +1035,7 @@ export default function Home() {
                       placeholder="Όνομα αναθέτουσας αρχής"
                     />
                   </section>
-                  <section className="interestBox">
+                  <section className="interestBox toneComp">
                     <header className="interestBoxHead"><span className="interestIcon"><Trophy size={18} /></span><div><h3>Ανάδοχοι</h3><p>Ανταγωνιστές που παρακολουθείς</p></div><span className="interestMeta"><em>{newsLabel(interestNews?.contractors)}</em>{syncShort && <small>Ενημ. {syncShort}</small>}</span><b className="interestCount">{number.format(contractorWatch.length)}</b></header>
                     <MultiSearchInput
                       label="Προσθήκη"

@@ -236,3 +236,28 @@ h1{font-size:22px;letter-spacing:-.5px}.overviewHeading{font-size:16px}.panel h2
 .profilePage>.profileCard{padding:18px 20px}
 .profilePage>.profileCard h2{margin:2px 0 8px;font-size:15px}
 .profilePage>.emailPanel,.profilePage>.apodeltiosiPanel{padding:18px 20px;grid-column:auto}
+/* Προφίλ - Τι ακολουθείς: four tinted cards, soft chips, no repeated sync line */
+.profileWatchCard .watchlistCaption{margin:0 0 4px;padding:9px 12px;border-radius:10px;background:#f1f6f8;color:#52646f;font-size:11px;line-height:1.5}
+.interestGrid{gap:16px;margin-top:12px}
+.interestBox{--tone:#168c8c;--tone-soft:#e3f3f0;--tone-ink:#0f6e6e;position:relative;gap:12px;padding:16px 18px 18px;border:1px solid var(--line);border-top:3px solid var(--tone);border-radius:14px;background:#fff;box-shadow:0 4px 14px rgba(24,55,74,.05);transition:box-shadow .15s}
+.interestBox:hover{box-shadow:0 8px 22px rgba(24,55,74,.09)}
+.interestBox.toneCpv{--tone:#168c8c;--tone-soft:#e3f3f0;--tone-ink:#0f6e6e}
+.interestBox.toneNuts{--tone:#2a78d6;--tone-soft:#e5f1f8;--tone-ink:#1c4a68}
+.interestBox.toneAuth{--tone:#6250d6;--tone-soft:#ece9f7;--tone-ink:#3f3470}
+.interestBox.toneComp{--tone:#d7952f;--tone-soft:#fbf0da;--tone-ink:#6b4f10}
+.interestBox .interestIcon{width:40px;height:40px;border-radius:12px;background:var(--tone-soft);color:var(--tone)}
+.interestBox .interestBoxHead h3{font-size:15px}
+.interestBox .interestBoxHead p{font-size:11px}
+.interestBox .interestCount{min-width:30px;padding:3px 10px;font-size:13px;font-weight:700;background:var(--tone);color:#fff}
+.interestBox .interestMeta small{display:none}
+.interestBox .interestMeta em{font-size:11px;font-weight:600;padding:2px 8px;border-radius:999px;background:var(--tone-soft);color:var(--tone-ink)}
+.interestBox .interestMeta em:empty{display:none}
+.interestBox .multiSearch{margin-top:0}
+.interestBox .multiBox{min-height:48px;border-radius:10px;border-color:#d4e1e8;background:#fbfdfd}
+.interestBox .multiBox:focus-within{border-color:var(--tone);box-shadow:0 0 0 3px color-mix(in srgb,var(--tone) 16%,transparent)}
+.interestBox .filterChip{background:var(--tone-soft);border:1px solid transparent;color:var(--tone-ink);box-shadow:none;border-radius:999px;font-weight:600;padding:5px 6px 5px 11px}
+.interestBox .filterChip button{background:rgba(0,0,0,.09);color:var(--tone-ink);width:17px;height:17px}
+.interestBox .filterChip button:hover{background:rgba(0,0,0,.18)}
+.interestBox .chipCode{color:var(--tone-ink);width:auto}
+.interestBox .chipDesc{color:#52646f;font-weight:500}
+@media(max-width:900px){.interestGrid{grid-template-columns:1fr}}
