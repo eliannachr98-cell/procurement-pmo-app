@@ -1203,6 +1203,7 @@ function shortName(name: string) {
 
 function OverviewCompetition({ data, state, signedIn, ready, hasKeys, onProfile, labels }: { data: CompetitorData | null; state: "idle" | "loading" | "error"; signedIn: boolean; ready: boolean; hasKeys: boolean; onProfile: () => void; labels: Record<string, string> }) {
   const [open, setOpen] = useState<string | null>(null);
+  const [commonFor, setCommonFor] = useState<string | null>(null);
   if (!signedIn) return <p className="noRows">Συνδέσου και πρόσθεσε αναδόχους στο Προφίλ για να δεις τον ανταγωνισμό τους.</p>;
   if (ready && !hasKeys) return <p className="noRows">Δεν ακολουθείς ακόμα κάποιον ανάδοχο. Πρόσθεσέ τους στο Προφίλ. <button type="button" className="profileLink" onClick={onProfile}>Πήγαινε στο Προφίλ →</button></p>;
   if (state === "error") return <p className="noRows">Δεν φορτώθηκαν τα στοιχεία των αναδόχων - δοκίμασε ξανά.</p>;
@@ -1211,6 +1212,18 @@ function OverviewCompetition({ data, state, signedIn, ready, hasKeys, onProfile,
   // A followed contractor with no awards/contracts yet comes back without a name (just its key): use the label saved in Προφίλ.
   const displayName = (item: Competitor) => item.name !== item.key ? item.name : (labels[item.key] ?? item.name);
   const nameOf = (key: string) => { const item = data.competitors.find((entry) => entry.key === key); return item ? displayName(item) : (labels[key] ?? key); };
+  // Κοινές αρχές for one chosen contractor: the authorities where he won together with at least one other followed contractor.
+  const selKey = data.competitors.some((item) => item.key === commonFor) ? (commonFor as string) : (data.competitors[0]?.key ?? "");
+  const selRows = data.common
+    .map((entry) => {
+      const mine = (entry.by ?? []).find((item) => item.key === selKey);
+      return { authority: entry.authority, own: mine?.count ?? 0, rivals: (entry.by ?? []).filter((item) => item.key !== selKey), found: Boolean(mine) };
+    })
+    .filter((row) => row.found && row.rivals.length > 0)
+    .sort((a, b) => b.rivals.length - a.rivals.length || b.own - a.own);
+  const rivalFrequency = new Map<string, number>();
+  selRows.forEach((row) => row.rivals.forEach((rival) => rivalFrequency.set(rival.key, (rivalFrequency.get(rival.key) ?? 0) + 1)));
+  const topRival = [...rivalFrequency.entries()].sort((a, b) => b[1] - a[1])[0];
   // The last 24 months, oldest first, so every row's mini chart lines up.
   const months = Array.from({ length: 24 }, (_, index) => {
     const date = new Date();
@@ -1263,12 +1276,18 @@ function OverviewCompetition({ data, state, signedIn, ready, hasKeys, onProfile,
           </Fragment>;
         })}</tbody></table></div>
     </article>
-    {data.competitors.length > 1 && <article className="panel overviewBigFour"><PanelHeader title="Κοινές αρχές" caption="Αρχές όπου κέρδισαν δύο ή περισσότεροι από όσους ακολουθείς - εκεί ανταγωνίζονται άμεσα · σε κάθε ετικέτα ο αριθμός αναθέσεων και συμβάσεων" />
-      {data.common.length === 0 ? <p className="noRows">Δεν υπάρχουν αρχές όπου κέρδισαν περισσότεροι από ένας.</p> : <div className="tableScroll"><table className="commonTable"><thead><tr><th>Αναθέτουσα/Διενεργούσα Αρχή</th><th>Ανάδοχοι</th><th>Σύνολο</th></tr></thead>
-        <tbody>{data.common.map((item) => <tr key={item.authority}>
-          <td>{item.authority}</td>
-          <td><div className="chipRow">{(item.by ?? item.keys.map((key) => ({ key, count: 0 }))).map((entry) => <span className="competitorChip" key={entry.key} title={`${nameOf(entry.key)}: ${number.format(entry.count)} αναθέσεις και συμβάσεις`}>{shortName(nameOf(entry.key))}{entry.count > 0 && <b>{number.format(entry.count)}</b>}</span>)}</div></td>
-          <td><b>{number.format(item.payments)}</b></td>
+    {data.competitors.length > 1 && <article className="panel overviewBigFour"><PanelHeader title="Κοινές αρχές" caption="Διάλεξε έναν ανάδοχο: δες σε ποιες αρχές κέρδισε και ποιοι άλλοι από όσους ακολουθείς κέρδισαν εκεί" />
+      <div className="commonPicker">
+        <label>Ανάδοχος<select value={selKey} onChange={(event) => setCommonFor(event.target.value)}>{data.competitors.map((item) => <option key={item.key} value={item.key}>{shortName(displayName(item))}</option>)}</select></label>
+        <span className="commonSummary">{selRows.length === 0
+          ? "Δεν υπάρχει αρχή όπου κέρδισε μαζί με άλλον από όσους ακολουθείς."
+          : <>Συναντά άλλους από όσους ακολουθείς σε <b>{number.format(selRows.length)}</b> {selRows.length === 1 ? "αρχή" : "αρχές"}{topRival ? <>. Πιο συχνός αντίπαλος: <b>{shortName(nameOf(topRival[0]))}</b> ({number.format(topRival[1])} {topRival[1] === 1 ? "αρχή" : "αρχές"})</> : null}.</>}</span>
+      </div>
+      {selRows.length > 0 && <div className="tableScroll"><table className="commonTable"><thead><tr><th>Αναθέτουσα/Διενεργούσα Αρχή</th><th>Ο ίδιος</th><th>Ποιοι άλλοι κέρδισαν εκεί</th></tr></thead>
+        <tbody>{selRows.map((row) => <tr key={row.authority}>
+          <td>{row.authority}</td>
+          <td><b>{number.format(row.own)}</b></td>
+          <td><ul className="rivalList">{row.rivals.map((rival) => <li key={rival.key} title={nameOf(rival.key)}><span>{shortName(nameOf(rival.key))}</span><b>{number.format(rival.count)}</b></li>)}</ul></td>
         </tr>)}</tbody></table></div>}
     </article>}
   </>;

@@ -119,3 +119,11 @@ h1{font-size:22px;letter-spacing:-.5px}.overviewHeading{font-size:16px}.panel h2
 .competitorChip{display:inline-flex;align-items:center;gap:5px;padding:2px 4px 2px 8px;border-radius:999px;background:#e4f3ef;border:1px solid #c3e0d8;color:#135c47;font-size:10px;font-weight:600;white-space:nowrap}
 .competitorChip b{display:inline-grid;place-items:center;min-width:17px;height:17px;padding:0 4px;border-radius:999px;background:#168c8c;color:#fff;font-size:9px}
 .commonTable th:nth-child(3),.commonTable td:nth-child(3){width:70px}
+/* Κοινές αρχές: pick a contractor, see who he meets where */
+.commonPicker{display:flex;flex-wrap:wrap;align-items:center;gap:8px 18px;padding:0 16px 10px;font-size:12px}
+.commonPicker label{display:flex;align-items:center;gap:8px;margin:0}
+.commonPicker select{width:auto;min-width:230px;font-size:12px;padding:5px 8px}
+.commonSummary{color:var(--muted);font-size:11px}.commonSummary b{color:var(--ink)}
+.commonTable td:nth-child(2),.commonTable th:nth-child(2){width:80px;text-align:center!important}
+.rivalList{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:2px 16px;font-size:10px}
+.rivalList li{display:inline-flex;gap:6px;align-items:baseline}.rivalList li b{color:var(--ink)}
