@@ -17,6 +17,8 @@ export async function GET(request: Request) {
       p_keys: keys,
       p_year: /^\d{4}$/.test(year) ? year : null,
     });
+    // The per-document list (items) is not shown here (it is for a separate page), so it is not sent.
+    (result as { competitors?: { items?: unknown }[] }).competitors?.forEach((entry) => { delete entry.items; });
     return NextResponse.json(result, { headers: { "Cache-Control": "no-store, max-age=0" } });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown competitors error";
