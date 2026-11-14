@@ -1,3 +1,7 @@
-explain analyze select public.follow_updates((select array_agg(adam) from (select adam from public.procurements_compact where document_category = 'declaration' and publication_date >= current_date - 150 order by publication_date desc limit 10) s), null, null, current_date - 45);
-explain analyze select public.follow_updates((select array_agg(adam) from (select adam from public.procurements_compact where document_category = 'declaration' and publication_date >= current_date - 150 order by publication_date desc limit 40) s), null, null, current_date - 45);
-explain analyze select public.follow_updates(null, array['091569759', 'ΙΝΕΞ', '094428065', 'ΚΡΜG'], null, current_date - 45)
+with t as (select adam, title, authority_name, publication_date, opening_at, coalesce(nullif(budget_inc_vat,0), nullif(budget_ex_vat,0), nullif(budget_unknown_vat,0)) as budget from public.procurements_compact where adam = '26PROC019954956')
+select 'tender' as role, t.adam, 'declaration' as category, t.publication_date::text as published, t.opening_at::text as opening, left(t.title, 90) as title, t.budget::text as budget from t
+union all
+select 'related', r.adam, r.document_category, r.publication_date::text, r.opening_at::text, left(r.title, 90), coalesce(nullif(r.budget_inc_vat,0), nullif(r.budget_ex_vat,0), nullif(r.budget_unknown_vat,0))::text
+from t join public.procurements_compact r on r.authority_name = t.authority_name and r.adam <> t.adam and r.publication_date >= t.publication_date
+ and (r.budget_inc_vat = t.budget or r.budget_ex_vat = t.budget or r.budget_unknown_vat = t.budget)
+order by 1 desc, 4
