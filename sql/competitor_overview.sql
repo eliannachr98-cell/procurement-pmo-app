@@ -69,9 +69,11 @@ begin
   ),
   client_total as (select key, sum(c) as total from clients group by key),
   common as (
-    select authority_name, count(distinct key) as competitors, count(*) as payments,
-           array_agg(distinct key) as keys
-    from rws group by authority_name having count(distinct key) >= 2
+    select authority_name, count(*) as competitors, sum(c) as payments,
+           array_agg(key) as keys,
+           json_agg(json_build_object('key', key, 'count', c) order by c desc) as by
+    from (select authority_name, key, count(*) as c from rws group by authority_name, key) x
+    group by authority_name having count(*) >= 2
   ),
   pooled as (select distinct n, discount from won where discount is not null)
   select json_build_object(
@@ -95,8 +97,8 @@ begin
       from keys k left join agg a on a.key = k.key left join disc d on d.key = k.key
     ), '[]'::json),
     'common', coalesce((
-      select json_agg(json_build_object('authority', authority_name, 'competitors', competitors, 'payments', payments, 'keys', keys) order by competitors desc, payments desc)
-      from (select * from common order by competitors desc, payments desc limit 10) x
+      select json_agg(json_build_object('authority', authority_name, 'competitors', competitors, 'payments', payments, 'keys', keys, 'by', by) order by competitors desc, payments desc)
+      from (select * from common order by competitors desc, payments desc limit 25) x
     ), '[]'::json),
     'summary', json_build_object('discount', (select json_build_object('count', count(*), 'median', percentile_cont(0.5) within group (order by discount) * 100, 'average', avg(discount) * 100) from pooled))
   ) into result;
