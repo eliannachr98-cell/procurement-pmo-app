@@ -231,3 +231,8 @@ h1{font-size:22px;letter-spacing:-.5px}.overviewHeading{font-size:16px}.panel h2
 .updatesAdams{display:flex;gap:6px;flex-wrap:wrap}
 .profilePage>.updatesPanel{margin-bottom:0}
 .navProfileCol button{position:relative}
+/* Προφίλ: the tab panels all span the full width and look alike (the old grid-area names no longer apply). */
+.profilePage>.panel{grid-area:auto;width:auto;min-width:0}
+.profilePage>.profileCard{padding:18px 20px}
+.profilePage>.profileCard h2{margin:2px 0 8px;font-size:15px}
+.profilePage>.emailPanel,.profilePage>.apodeltiosiPanel{padding:18px 20px;grid-column:auto}
