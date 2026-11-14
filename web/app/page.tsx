@@ -1201,10 +1201,61 @@ function shortName(name: string) {
   return short || name;
 }
 
+// Grouped horizontal bars: the same authorities, one bar per contractor. One metric at a time (value OR count) on a single axis.
+type CompareSide = { awards: number; contracts: number; value: number };
+function ComparisonChart({ rows, nameA, nameB }: { rows: { authority: string; a: CompareSide; b: CompareSide }[]; nameA: string; nameB: string }) {
+  const [metric, setMetric] = useState<"value" | "count">("value");
+  const [tip, setTip] = useState<{ x: number; y: number; authority: string; a: CompareSide; b: CompareSide } | null>(null);
+  const measure = (side: CompareSide) => metric === "value" ? side.value : side.awards + side.contracts;
+  const top = [...rows].sort((x, y) => (measure(y.a) + measure(y.b)) - (measure(x.a) + measure(x.b))).slice(0, 10);
+  const max = Math.max(1, ...top.flatMap((row) => [measure(row.a), measure(row.b)]));
+  // A clean axis: about four steps of 1, 2 or 5 x 10^n.
+  const rough = max / 4;
+  const magnitude = 10 ** Math.floor(Math.log10(rough));
+  const step = [1, 2, 5, 10].map((factor) => factor * magnitude).find((candidate) => candidate >= rough) ?? magnitude * 10;
+  const axisMax = Math.ceil(max / step) * step;
+  const ticks = Array.from({ length: Math.round(axisMax / step) + 1 }, (_, index) => index * step);
+  const compact = (value: number) => metric === "count" ? number.format(value) : value >= 1_000_000 ? `${(value / 1_000_000).toLocaleString("el-GR", { maximumFractionDigits: 1 })} εκ.` : value >= 1_000 ? `${(value / 1_000).toLocaleString("el-GR", { maximumFractionDigits: 0 })} χιλ.` : number.format(value);
+  const full = (side: CompareSide) => `${euro.format(side.value)} · ${number.format(side.awards)} αναθέσεις, ${number.format(side.contracts)} συμβάσεις`;
+  if (top.length === 0) return null;
+  return <div className="cmpChart">
+    <div className="cmpHead">
+      <div className="cmpLegend"><span><i className="cmpKey a" />{nameA}</span><span><i className="cmpKey b" />{nameB}</span></div>
+      <div className="cmpToggle" role="group" aria-label="Τι να δείχνει το διάγραμμα">
+        <button type="button" className={metric === "value" ? "active" : ""} onClick={() => setMetric("value")}>Αξία</button>
+        <button type="button" className={metric === "count" ? "active" : ""} onClick={() => setMetric("count")}>Πλήθος</button>
+      </div>
+    </div>
+    <p className="cmpNote">Οι {top.length} αρχές με το μεγαλύτερο {metric === "value" ? "ποσό" : "πλήθος αναθέσεων και συμβάσεων"} και των δύο μαζί</p>
+    <div className="cmpRows" role="img" aria-label={`Σύγκριση ${nameA} και ${nameB} ανά αρχή`}>
+      {top.map((row) => {
+        const valueA = measure(row.a);
+        const valueB = measure(row.b);
+        return <div className="cmpRow" key={row.authority} onPointerMove={(event) => setTip({ x: event.clientX, y: event.clientY, authority: row.authority, a: row.a, b: row.b })} onPointerLeave={() => setTip(null)}>
+          <span className="cmpLabel" title={row.authority}>{row.authority}</span>
+          <div className="cmpBars" style={{ backgroundSize: `${100 / (ticks.length - 1)}% 100%` }}>
+            <div className="cmpBarLine"><i className="cmpBar a" style={{ width: `${100 * valueA / axisMax}%` }} />{valueA === max && <b>{compact(valueA)}</b>}</div>
+            <div className="cmpBarLine"><i className="cmpBar b" style={{ width: `${100 * valueB / axisMax}%` }} />{valueB === max && <b>{compact(valueB)}</b>}</div>
+          </div>
+        </div>;
+      })}
+      <div className="cmpRow cmpAxisRow"><span className="cmpLabel" />
+        <div className="cmpAxis">{ticks.map((tick, index) => <span key={tick} style={{ left: `${100 * index / (ticks.length - 1)}%` }}>{compact(tick)}</span>)}</div>
+      </div>
+    </div>
+    {tip && <div className="cmpTip" style={{ left: tip.x + 14, top: tip.y + 14 }}>
+      <strong>{tip.authority}</strong>
+      <span><i className="cmpKey a" />{nameA}: <b>{full(tip.a)}</b></span>
+      <span><i className="cmpKey b" />{nameB}: <b>{full(tip.b)}</b></span>
+    </div>}
+  </div>;
+}
+
 function OverviewCompetition({ data, state, signedIn, ready, hasKeys, onProfile, labels }: { data: CompetitorData | null; state: "idle" | "loading" | "error"; signedIn: boolean; ready: boolean; hasKeys: boolean; onProfile: () => void; labels: Record<string, string> }) {
   const [open, setOpen] = useState<string | null>(null);
   const [picked, setPicked] = useState<string[]>([]);
   const [onlyCommon, setOnlyCommon] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
   if (!signedIn) return <p className="noRows">Συνδέσου και πρόσθεσε αναδόχους στο Προφίλ για να δεις τον ανταγωνισμό τους.</p>;
   if (ready && !hasKeys) return <p className="noRows">Δεν ακολουθείς ακόμα κάποιον ανάδοχο. Πρόσθεσέ τους στο Προφίλ. <button type="button" className="profileLink" onClick={onProfile}>Πήγαινε στο Προφίλ →</button></p>;
   if (state === "error") return <p className="noRows">Δεν φορτώθηκαν τα στοιχεία των αναδόχων - δοκίμασε ξανά.</p>;
@@ -1213,9 +1264,8 @@ function OverviewCompetition({ data, state, signedIn, ready, hasKeys, onProfile,
   // A followed contractor with no awards/contracts yet comes back without a name (just its key): use the label saved in Προφίλ.
   const displayName = (item: Competitor) => item.name !== item.key ? item.name : (labels[item.key] ?? item.name);
   const nameOf = (key: string) => { const item = data.competitors.find((entry) => entry.key === key); return item ? displayName(item) : (labels[key] ?? key); };
-  // Σύγκριση: two contractors side by side, authority by authority. Starts with the two of the biggest value.
-  const defaultPair = [...data.competitors].sort((x, y) => y.value - x.value).slice(0, 2).map((item) => item.key);
-  const chosen = (picked.length > 0 ? picked : defaultPair).filter((key) => data.competitors.some((item) => item.key === key)).slice(0, 2);
+  // Σύγκριση: two contractors side by side, authority by authority. Nothing is shown until two are ticked.
+  const chosen = picked.filter((key) => data.competitors.some((item) => item.key === key)).slice(0, 2);
   type AuthorityTotals = { awards: number; contracts: number; value: number };
   const totalsFor = (key: string | undefined) => {
     const map = new Map<string, AuthorityTotals>();
@@ -1234,7 +1284,11 @@ function OverviewCompetition({ data, state, signedIn, ready, hasKeys, onProfile,
   const sumOf = (side: "a" | "b") => authorityRows.reduce((sum, row) => ({ awards: sum.awards + row[side].awards, contracts: sum.contracts + row[side].contracts, value: sum.value + row[side].value }), { ...empty });
   const totalA = sumOf("a");
   const totalB = sumOf("b");
-  const togglePick = (key: string) => setPicked(chosen.includes(key) ? chosen.filter((item) => item !== key) : [...chosen, key].slice(-2));
+  const togglePick = (key: string) => {
+    const next = chosen.includes(key) ? chosen.filter((item) => item !== key) : chosen.length < 2 ? [...chosen, key] : chosen;
+    setPicked(next);
+    if (next.length === 2) setPickerOpen(false);
+  };
   const nameA = comparing ? shortName(nameOf(chosen[0])) : "";
   const nameB = comparing ? shortName(nameOf(chosen[1])) : "";
   // The last 24 months, oldest first, so every row's mini chart lines up.
@@ -1289,31 +1343,44 @@ function OverviewCompetition({ data, state, signedIn, ready, hasKeys, onProfile,
           </Fragment>;
         })}</tbody></table></div>
     </article>
-    {data.competitors.length > 1 && <article className="panel overviewBigFour"><PanelHeader title="Σύγκριση αναδόχων ανά αρχή" caption="Διάλεξε δύο αναδόχους και δες δίπλα-δίπλα τι έχουν πάρει από κάθε αναθέτουσα/διενεργούσα αρχή" />
+    {data.competitors.length > 1 && <article className="panel overviewBigFour"><PanelHeader title="Σύγκριση αναδόχων ανά αρχή" caption="Τσέκαρε δύο αναδόχους και δες δίπλα-δίπλα τι έχουν πάρει από κάθε αναθέτουσα/διενεργούσα αρχή" />
       <div className="authorityFilter">
-        <div className="authorityPills" role="group" aria-label="Ανάδοχοι">
-          {data.competitors.map((item) => <button type="button" key={item.key} title={displayName(item)} className={`authorityPill${chosen.includes(item.key) ? " active" : ""}`} aria-pressed={chosen.includes(item.key)} onClick={() => togglePick(item.key)}>{shortName(displayName(item))}</button>)}
+        <div className="pickerWrap">
+          <button type="button" className="pickerButton" aria-expanded={pickerOpen} onClick={() => setPickerOpen(!pickerOpen)}>Διάλεξε αναδόχους ({chosen.length}/2) <span aria-hidden="true">{pickerOpen ? "▴" : "▾"}</span></button>
+          {pickerOpen && <div className="pickerMenu" role="group" aria-label="Ανάδοχοι">
+            {data.competitors.map((item) => {
+              const checked = chosen.includes(item.key);
+              const blocked = !checked && chosen.length >= 2;
+              return <label key={item.key} className={`pickerOption${blocked ? " disabled" : ""}`} title={displayName(item)}>
+                <input type="checkbox" checked={checked} disabled={blocked} onChange={() => togglePick(item.key)} /><span>{displayName(item)}</span>
+              </label>;
+            })}
+          </div>}
         </div>
+        {chosen.length > 0 && <div className="pickedTags">{chosen.map((key, index) => <span className="pickedTag" key={key}><i className={`cmpKey ${index === 0 ? "a" : "b"}`} />{shortName(nameOf(key))}<button type="button" aria-label="Αφαίρεση" onClick={() => togglePick(key)}>×</button></span>)}</div>}
         {comparing && <div className="authorityCompare"><label className="checkboxRow"><input type="checkbox" checked={onlyCommon} onChange={(event) => setOnlyCommon(event.target.checked)} />Μόνο κοινές αρχές</label></div>}
       </div>
-      {!comparing ? <p className="noRows">Διάλεξε δύο αναδόχους από τα κουμπιά{chosen.length === 1 ? ` - έχεις διαλέξει τον ${shortName(nameOf(chosen[0]))}, διάλεξε και έναν ακόμα` : ""}.</p>
+      {!comparing ? <p className="noRows">Άνοιξε τη λίστα και τσέκαρε δύο αναδόχους για να τους συγκρίνεις{chosen.length === 1 ? ` - έχεις διαλέξει τον ${shortName(nameOf(chosen[0]))}, τσέκαρε και έναν ακόμα` : ""}.</p>
         : authorityRows.length === 0 ? <p className="noRows">{onlyCommon ? "Δεν υπάρχει αρχή όπου κέρδισαν και οι δύο." : "Δεν υπάρχουν αναθέσεις ή συμβάσεις."}</p>
-        : <div className="tableScroll"><table className="authorityTable">
-          <thead>
-            <tr className="groupHead"><th rowSpan={2}>Αναθέτουσα/Διενεργούσα Αρχή</th><th colSpan={3}>{nameA}</th><th colSpan={3}>{nameB}</th></tr>
-            <tr><th>Αναθέσεις</th><th>Συμβάσεις</th><th>Αξία</th><th>Αναθέσεις</th><th>Συμβάσεις</th><th>Αξία</th></tr>
-          </thead>
-          <tbody>
-            {authorityRows.map((row) => <tr key={row.authority}>
-              <td>{row.authority}</td>
-              <td>{number.format(row.a.awards)}</td><td>{number.format(row.a.contracts)}</td><td>{row.a.value > 0 ? euro.format(row.a.value) : "—"}</td>
-              <td>{number.format(row.b.awards)}</td><td>{number.format(row.b.contracts)}</td><td>{row.b.value > 0 ? euro.format(row.b.value) : "—"}</td>
-            </tr>)}
-            <tr className="tableTotal"><td>Σύνολο ({number.format(authorityRows.length)} αρχές)</td>
-              <td>{number.format(totalA.awards)}</td><td>{number.format(totalA.contracts)}</td><td>{euro.format(totalA.value)}</td>
-              <td>{number.format(totalB.awards)}</td><td>{number.format(totalB.contracts)}</td><td>{euro.format(totalB.value)}</td>
-            </tr>
-          </tbody></table></div>}
+        : <>
+          <ComparisonChart rows={authorityRows} nameA={nameA} nameB={nameB} />
+          <div className="tableScroll"><table className="authorityTable">
+            <thead>
+              <tr className="groupHead"><th rowSpan={2}>Αναθέτουσα/Διενεργούσα Αρχή</th><th colSpan={3}><i className="cmpKey a" />{nameA}</th><th colSpan={3}><i className="cmpKey b" />{nameB}</th></tr>
+              <tr><th>Αναθέσεις</th><th>Συμβάσεις</th><th>Αξία</th><th>Αναθέσεις</th><th>Συμβάσεις</th><th>Αξία</th></tr>
+            </thead>
+            <tbody>
+              {authorityRows.map((row) => <tr key={row.authority}>
+                <td>{row.authority}</td>
+                <td>{number.format(row.a.awards)}</td><td>{number.format(row.a.contracts)}</td><td>{row.a.value > 0 ? euro.format(row.a.value) : "—"}</td>
+                <td>{number.format(row.b.awards)}</td><td>{number.format(row.b.contracts)}</td><td>{row.b.value > 0 ? euro.format(row.b.value) : "—"}</td>
+              </tr>)}
+              <tr className="tableTotal"><td>Σύνολο ({number.format(authorityRows.length)} αρχές)</td>
+                <td>{number.format(totalA.awards)}</td><td>{number.format(totalA.contracts)}</td><td>{euro.format(totalA.value)}</td>
+                <td>{number.format(totalB.awards)}</td><td>{number.format(totalB.contracts)}</td><td>{euro.format(totalB.value)}</td>
+              </tr>
+            </tbody></table></div>
+        </>}
     </article>}
   </>;
 }

@@ -140,3 +140,40 @@ h1{font-size:22px;letter-spacing:-.5px}.overviewHeading{font-size:16px}.panel h2
 .authorityTable .groupHead th:first-child{text-align:left!important}
 .authorityTable .groupHead th:nth-child(3){border-left:1px solid var(--line)}
 .authorityTable.compared td:nth-child(5),.authorityTable.compared th:nth-child(4){border-left:1px solid var(--line)}
+/* Σύγκριση αναδόχων: tick-to-pick dropdown + grouped bar chart. Series 1 / 2 = blue / orange (validated categorical slots). */
+:root{--cmp-a:#2a78d6;--cmp-b:#eb6834;--cmp-grid:#e4ecf0}
+.cmpKey{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:-1px}
+.cmpKey.a{background:var(--cmp-a)}.cmpKey.b{background:var(--cmp-b)}
+.pickerWrap{position:relative}
+.pickerButton{display:inline-flex;align-items:center;gap:8px;padding:6px 12px;border:1px solid #c3d6de;border-radius:10px;background:#fff;color:var(--ink);font-size:12px;font-weight:600;cursor:pointer}
+.pickerButton:hover{border-color:#168c8c}
+.pickerMenu{position:absolute;z-index:20;top:calc(100% + 4px);left:0;min-width:320px;max-width:520px;max-height:300px;overflow-y:auto;padding:6px;background:#fff;border:1px solid #cbdbe3;border-radius:10px;box-shadow:0 12px 30px rgba(18,55,74,.18);display:grid;gap:2px}
+.pickerOption{display:flex;align-items:flex-start;gap:8px;margin:0;padding:6px 8px;border-radius:7px;font-size:11px;line-height:1.3;cursor:pointer}
+.pickerOption:hover{background:#f1f7f9}.pickerOption.disabled{opacity:.45;cursor:not-allowed}
+.pickerOption input{width:15px;height:15px;margin-top:1px;flex:none;accent-color:#168c8c}
+.pickedTags{display:flex;flex-wrap:wrap;gap:6px}
+.pickedTag{display:inline-flex;align-items:center;padding:3px 4px 3px 9px;border-radius:999px;background:#f1f6f8;border:1px solid var(--line);font-size:11px;font-weight:600;color:var(--ink)}
+.pickedTag button{border:0;background:transparent;color:var(--muted);font-size:14px;line-height:1;padding:0 6px;cursor:pointer}
+.authorityTable .groupHead th .cmpKey{margin-right:6px}
+.cmpChart{padding:2px 16px 14px;color:var(--ink);position:relative}
+.cmpHead{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 16px}
+.cmpLegend{display:flex;flex-wrap:wrap;gap:4px 18px;font-size:11px;color:#52646f}
+.cmpToggle{display:inline-flex;border:1px solid #c3d6de;border-radius:999px;overflow:hidden}
+.cmpToggle button{border:0;background:#fff;color:#52646f;font-size:11px;font-weight:600;padding:4px 14px;cursor:pointer}
+.cmpToggle button.active{background:#168c8c;color:#fff}
+.cmpNote{margin:6px 0 8px;font-size:10px;color:var(--muted)}
+.cmpRows{display:grid;gap:7px}
+.cmpRow{display:grid;grid-template-columns:minmax(120px,32%) minmax(0,1fr);gap:12px;align-items:center}
+.cmpLabel{font-size:10px;color:#52646f;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:right}
+.cmpBars{display:grid;gap:2px;border-left:1px solid #b9c9d1;border-right:1px solid var(--cmp-grid);background-image:linear-gradient(to right,var(--cmp-grid) 1px,transparent 1px);background-repeat:repeat-x}
+.cmpBarLine{display:flex;align-items:center;gap:6px;height:10px}
+.cmpBar{display:block;height:10px;min-width:1px;border-radius:0 4px 4px 0}
+.cmpBar.a{background:var(--cmp-a)}.cmpBar.b{background:var(--cmp-b)}
+.cmpBarLine b{font-size:10px;color:var(--ink);white-space:nowrap}
+.cmpAxisRow{margin-top:-2px}
+.cmpAxis{position:relative;height:14px}
+.cmpAxis span{position:absolute;transform:translateX(-50%);font-size:9px;color:var(--muted);white-space:nowrap}
+.cmpAxis span:first-child{transform:none}.cmpAxis span:last-child{transform:translateX(-100%)}
+.cmpTip{position:fixed;z-index:60;display:grid;gap:3px;max-width:340px;padding:8px 10px;background:#fff;border:1px solid #cbdbe3;border-radius:9px;box-shadow:0 10px 26px rgba(18,55,74,.2);font-size:10px;color:#52646f;pointer-events:none}
+.cmpTip strong{font-size:11px;color:var(--ink)}.cmpTip b{color:var(--ink)}
+@media(max-width:700px){.cmpRow{grid-template-columns:1fr}.cmpLabel{text-align:left}}
