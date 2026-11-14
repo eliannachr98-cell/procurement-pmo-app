@@ -230,3 +230,4 @@ h1{font-size:22px;letter-spacing:-.5px}.overviewHeading{font-size:16px}.panel h2
 .profileTabs button.active{color:#0f7a7a;border-bottom-color:#168c8c}
 .updatesAdams{display:flex;gap:6px;flex-wrap:wrap}
 .profilePage>.updatesPanel{margin-bottom:0}
+.navProfileCol button{position:relative}

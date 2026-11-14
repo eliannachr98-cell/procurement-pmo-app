@@ -542,6 +542,22 @@ export default function Home() {
     return () => window.clearTimeout(timer);
   }, [competitionNeedsFetch, loadCompetition]);
 
+  // The badge on Προφίλ: how many updates are new since the last visit. Loaded a few seconds after sign-in (so the page itself comes first), then every 10 minutes; seen once the Ενημερώσεις tab is opened.
+  const [updatesNew, setUpdatesNew] = useState(0);
+  const [updatesSeen, setUpdatesSeen] = useState(false);
+  useEffect(() => {
+    if (!team.code || !visitBaseline) { setUpdatesNew(0); return; }
+    const code = team.code;
+    const since = visitBaseline.slice(0, 10);
+    let cancelled = false;
+    const load = () => fetch("/api/updates?days=30", { headers: { "x-alert-code": code } })
+      .then((response) => response.ok ? response.json() : null)
+      .then((payload) => { if (!cancelled && payload && Array.isArray(payload.tenders)) setUpdatesNew(countNewUpdates(payload as FollowUpdates, since)); })
+      .catch(() => {});
+    const first = window.setTimeout(load, 4000);
+    const timer = window.setInterval(load, 10 * 60 * 1000);
+    return () => { cancelled = true; window.clearTimeout(first); window.clearInterval(timer); };
+  }, [team.code, visitBaseline]);
   useEffect(() => {
     if (page !== "profile" || !team.code || !watchlistReady || !visitBaseline) return;
     const baseline = visitBaseline;
@@ -848,6 +864,7 @@ export default function Home() {
             {navItems.filter(([id]) => id === "profile").map(([id, Icon, label]) => (
               <button key={id} className={page === id ? "active" : ""} onClick={() => setPage(id)}>
                 <span><Icon size={16} strokeWidth={2.25} /></span>{label}
+                {id === "profile" && team.code && updatesNew > 0 && !updatesSeen && <i className="navBadge" title={`${updatesNew} νέες ενημερώσεις`}>{updatesNew > 9 ? "9+" : updatesNew}</i>}
               </button>
             ))}
             {team.code !== undefined && <TeamCodeBar team={team} />}
@@ -966,7 +983,7 @@ export default function Home() {
               ))}
             </div>
             {profileTab === "updates" && (team.code
-              ? <ProfileUpdates code={team.code} baseline={visitBaseline} onUnauthorized={team.onUnauthorized} />
+              ? <ProfileUpdates code={team.code} baseline={visitBaseline} onUnauthorized={team.onUnauthorized} onSeen={() => setUpdatesSeen(true)} />
               : <article className="panel profileCard"><p className="noRows">Συνδέσου για να βλέπεις τις ενημερώσεις για όσα ακολουθείς.</p></article>)}
             {profileTab === "follow" && <article className="panel profileCard profileWatchCard">
               <p className="eyebrow">ΕΝΔΙΑΦΕΡΟΝΤΑ</p>
@@ -2405,20 +2422,30 @@ function groupUpdateEvents(events: UpdateEvent[]) {
   return [...groups.values()];
 }
 
+// How many entries of the updates are newer than the given date (yyyy-mm-dd): the badge in the menu.
+function countNewUpdates(data: FollowUpdates, since: string) {
+  const fresh = (date?: string | null) => Boolean(date && date.slice(0, 10) >= since);
+  return data.tenders.reduce((sum, tender) => sum + groupUpdateEvents(tender.events).filter(({ event }) => fresh(event.date)).length, 0)
+    + data.contractors.reduce((sum, contractor) => sum + contractor.items.filter((item) => fresh(item.date)).length, 0)
+    + data.authorities.filter((item) => fresh(item.date)).length;
+}
+
 // The "Ενημερώσεις" of the Προφίλ: what happened to the tenders, contractors and authorities followed.
-function ProfileUpdates({ code, baseline, onUnauthorized }: { code: string | null; baseline: string | null; onUnauthorized: () => void }) {
+function ProfileUpdates({ code, baseline, onUnauthorized, onSeen }: { code: string | null; baseline: string | null; onUnauthorized: () => void; onSeen: () => void }) {
   const [days, setDays] = useState(30);
   const [data, setData] = useState<FollowUpdates | null>(null);
   const [state, setState] = useState<"loading" | "idle" | "error">("loading");
   const unauthorizedRef = useRef(onUnauthorized);
   unauthorizedRef.current = onUnauthorized;
+  const seenRef = useRef(onSeen);
+  seenRef.current = onSeen;
   useEffect(() => {
     if (!code) return;
     let cancelled = false;
     setState("loading");
     fetch(`/api/updates?days=${days}`, { headers: { "x-alert-code": code } })
       .then((response) => { if (response.status === 401) unauthorizedRef.current(); return response.ok ? response.json() : Promise.reject(new Error("updates")); })
-      .then((payload) => { if (!cancelled) { setData(payload); setState("idle"); } })
+      .then((payload) => { if (!cancelled) { setData(payload); setState("idle"); seenRef.current(); } })
       .catch(() => { if (!cancelled) setState("error"); });
     return () => { cancelled = true; };
   }, [code, days]);
