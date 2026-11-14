@@ -213,6 +213,7 @@ export default function Home() {
   // a photo" option has a natural place to sit alongside emoji, instead of
   // permanently showing a whole grid of options under the avatar.
   const [avatarPickerOpen, setAvatarPickerOpen] = useState(false);
+  const [profileTab, setProfileTab] = useState<"updates" | "follow" | "email" | "tools">("updates");
   const previousTeamCode = useRef(team.code);
   useEffect(() => {
     if (previousTeamCode.current && !team.code) {
@@ -923,11 +924,9 @@ export default function Home() {
           </>}
           {page === "market" && <MarketPanel awards={awards} contracts={contracts} cpv={cpv} contractor={contractor} authority={authority} year={year} contractType={contractType} documentType={documentType} loadedCount={tenders.length} totalCount={totalTenders} stillLoading={hasMore && loading} locked={!team.code} selectedContractor={marketSelectedContractor} setSelectedContractor={setMarketSelectedContractor} contractorSearch={marketContractorSearch} setContractorSearch={setMarketContractorSearch} visibleCount={marketVisibleCount} setVisibleCount={setMarketVisibleCount} />}
           {page === "profile" && <>
-          <ProfileUpdates code={team.code ?? null} baseline={visitBaseline} onUnauthorized={team.onUnauthorized} />
-          <div className="profileGrid">
-            <article className="panel profileCard profileAccountCard">
-              <p className="eyebrow">ΛΟΓΑΡΙΑΣΜΟΣ</p>
-              <div className="profileHeaderMain">
+          <div className="profilePage">
+            <header className="panel profileHero">
+              <div className="profileHeroMain">
                 <button
                   type="button"
                   className="profileAvatar"
@@ -937,11 +936,21 @@ export default function Home() {
                 >
                   {team.code && team.teamAvatar ? <span className="profileAvatarEmoji">{team.teamAvatar}</span> : <CircleUserRound size={46} strokeWidth={1.75} />}
                 </button>
-                {team.code
-                  ? <p className="profileStatusOn">{team.teamName || "Ο λογαριασμός σου"}</p>
-                  : <p className="profileStatusOff">Δεν είσαι συνδεδεμένη — οι Προβολές και η Παρακολούθηση χρειάζονται σύνδεση.</p>}
+                <div className="profileHeroText">
+                  {team.code
+                    ? <p className="profileStatusOn">{team.teamName || "Ο λογαριασμός σου"}</p>
+                    : <p className="profileStatusOff">Δεν είσαι συνδεδεμένος - οι ενημερώσεις και οι προτιμήσεις χρειάζονται σύνδεση.</p>}
+                  {lastSync && <p className="profileHeaderSync">Ενημέρωση δεδομένων: <strong>{new Intl.DateTimeFormat("el-GR", { dateStyle: "short", timeStyle: "short" }).format(new Date(lastSync))}</strong></p>}
+                </div>
               </div>
-              {team.code && avatarPickerOpen && <>
+              {team.code && <div className="profileStats" aria-label="Τι ακολουθείς">
+                <div><b>{number.format(alertsWatchlist.length)}</b><span>CPV</span></div>
+                <div><b>{number.format(alertsNutsFilter.length)}</b><span>Περιοχές</span></div>
+                <div><b>{number.format(authorityWatch.length)}</b><span>Αρχές</span></div>
+                <div><b>{number.format(contractorWatch.length)}</b><span>Ανάδοχοι</span></div>
+                <div><b>{number.format(interestedCount)}</b><span>Διαγωνισμοί ★</span></div>
+              </div>}
+              {team.code && avatarPickerOpen && <div className="profileHeroPicker">
                 <p className="watchlistCaption">Διάλεξε emoji</p>
                 <div className="profileEmojiPicker">
                   {AVATAR_OPTIONS.map((emoji) => (
@@ -949,10 +958,17 @@ export default function Home() {
                   ))}
                 </div>
                 {team.avatarError && <p className="recipientError">{team.avatarError}</p>}
-              </>}
-              {lastSync && <p className="profileHeaderSync">Ενημέρωση δεδομένων<strong>{new Intl.DateTimeFormat("el-GR", { dateStyle: "short", timeStyle: "short" }).format(new Date(lastSync))}</strong></p>}
-            </article>
-            <article className="panel profileCard profileWatchCard">
+              </div>}
+            </header>
+            <div className="profileTabs" role="tablist" aria-label="Ενότητες προφίλ">
+              {([["updates", "Ενημερώσεις"], ["follow", "Τι ακολουθείς"], ["email", "Ειδοποιήσεις email"], ["tools", "Εργαλεία"]] as const).map(([id, label]) => (
+                <button type="button" role="tab" key={id} aria-selected={profileTab === id} className={profileTab === id ? "active" : ""} onClick={() => setProfileTab(id)}>{label}</button>
+              ))}
+            </div>
+            {profileTab === "updates" && (team.code
+              ? <ProfileUpdates code={team.code} baseline={visitBaseline} onUnauthorized={team.onUnauthorized} />
+              : <article className="panel profileCard"><p className="noRows">Συνδέσου για να βλέπεις τις ενημερώσεις για όσα ακολουθείς.</p></article>)}
+            {profileTab === "follow" && <article className="panel profileCard profileWatchCard">
               <p className="eyebrow">ΕΝΔΙΑΦΕΡΟΝΤΑ</p>
               <h2>Τι ακολουθείς</h2>
               {team.code ? <>
@@ -1018,14 +1034,9 @@ export default function Home() {
                     />
                   </section>
                 </div>
-                <div className="profileDivider" />
-                <p className="eyebrow">ΔΡΑΣΤΗΡΙΟΤΗΤΑ</p>
-                <div className="metrics profileMetrics">
-                  <Metric label="Διαγωνισμοί που παρακολουθώ" value={number.format(interestedCount)} tone="lilac" />
-                </div>
               </> : <p className="watchlistCaption">Συνδέσου για να ορίσεις τι ακολουθείς.</p>}
-            </article>
-            <ProfileTools code={team.code ?? null} onUnauthorized={team.onUnauthorized} />
+            </article>}
+            {(profileTab === "email" || profileTab === "tools") && <ProfileTools part={profileTab} code={team.code ?? null} onUnauthorized={team.onUnauthorized} />}
           </div></>}
         </section>
 
@@ -2371,7 +2382,7 @@ type UpdateEvent = { kind: string; date: string; adam: string | null; title: str
 type FollowUpdates = {
   since: string;
   followed: { tenders: number; contractors: number; authorities: number };
-  tenders: { adam: string; title: string; authority: string; last_date: string; events: UpdateEvent[] }[];
+  tenders: { adam: string; title: string; authority: string; opening: string | null; last_date: string; events: UpdateEvent[] }[];
   contractors: { key: string; name: string; total: number; items: { kind: string; date: string; adam: string | null; tender: string; authority: string; amount: number; union: boolean }[] }[];
   authorities: { authority: string; adam: string; title: string; date: string; budget: number | null }[];
 };
@@ -2381,6 +2392,18 @@ const UPDATE_LABELS: Record<string, string> = {
 };
 // Kinds that change the tender itself (deadline, rules, outcome) get a stronger tone than the rest.
 const UPDATE_TONES: Record<string, string> = { extension: "warn", amendment: "warn", cancelled: "bad", award: "good", contract: "good", clarification: "info", decision: "info", summary: "info" };
+
+// The same notice is sometimes published twice (two ADAMs, same date, title and deadline): show it once.
+function groupUpdateEvents(events: UpdateEvent[]) {
+  const groups = new Map<string, { event: UpdateEvent; adams: string[] }>();
+  for (const event of events) {
+    const key = [event.kind, event.date, event.title ?? "", event.opening ?? "", event.amount ?? ""].join("|");
+    const group = groups.get(key);
+    if (group) { if (event.adam && !group.adams.includes(event.adam)) group.adams.push(event.adam); }
+    else groups.set(key, { event, adams: event.adam ? [event.adam] : [] });
+  }
+  return [...groups.values()];
+}
 
 // The "Ενημερώσεις" of the Προφίλ: what happened to the tenders, contractors and authorities followed.
 function ProfileUpdates({ code, baseline, onUnauthorized }: { code: string | null; baseline: string | null; onUnauthorized: () => void }) {
@@ -2424,17 +2447,23 @@ function ProfileUpdates({ code, baseline, onUnauthorized }: { code: string | nul
       {data.tenders.length > 0 && <section className="updatesSection"><h3>Διαγωνισμοί που παρακολουθείς</h3>
         {data.tenders.map((tender) => <div className="updatesItem" key={tender.adam}>
           <div className="updatesItemHead"><b title={tender.title}>{tender.title}</b><span>{tender.authority}</span><AdamCopy adam={tender.adam} className="adamCopy" /></div>
-          <ul className="updatesEvents">{tender.events.map((event, index) => <li key={`${event.kind}-${event.adam}-${index}`}>
-            <span className="updatesDate">{formatDate(event.date)}</span>
-            <span className={`updatesBadge ${UPDATE_TONES[event.kind] ?? "info"}`}>{UPDATE_LABELS[event.kind] ?? event.kind}</span>
-            <span className="updatesText">
-              {event.kind === "extension" && event.opening ? <>Νέα καταληκτική: <b>{formatDate(event.opening)}</b></> : null}
-              {(event.kind === "award" || event.kind === "contract") && event.amount ? <b>{euro.format(event.amount)}</b> : null}
-              {event.title && event.kind !== "award" && event.kind !== "contract" && !(event.kind === "extension" && event.opening) ? <span className="updatesDocTitle" title={event.title}>{event.title}</span> : null}
-            </span>
-            {event.adam && event.adam !== tender.adam && <AdamCopy adam={event.adam} className="adamCopy" />}
-            {isNew(event.date) && <b className="newBadge">ΝΕΟ</b>}
-          </li>)}</ul>
+          <ul className="updatesEvents">{groupUpdateEvents(tender.events).map(({ event, adams }, index) => {
+            const hasDoc = event.kind !== "award" && event.kind !== "contract" && event.kind !== "cancelled";
+            // The deadline the notice sets, when it differs from the tender's original one.
+            const moved = hasDoc && event.opening && (!tender.opening || event.opening.slice(0, 10) !== tender.opening.slice(0, 10));
+            return <li key={`${event.kind}-${event.date}-${index}`}>
+              <span className="updatesDate">{formatDate(event.date)}</span>
+              <span className={`updatesBadge ${UPDATE_TONES[event.kind] ?? "info"}`}>{UPDATE_LABELS[event.kind] ?? event.kind}</span>
+              <span className="updatesText">
+                {moved ? <span>Νέα καταληκτική: <b>{formatDate(event.opening ?? undefined)}</b>{tender.opening ? <small className="competitorEmpty"> (πριν: {formatDate(tender.opening)})</small> : null}</span> : null}
+                {(event.kind === "award" || event.kind === "contract") && event.amount ? <b>{euro.format(event.amount)}</b> : null}
+                {event.title && hasDoc ? <span className="updatesDocTitle" title={event.title}>{event.title}</span> : null}
+                {adams.length > 1 ? <small className="competitorEmpty" title="Η ίδια ειδοποίηση έχει δημοσιευτεί περισσότερες από μία φορές (διαφορετικά ΑΔΑΜ)">δημοσιεύτηκε {adams.length} φορές</small> : null}
+              </span>
+              <span className="updatesAdams">{adams.filter((adam) => adam !== tender.adam).map((adam) => <AdamCopy key={adam} adam={adam} className="adamCopy" />)}</span>
+              {isNew(event.date) && <b className="newBadge">ΝΕΟ</b>}
+            </li>;
+          })}</ul>
         </div>)}
       </section>}
       {data.contractors.length > 0 && <section className="updatesSection"><h3>Ανάδοχοι που ακολουθείς</h3>
@@ -2462,7 +2491,7 @@ function ProfileUpdates({ code, baseline, onUnauthorized }: { code: string | nul
   </article>;
 }
 
-function ProfileTools({ code, onUnauthorized }: { code: string | null; onUnauthorized: () => void }) {
+function ProfileTools({ code, onUnauthorized, part }: { code: string | null; onUnauthorized: () => void; part: "email" | "tools" }) {
   const authFetch = useCallback((url: string, init: RequestInit = {}) => {
     return fetch(url, { ...init, headers: { ...(init.headers as Record<string, string> ?? {}), "x-alert-code": code ?? "" } })
       .then((response) => {
@@ -2545,7 +2574,7 @@ function ProfileTools({ code, onUnauthorized }: { code: string | null; onUnautho
   };
 
   return <>
-    {code ? <article className="panel emailPanel">
+    {part === "email" && (code ? <article className="panel emailPanel">
       <p className="eyebrow">EMAIL</p>
       <h2><span className="emailIcon" aria-hidden="true">✉</span>Ειδοποιήσεις μέσω email</h2>
       <p className="emailCaption">Στείλε νέους διαγωνισμούς απευθείας στα εισερχόμενα.</p>
@@ -2568,8 +2597,8 @@ function ProfileTools({ code, onUnauthorized }: { code: string | null; onUnautho
       <p className="eyebrow">EMAIL</p>
       <h2><span className="emailIcon" aria-hidden="true">✉</span>Ειδοποιήσεις μέσω email</h2>
       <p className="emailCaption">Για να ενημερώνεσαι με νέες ειδοποιήσεις για CPV/διαγωνισμούς που σε ενδιαφέρουν, συνδέσου ή εγγράψου.</p>
-    </article>}
-    {code ? <article className="panel apodeltiosiPanel apodeltiosiTrigger">
+    </article>)}
+    {part === "tools" && (code ? <article className="panel apodeltiosiPanel apodeltiosiTrigger">
       <p className="eyebrow">ΑΠΟΔΕΛΤΙΩΣΗ</p>
       <h2>Ανάλυση Διακήρυξης</h2>
       <p className="watchlistCaption">Ανέβασε το PDF μιας Διακήρυξης για αυτόματη αποδελτίωση σε δομημένη μορφή.</p>
@@ -2582,8 +2611,8 @@ function ProfileTools({ code, onUnauthorized }: { code: string | null; onUnautho
       <p className="eyebrow">ΑΠΟΔΕΛΤΙΩΣΗ</p>
       <h2>Ανάλυση Διακήρυξης</h2>
       <p className="watchlistCaption">Για να ανεβάζεις Διακηρύξεις και να παίρνεις αυτόματη αποδελτίωση, συνδέσου ή εγγράψου.</p>
-    </article>}
-    {apodeltiosiResult && <article className="panel apodeltiosiPanel apodeltiosiResultPanel">
+    </article>)}
+    {part === "tools" && apodeltiosiResult && <article className="panel apodeltiosiPanel apodeltiosiResultPanel">
       <div className="apodeltiosiResultHeader">
         <div>
           <p className="eyebrow">ΑΠΟΔΕΛΤΙΩΣΗ</p>
