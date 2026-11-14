@@ -961,11 +961,11 @@ export default function Home() {
                 </div>
               </div>
               {team.code && <div className="profileStats" aria-label="Τι ακολουθείς">
-                <div className="toneCpv"><i aria-hidden="true">🏷️</i><b>{number.format(alertsWatchlist.length)}</b><span>CPV</span></div>
-                <div className="toneNuts"><i aria-hidden="true">📍</i><b>{number.format(alertsNutsFilter.length)}</b><span>Περιοχές</span></div>
-                <div className="toneAuth"><i aria-hidden="true">🏛️</i><b>{number.format(authorityWatch.length)}</b><span>Αρχές</span></div>
-                <div className="toneComp"><i aria-hidden="true">🏆</i><b>{number.format(contractorWatch.length)}</b><span>Ανάδοχοι</span></div>
-                <div className="toneStar"><i aria-hidden="true">⭐</i><b>{number.format(interestedCount)}</b><span>Διαγωνισμοί</span></div>
+                <div className="toneCpv"><b>{number.format(alertsWatchlist.length)}</b><span>CPV</span></div>
+                <div className="toneNuts"><b>{number.format(alertsNutsFilter.length)}</b><span>Περιοχές</span></div>
+                <div className="toneAuth"><b>{number.format(authorityWatch.length)}</b><span>Αρχές</span></div>
+                <div className="toneComp"><b>{number.format(contractorWatch.length)}</b><span>Ανάδοχοι</span></div>
+                <div className="toneStar"><b>{number.format(interestedCount)}</b><span>Διαγωνισμοί ★</span></div>
               </div>}
               {team.code && avatarPickerOpen && <div className="profileHeroPicker">
                 <p className="watchlistCaption">Διάλεξε emoji</p>

@@ -271,3 +271,6 @@ h1{font-size:22px;letter-spacing:-.5px}.overviewHeading{font-size:16px}.panel h2
 .profileStats div i{font-style:normal;font-size:17px;line-height:1.2}
 .profileStats div b{color:var(--tone-ink);font-size:19px}
 .profileStats div span{color:var(--tone-ink);opacity:.85;font-size:10px;font-weight:600}
+/* summary chips: colour only, no emoji */
+.profileStats div{grid-template-rows:auto auto;gap:2px;min-width:88px;padding:9px 14px 8px}
+.profileStats div b{font-size:21px}
