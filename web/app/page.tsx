@@ -129,7 +129,7 @@ type Competitor = {
   monthly: { month: string; count: number }[];
   clients: { authority: string; count: number; awards: number; contracts: number; share: number }[];
 };
-type CompetitorData = { competitors: Competitor[]; common: { authority: string; competitors: number; payments: number; keys: string[] }[] };
+type CompetitorData = { competitors: Competitor[]; common: { authority: string; competitors: number; payments: number; keys: string[] }[]; summary?: { discount: { count: number; median: number | null; average: number | null } } };
 
 type MarketOverview = {
   empty?: boolean;
@@ -1203,9 +1203,19 @@ function OverviewCompetition({ data, state, signedIn, ready, hasKeys, onProfile,
     date.setMonth(date.getMonth() - (23 - index));
     return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
   });
+  const showShare = data.competitors.length > 1;
+  const awardsTotal = data.competitors.reduce((sum, item) => sum + item.awards, 0);
+  const contractsTotal = data.competitors.reduce((sum, item) => sum + item.contracts, 0);
+  const pooled = data.summary?.discount;
   return <>
+    <div className="metrics statusMetrics">
+      <Metric label="Ανάδοχοι που ακολουθείς" value={number.format(data.competitors.length)} tone="sky" />
+      <Metric label="Αναθέσεις" value={number.format(awardsTotal)} tone="lilac" />
+      <Metric label="Συμβάσεις" value={number.format(contractsTotal)} tone="mint" />
+      <Metric label="Τυπική έκπτωση" value={percentText(pooled?.median)} tone="sand" sub={pooled && pooled.count > 0 ? `Διάμεση, σε ${number.format(pooled.count)} διαγωνισμούς` : undefined} />
+    </div>
     <article className="panel overviewBigFour"><PanelHeader title="Ανάδοχοι που ακολουθείς" caption="Σε όλη την αγορά · η αξία των ενώσεων μοιράζεται στα μέλη · πάτα μια γραμμή για λεπτομέρειες" />
-      <div className="tableScroll"><table><thead><tr><th>Ανάδοχος</th><th>Αναθέσεις</th><th>Συμβάσεις</th><th>Αξία</th><th title="Μερίδιο στην αξία των αναδόχων που ακολουθείς">Μερίδιο</th><th title="Μέσος όρος έκπτωσης σε σχέση με τον Π/Υ, όπου υπολογίζεται">Μέση έκπτωση</th><th>Διάμεση</th><th title="Ποσοστό των διαγωνισμών του με έκπτωση πάνω από 0%">Με έκπτωση</th><th>Μέσος Π/Υ</th><th>Τελευταία</th></tr></thead>
+      <div className="tableScroll"><table><thead><tr><th>Ανάδοχος</th><th>Αναθέσεις</th><th>Συμβάσεις</th><th>Αξία</th>{showShare && <th title="Μερίδιο στην αξία των αναδόχων που ακολουθείς">Μερίδιο</th>}<th title="Η τυπική (διάμεση) έκπτωση σε σχέση με τον προϋπολογισμό· σε παρένθεση το πλήθος των διαγωνισμών στους οποίους βασίζεται">Διάμεση έκπτωση</th><th>Μέσος Π/Υ</th><th>Τελευταία</th></tr></thead>
         <tbody>{data.competitors.map((item) => {
           const isOpen = open === item.key;
           const counts = new Map(item.monthly.map((entry) => [entry.month, entry.count]));
@@ -1214,11 +1224,11 @@ function OverviewCompetition({ data, state, signedIn, ready, hasKeys, onProfile,
             <tr className="competitorRow" onClick={() => setOpen(isOpen ? null : item.key)} aria-expanded={isOpen}>
               <td><b>{isOpen ? "▾ " : "▸ "}{displayName(item)}</b>{item.awards + item.contracts === 0 && <small className="competitorEmpty"> · καμία ανάθεση ή σύμβαση ακόμα</small>}</td>
               <td>{number.format(item.awards)}</td><td>{number.format(item.contracts)}</td><td>{item.value > 0 ? euro.format(item.value) : "—"}</td>
-              <td>{total > 0 ? percentText(100 * item.value / total) : "—"}</td>
-              <td>{percentText(item.discount.average)}</td><td>{percentText(item.discount.median)}</td><td>{percentText(item.discount.positiveShare)}</td>
+              {showShare && <td>{total > 0 ? percentText(100 * item.value / total) : "—"}</td>}
+              <td>{percentText(item.discount.median)}{item.discount.count > 0 && <small className="competitorEmpty"> ({number.format(item.discount.count)})</small>}</td>
               <td>{item.avgBudget ? euro.format(item.avgBudget) : "—"}</td><td>{item.lastDate ? formatDate(item.lastDate) : "—"}</td>
             </tr>
-            {isOpen && <tr className="competitorDetail"><td colSpan={10}><div className="competitorDetailGrid">
+            {isOpen && <tr className="competitorDetail"><td colSpan={showShare ? 8 : 7}><div className="competitorDetailGrid">
               <div><h4>Πελάτες</h4>
                 {item.clients.length === 0 ? <p className="noRows">Δεν υπάρχουν αναθέσεις ή συμβάσεις.</p> : <ul className="clientList">{item.clients.map((client) => <li key={client.authority} title={`${client.awards} αναθέσεις, ${client.contracts} συμβάσεις`}><span>{client.authority}</span><b>{number.format(client.count)}</b><em>{percentText(client.share)}</em></li>)}</ul>}
               </div>
@@ -1231,6 +1241,8 @@ function OverviewCompetition({ data, state, signedIn, ready, hasKeys, onProfile,
               </div>
               <div><h4>Ενώσεις</h4>
                 <p className="competitorUnion">{item.unionShare === null ? "—" : percentText(item.unionShare)} <span>των αναθέσεων και συμβάσεών του έγιναν σε ένωση εταιρειών.</span></p>
+                <h4 className="competitorSubhead">Εκπτώσεις</h4>
+                <p className="competitorDiscount">Μέση: <b>{percentText(item.discount.average)}</b> · με έκπτωση: <b>{percentText(item.discount.positiveShare)}</b><span>στους {number.format(item.discount.count)} διαγωνισμούς όπου υπολογίζεται</span></p>
               </div>
             </div></td></tr>}
           </Fragment>;
