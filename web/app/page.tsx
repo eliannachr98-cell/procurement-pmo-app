@@ -2649,7 +2649,7 @@ type UpdateEvent = { kind: string; date: string; adam: string | null; title: str
 type UpdateTender = { adam: string; title: string; authority: string; opening: string | null; last_date: string; events: UpdateEvent[] };
 type FollowUpdates = {
   since: string;
-  followed: { tenders: number; contractors: number; authorities: number; cpv?: number };
+  followed: { tenders: number; contractors: number; authorities: number; cpv?: number; adams?: string[] };
   tenders: UpdateTender[];
   cpvTenders?: { adam: string; title: string; authority: string; date: string; budget: number | null; opening: string | null; region: string | null }[];
   cpvEvents?: UpdateTender[];
@@ -2753,14 +2753,14 @@ function ProfileUpdates({ code, baseline, onUnauthorized, onSeen }: { code: stri
       {(data.cpvTenders ?? []).length > 0 && <section className="updatesSection"><h3>Νέοι διαγωνισμοί στα CPV και τις περιοχές σου</h3>
         <ul className="updatesEvents">{(data.cpvTenders ?? []).map((item) => <li key={item.adam}>
           <span className="updatesDate">{formatDate(item.date)}</span>
-          <span className="updatesBadge info">Διακήρυξη</span>
+          <span className="updatesBadge info">Διακήρυξη{(data.followed.adams ?? []).includes(item.adam) ? " ★" : ""}</span>
           <span className="updatesText"><span className="updatesDocTitle" title={item.title}>{item.title}</span><span className="updatesAuthority">{item.authority}</span>{item.budget ? <b>{euro.format(item.budget)}</b> : null}{item.opening ? <small className="competitorEmpty">καταληκτική {formatDate(item.opening)}</small> : null}</span>
           <AdamCopy adam={item.adam} className="adamCopy" />
           {isNew(item.date) && <b className="newBadge">ΝΕΟ</b>}
         </li>)}</ul>
       </section>}
-      {(data.cpvEvents ?? []).length > 0 && <section className="updatesSection"><h3>Αλλαγές σε διαγωνισμούς των CPV και των περιοχών σου</h3>
-        {(data.cpvEvents ?? []).map(renderTender)}
+      {(data.cpvEvents ?? []).some((tender) => !data.tenders.some((own) => own.adam === tender.adam)) && <section className="updatesSection"><h3>Αλλαγές σε διαγωνισμούς των CPV και των περιοχών σου</h3>
+        {(data.cpvEvents ?? []).filter((tender) => !data.tenders.some((own) => own.adam === tender.adam)).map(renderTender)}
       </section>}
       {data.tenders.length > 0 && <section className="updatesSection"><h3>Διαγωνισμοί που παρακολουθείς</h3>
         {data.tenders.map(renderTender)}

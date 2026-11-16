@@ -28,7 +28,7 @@ export async function GET(request: Request) {
       p_nuts: nuts.length ? nuts.map((item) => item.nuts_code).slice(0, 30) : null,
     });
     return NextResponse.json(
-      { ...(result as Record<string, unknown>), followed: { tenders: tenders.length, contractors: contractors.length, authorities: authorities.length, cpv: cpvs.length } },
+      { ...(result as Record<string, unknown>), followed: { tenders: tenders.length, contractors: contractors.length, authorities: authorities.length, cpv: cpvs.length, adams: tenders.map((item) => item.adam).slice(0, 200) } },
       { headers: { "Cache-Control": "no-store, max-age=0" } },
     );
   } catch (error) {

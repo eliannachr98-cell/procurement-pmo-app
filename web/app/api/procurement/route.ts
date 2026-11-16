@@ -820,7 +820,7 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   if (url.searchParams.get("q") || url.searchParams.get("adams")) return computeGet(request);
   // "v6" is the result-shape/logic version: bump it to drop cached lists after a change.
-  const key = "v6|" + [...url.searchParams.entries()].map(([name, value]) => `${name}=${value}`).sort().join("&");
+  const key = "v7|" + [...url.searchParams.entries()].map(([name, value]) => `${name}=${value}`).sort().join("&");
   const state: { failure: Response | null } = { failure: null };
   const body = await cachedScope<unknown>("list", key, async () => {
     const response = await computeGet(request);
