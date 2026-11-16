@@ -174,28 +174,37 @@ declare
   sort_col text := case p_sort when 'amount' then 'amount' when 'authority' then 'authority' when 'contractor' then 'contractor' when 'discount' then 'discount' when 'kind' then 'kind' else 'dt' end;
   dir text := case when lower(p_dir) = 'asc' then 'asc' else 'desc' end;
   search_sql text := 'true';
+  title_join text := '';
+  title_col text := 'null::text';
   result json;
 begin
+  -- titles are only looked up for every row when the search has to look inside them;
+  -- otherwise just for the rows of the page shown
   if p_search is not null and p_search <> '' then
+    title_join := 'left join public.procurements_compact pr on pr.adam = pay.tender';
+    title_col := 'pr.title';
     search_sql := format('(authority ilike %1$L or contractor ilike %1$L or adam ilike %1$L or tender ilike %1$L or title ilike %1$L)', '%' || p_search || '%');
   end if;
   execute format($q$
-    with matched as (select p.* from public.market_tender_facts p where %1$s),
-    pay as (
+    with matched as (select p.adam, p.authority_name, p.discount, p.budget, p.publication_date from public.market_tender_facts p where %1$s),
+    pay as materialized (
       select min(f.doc_adam) as adam, f.n as tender, f.kind, f.amt as amount,
              min(coalesce(f.doc_date, m.publication_date)) as dt, string_agg(distinct f.contractor_name, ' + ') as contractor,
              max(f.members) > 1 as is_union, m.authority_name as authority, m.discount, m.budget
       from public.market_contractor_facts f join matched m on m.adam = f.n where %2$s
       group by f.n, f.kind, f.amt, m.authority_name, m.discount, m.budget
     ),
-    rows as (select p.*, pr.title from pay p left join public.procurements_compact pr on pr.adam = p.tender),
-    filtered as (select * from rows where %3$s)
+    filtered as materialized (select pay.*, %8$s as title from pay %9$s where %3$s),
+    page as (select * from filtered order by %4$s %5$s nulls last, adam limit %6$s offset %7$s)
     select json_build_object(
       'total', (select count(*) from filtered),
-      'rows', coalesce((select json_agg(r) from (
-        select adam, tender, kind, amount, dt as date, contractor, is_union as "union", authority, discount * 100 as discount, budget, left(title, 160) as title
-        from filtered order by %4$s %5$s nulls last, adam limit %6$s offset %7$s) r), '[]'::json))
-  $q$, where_sql, c_sql, search_sql, sort_col, dir, greatest(p_limit, 1), greatest(p_offset, 0)) into result;
+      'rows', coalesce((select json_agg(r order by r.rn) from (
+        select row_number() over (order by %4$s %5$s nulls last, page.adam) as rn,
+               page.adam, page.tender, page.kind, page.amount, page.dt as date, page.contractor, page.is_union as "union", page.authority,
+               page.discount * 100 as discount, page.budget,
+               left(coalesce(page.title, (select pc.title from public.procurements_compact pc where pc.adam = page.tender)), 160) as title
+        from page) r), '[]'::json))
+  $q$, where_sql, c_sql, search_sql, sort_col, dir, greatest(p_limit, 1), greatest(p_offset, 0), title_col, title_join) into result;
   return result;
 end;
 $$;
