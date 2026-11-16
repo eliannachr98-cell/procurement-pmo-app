@@ -2646,10 +2646,13 @@ function TeamCodeBar({ team }: { team: ReturnType<typeof useTeamCode> }) {
 // instead, so they're unaffected by this remount and by switching tabs away
 // and back.
 type UpdateEvent = { kind: string; date: string; adam: string | null; title: string | null; opening: string | null; amount: number | null };
+type UpdateTender = { adam: string; title: string; authority: string; opening: string | null; last_date: string; events: UpdateEvent[] };
 type FollowUpdates = {
   since: string;
-  followed: { tenders: number; contractors: number; authorities: number };
-  tenders: { adam: string; title: string; authority: string; opening: string | null; last_date: string; events: UpdateEvent[] }[];
+  followed: { tenders: number; contractors: number; authorities: number; cpv?: number };
+  tenders: UpdateTender[];
+  cpvTenders?: { adam: string; title: string; authority: string; date: string; budget: number | null; opening: string | null; region: string | null }[];
+  cpvEvents?: UpdateTender[];
   contractors: { key: string; name: string; total: number; items: { kind: string; date: string; adam: string | null; tender: string; authority: string; amount: number; union: boolean }[] }[];
   authorities: { authority: string; adam: string; title: string; date: string; budget: number | null }[];
 };
@@ -2677,7 +2680,9 @@ function countNewUpdates(data: FollowUpdates, since: string) {
   const fresh = (date?: string | null) => Boolean(date && date.slice(0, 10) >= since);
   return data.tenders.reduce((sum, tender) => sum + groupUpdateEvents(tender.events).filter(({ event }) => fresh(event.date)).length, 0)
     + data.contractors.reduce((sum, contractor) => sum + contractor.items.filter((item) => fresh(item.date)).length, 0)
-    + data.authorities.filter((item) => fresh(item.date)).length;
+    + data.authorities.filter((item) => fresh(item.date)).length
+    + (data.cpvTenders ?? []).filter((item) => fresh(item.date)).length
+    + (data.cpvEvents ?? []).reduce((sum, tender) => sum + groupUpdateEvents(tender.events).filter(({ event }) => fresh(event.date)).length, 0);
 }
 
 // The "Ενημερώσεις" of the Προφίλ: what happened to the tenders, contractors and authorities followed.
@@ -2704,25 +2709,14 @@ function ProfileUpdates({ code, baseline, onUnauthorized, onSeen }: { code: stri
   const isNew = (date?: string | null) => Boolean(since && date && date.slice(0, 10) >= since);
   const newCount = data ? data.tenders.reduce((sum, tender) => sum + tender.events.filter((event) => isNew(event.date)).length, 0)
     + data.contractors.reduce((sum, contractor) => sum + contractor.items.filter((item) => isNew(item.date)).length, 0)
-    + data.authorities.filter((item) => isNew(item.date)).length : 0;
+    + data.authorities.filter((item) => isNew(item.date)).length
+    + (data.cpvTenders ?? []).filter((item) => isNew(item.date)).length
+    + (data.cpvEvents ?? []).reduce((sum, tender) => sum + tender.events.filter((event) => isNew(event.date)).length, 0) : 0;
   const total = data ? data.tenders.reduce((sum, tender) => sum + tender.events.length, 0)
-    + data.contractors.reduce((sum, contractor) => sum + contractor.total, 0) + data.authorities.length : 0;
-  const followedAnything = data ? data.followed.tenders + data.followed.contractors + data.followed.authorities > 0 : true;
-  return <article className="panel updatesPanel">
-    <div className="updatesHead">
-      <div><p className="eyebrow">ΕΝΗΜΕΡΩΣΕΙΣ</p><h2>Τι νέο στα όσα ακολουθείς</h2></div>
-      <label className="updatesRange">Περίοδος<select value={days} onChange={(event) => setDays(Number(event.target.value))}>
-        <option value={7}>Τελευταίες 7 ημέρες</option><option value={30}>Τελευταίες 30 ημέρες</option><option value={90}>Τελευταίες 90 ημέρες</option>
-      </select></label>
-    </div>
-    {state === "loading" && !data && <p className="noRows">Φόρτωση…</p>}
-    {state === "error" && <p className="noRows">Δεν φορτώθηκαν οι ενημερώσεις - δοκίμασε ξανά.</p>}
-    {data && !followedAnything && <p className="noRows">Δεν ακολουθείς ακόμα τίποτα. Πάτα ★ σε διαγωνισμούς και πρόσθεσε αναδόχους ή αρχές παρακάτω.</p>}
-    {data && followedAnything && total === 0 && <p className="noRows">Δεν υπάρχουν εξελίξεις στις τελευταίες {days} ημέρες.</p>}
-    {data && total > 0 && <>
-      <p className="updatesSummary"><b>{number.format(total)}</b> εξελίξεις στις τελευταίες {days} ημέρες{newCount > 0 && <> · <b className="updatesNewCount">{number.format(newCount)} νέες</b> από την τελευταία σου επίσκεψη</>}</p>
-      {data.tenders.length > 0 && <section className="updatesSection"><h3>Διαγωνισμοί που παρακολουθείς</h3>
-        {data.tenders.map((tender) => <div className="updatesItem" key={tender.adam}>
+    + data.contractors.reduce((sum, contractor) => sum + contractor.total, 0) + data.authorities.length
+    + (data.cpvTenders ?? []).length + (data.cpvEvents ?? []).reduce((sum, tender) => sum + tender.events.length, 0) : 0;
+  const followedAnything = data ? data.followed.tenders + data.followed.contractors + data.followed.authorities + (data.followed.cpv ?? 0) > 0 : true;
+  const renderTender = (tender: UpdateTender) => <div className="updatesItem" key={tender.adam}>
           <div className="updatesItemHead"><b title={tender.title}>{tender.title}</b><span>{tender.authority}</span><AdamCopy adam={tender.adam} className="adamCopy" /></div>
           <ul className="updatesEvents">{groupUpdateEvents(tender.events).map(({ event, adams }, index) => {
             const hasDoc = event.kind !== "award" && event.kind !== "contract" && event.kind !== "cancelled";
@@ -2741,7 +2735,35 @@ function ProfileUpdates({ code, baseline, onUnauthorized, onSeen }: { code: stri
               {isNew(event.date) && <b className="newBadge">ΝΕΟ</b>}
             </li>;
           })}</ul>
-        </div>)}
+  </div>;
+
+  return <article className="panel updatesPanel">
+    <div className="updatesHead">
+      <div><p className="eyebrow">ΕΝΗΜΕΡΩΣΕΙΣ</p><h2>Τι νέο στα όσα ακολουθείς</h2></div>
+      <label className="updatesRange">Περίοδος<select value={days} onChange={(event) => setDays(Number(event.target.value))}>
+        <option value={7}>Τελευταίες 7 ημέρες</option><option value={30}>Τελευταίες 30 ημέρες</option><option value={90}>Τελευταίες 90 ημέρες</option>
+      </select></label>
+    </div>
+    {state === "loading" && !data && <p className="noRows">Φόρτωση…</p>}
+    {state === "error" && <p className="noRows">Δεν φορτώθηκαν οι ενημερώσεις - δοκίμασε ξανά.</p>}
+    {data && !followedAnything && <p className="noRows">Δεν ακολουθείς ακόμα τίποτα. Πρόσθεσε CPV, περιοχές, αναδόχους ή αρχές στο «Τι ακολουθείς», ή πάτα ★ σε διαγωνισμούς.</p>}
+    {data && followedAnything && total === 0 && <p className="noRows">Δεν υπάρχουν εξελίξεις στις τελευταίες {days} ημέρες.</p>}
+    {data && total > 0 && <>
+      <p className="updatesSummary"><b>{number.format(total)}</b> εξελίξεις στις τελευταίες {days} ημέρες{newCount > 0 && <> · <b className="updatesNewCount">{number.format(newCount)} νέες</b> από την τελευταία σου επίσκεψη</>}</p>
+      {(data.cpvTenders ?? []).length > 0 && <section className="updatesSection"><h3>Νέοι διαγωνισμοί στα CPV και τις περιοχές σου</h3>
+        <ul className="updatesEvents">{(data.cpvTenders ?? []).map((item) => <li key={item.adam}>
+          <span className="updatesDate">{formatDate(item.date)}</span>
+          <span className="updatesBadge info">Διακήρυξη</span>
+          <span className="updatesText"><span className="updatesDocTitle" title={item.title}>{item.title}</span><span className="updatesAuthority">{item.authority}</span>{item.budget ? <b>{euro.format(item.budget)}</b> : null}{item.opening ? <small className="competitorEmpty">καταληκτική {formatDate(item.opening)}</small> : null}</span>
+          <AdamCopy adam={item.adam} className="adamCopy" />
+          {isNew(item.date) && <b className="newBadge">ΝΕΟ</b>}
+        </li>)}</ul>
+      </section>}
+      {(data.cpvEvents ?? []).length > 0 && <section className="updatesSection"><h3>Αλλαγές σε διαγωνισμούς των CPV και των περιοχών σου</h3>
+        {(data.cpvEvents ?? []).map(renderTender)}
+      </section>}
+      {data.tenders.length > 0 && <section className="updatesSection"><h3>Διαγωνισμοί που παρακολουθείς</h3>
+        {data.tenders.map(renderTender)}
       </section>}
       {data.contractors.length > 0 && <section className="updatesSection"><h3>Ανάδοχοι που ακολουθείς</h3>
         {data.contractors.map((contractor) => <div className="updatesItem" key={contractor.key}>
