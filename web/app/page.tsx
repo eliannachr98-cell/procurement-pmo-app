@@ -705,7 +705,7 @@ export default function Home() {
     // The tender list only depends on the filters, not on the Επισκόπηση scope.
     const timer = window.setTimeout(() => {
       // Ειδοποιήσεις has no filter UI and its own independent data fetch.
-      if (pageRef.current !== "tenders" && pageRef.current !== "market") return;
+      if (pageRef.current !== "tenders") return;
       loadTenderPage(1);
     }, 500);
     return () => window.clearTimeout(timer);
@@ -737,31 +737,6 @@ export default function Home() {
     if (documentType !== "Όλοι") setDocumentType("Όλοι");
   }, [page, query, documentType]);
 
-  // Αγορά & Ανταγωνισμός computes its stats (Αναθέσεις/Συμβάσεις/Αξία per
-  // ανάδοχος) from whatever tenders are already loaded - fine for the
-  // ordinary "Διαγωνισμοί" list, which is meant to be browsed 100 at a
-  // time, but silently wrong for aggregates unless every matching tender
-  // is loaded. Keep paging automatically while on this tab, up to a safety
-  // cap so an unfiltered/very broad selection can't try to pull the whole
-  // multi-hundred-thousand-row table into the browser.
-  useEffect(() => {
-    if (page !== "market") return;
-    // A failed page fetch leaves hasMore/loadedPage exactly as they were -
-    // without this, a persistent error (e.g. a slow query timing out)
-    // would make this effect retry the same page forever instead of
-    // surfacing the error like the rest of the app already does.
-    if (dataError) return;
-    // Αναθέτουσα Αρχή has no "pick an option" step, so a short typed prefix
-    // (e.g. the first letter or two) matches far more rows than the person
-    // is actually asking for - only engage the heavy full-load once it's
-    // specific enough that finishing quickly is realistic. The plain 100-
-    // row page still loads normally either way, just without the auto-page.
-    const authorityTooShort = authority.trim().length > 0 && authority.trim() !== "Όλες" && authority.trim().length < 3;
-    if (authorityTooShort) return;
-    if (!hasMore || loading) return;
-    if (tenders.length >= MARKET_AUTO_LOAD_CAP) return;
-    loadTenderPage(loadedPage + 1, true);
-  }, [page, hasMore, loading, loadedPage, tenders.length, loadTenderPage, dataError, authority]);
 
   // contractor/cpv are NOT re-checked here - the server already filtered
   // `tenders` by them (via /api/procurement's contractor/cpv params), and
@@ -939,7 +914,7 @@ export default function Home() {
               {loading ? "Φόρτωση…" : `Φόρτωση περισσότερων (${number.format(tenders.length)} από ${number.format(totalTenders)})`}
             </button>}
           </>}
-          {page === "market" && <MarketPanel awards={awards} contracts={contracts} cpv={cpv} contractor={contractor} authority={authority} year={year} contractType={contractType} documentType={documentType} loadedCount={tenders.length} totalCount={totalTenders} stillLoading={hasMore && loading} locked={!team.code} selectedContractor={marketSelectedContractor} setSelectedContractor={setMarketSelectedContractor} contractorSearch={marketContractorSearch} setContractorSearch={setMarketContractorSearch} visibleCount={marketVisibleCount} setVisibleCount={setMarketVisibleCount} />}
+          {page === "market" && <MarketExplorer year={year} authority={authority} cpv={cpv} contractor={contractor} contractType={contractType} />}
           {page === "profile" && <>
           <div className="profilePage">
             <header className="panel profileHero">
@@ -1814,6 +1789,281 @@ function contractedAwardGroups(awards: Award[], contracts: Contract[]) {
     if (award) groups.add(awardGroupKey(award));
   }
   return groups;
+}
+
+// ---------------------------------------------------------------------------
+// The "Αγορά & Ανταγωνισμός" tab: trend per month, ranking (per contractor or per
+// authority) and the list of awards/contracts, for the filters on the left.
+// ---------------------------------------------------------------------------
+type ExplorerTrendRow = { month: string; awards: number; contracts: number; value: number };
+type RankRow = {
+  key?: string; name: string; awards: number; contracts: number; value: number; share?: number | null; median: number | null; dn: number | null;
+  avgbudget?: number | null; last_date?: string | null; tenders?: number; with_award?: number; conversion?: number | null; top_name?: string | null; topshare?: number | null;
+};
+type RankData = { total: number; totals: { tenders?: number; awards: number; contracts: number; value: number }; rows: RankRow[] };
+type DocRow = { adam: string | null; tender: string; kind: string; amount: number; date: string | null; contractor: string; union: boolean; authority: string; discount: number | null; budget: number | null; title: string | null };
+type DocData = { total: number; rows: DocRow[] };
+type ExplorerFocus = { kind: "contractor" | "authority"; value: string; label: string };
+
+// A clean axis: about four steps of 1, 2 or 5 x 10^n.
+function niceAxis(max: number) {
+  const rough = Math.max(max, 1) / 4;
+  const magnitude = 10 ** Math.floor(Math.log10(rough));
+  const step = [1, 2, 5, 10].map((factor) => factor * magnitude).find((candidate) => candidate >= rough) ?? magnitude * 10;
+  const axisMax = Math.ceil(Math.max(max, 1) / step) * step;
+  return { axisMax, ticks: Array.from({ length: Math.round(axisMax / step) + 1 }, (_, index) => index * step) };
+}
+const compactAxis = (value: number, money: boolean) => !money ? number.format(value)
+  : value >= 1_000_000_000 ? `${(value / 1_000_000_000).toLocaleString("el-GR", { maximumFractionDigits: 1 })} δισ.`
+  : value >= 1_000_000 ? `${(value / 1_000_000).toLocaleString("el-GR", { maximumFractionDigits: 1 })} εκ.`
+  : value >= 1_000 ? `${(value / 1_000).toLocaleString("el-GR", { maximumFractionDigits: 0 })} χιλ.` : number.format(value);
+
+// Columns per month: awards and contracts stacked (count), or the value of both.
+function TrendChart({ data }: { data: ExplorerTrendRow[] }) {
+  const [metric, setMetric] = useState<"count" | "value">("count");
+  const [tip, setTip] = useState<{ x: number; y: number; row: ExplorerTrendRow } | null>(null);
+  if (data.length === 0) return <p className="noRows">Δεν υπάρχουν αναθέσεις ή συμβάσεις για αυτά τα φίλτρα.</p>;
+  const measure = (row: ExplorerTrendRow) => metric === "count" ? row.awards + row.contracts : row.value;
+  const { axisMax, ticks } = niceAxis(Math.max(...data.map(measure)));
+  const labelEvery = data.length > 30 ? 4 : data.length > 16 ? 2 : 1;
+  return <div className="trendChart">
+    <div className="cmpHead">
+      <div className="cmpLegend">
+        {metric === "count" ? <><span><i className="cmpKey" style={{ background: SERIES_COLORS[0] }} />Αναθέσεις</span><span><i className="cmpKey" style={{ background: SERIES_COLORS[1] }} />Συμβάσεις</span></> : <span><i className="cmpKey" style={{ background: SERIES_COLORS[0] }} />Αξία αναθέσεων και συμβάσεων</span>}
+      </div>
+      <div className="cmpToggle" role="group" aria-label="Τι να δείχνει το γράφημα">
+        <button type="button" className={metric === "count" ? "active" : ""} onClick={() => setMetric("count")}>Πλήθος</button>
+        <button type="button" className={metric === "value" ? "active" : ""} onClick={() => setMetric("value")}>Αξία</button>
+      </div>
+    </div>
+    <div className="trendBody">
+      <div className="trendYAxis" aria-hidden="true">{ticks.map((tick) => <span key={tick} style={{ bottom: `${100 * tick / axisMax}%` }}>{compactAxis(tick, metric === "value")}</span>)}</div>
+      <div className="trendPlot" role="img" aria-label="Αναθέσεις και συμβάσεις ανά μήνα">
+        {ticks.map((tick) => <i className="trendGrid" key={tick} style={{ bottom: `${100 * tick / axisMax}%` }} />)}
+        <div className="trendCols">
+          {data.map((row, index) => <div className="trendCol" key={row.month} onPointerMove={(event) => setTip({ x: event.clientX, y: event.clientY, row })} onPointerLeave={() => setTip(null)}>
+            <div className="trendStack">
+              {metric === "count"
+                ? <><i style={{ height: `${100 * row.awards / axisMax}%`, background: SERIES_COLORS[0] }} /><i style={{ height: `${100 * row.contracts / axisMax}%`, background: SERIES_COLORS[1] }} /></>
+                : <i style={{ height: `${100 * row.value / axisMax}%`, background: SERIES_COLORS[0] }} />}
+            </div>
+            <span className="trendLabel">{index % labelEvery === 0 ? shortMonthLabel(row.month) : ""}</span>
+          </div>)}
+        </div>
+      </div>
+    </div>
+    {tip && <div className="cmpTip" style={{ left: tip.x + 14, top: tip.y + 14 }}>
+      <strong>{monthLabel(tip.row.month)}</strong>
+      <span><i className="cmpKey" style={{ background: SERIES_COLORS[0] }} />Αναθέσεις: <b>{number.format(tip.row.awards)}</b></span>
+      <span><i className="cmpKey" style={{ background: SERIES_COLORS[1] }} />Συμβάσεις: <b>{number.format(tip.row.contracts)}</b></span>
+      <span>Αξία: <b>{euro.format(tip.row.value)}</b></span>
+    </div>}
+  </div>;
+}
+
+// Opened under a contractor of the ranking: its clients, trend, consortium share and discounts.
+function ExplorerContractorDetail({ contractorKey, year, onShowDocuments }: { contractorKey: string; year: string; onShowDocuments: () => void }) {
+  const [data, setData] = useState<Competitor | null>(null);
+  const [state, setState] = useState<"loading" | "idle" | "error">("loading");
+  useEffect(() => {
+    let cancelled = false;
+    setState("loading");
+    fetch(`/api/competitors?key=${encodeURIComponent(contractorKey)}${year !== "Όλα" ? `&year=${year}` : ""}`)
+      .then((response) => response.ok ? response.json() : Promise.reject(new Error("competitor")))
+      .then((payload) => { if (!cancelled) { setData((payload.competitors ?? [])[0] ?? null); setState("idle"); } })
+      .catch(() => { if (!cancelled) setState("error"); });
+    return () => { cancelled = true; };
+  }, [contractorKey, year]);
+  const months = Array.from({ length: 24 }, (_, index) => {
+    const date = new Date();
+    date.setDate(1);
+    date.setMonth(date.getMonth() - (23 - index));
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+  });
+  if (state === "loading") return <p className="noRows">Φόρτωση…</p>;
+  if (state === "error" || !data) return <p className="noRows">Δεν φορτώθηκαν τα στοιχεία του αναδόχου.</p>;
+  const counts = new Map(data.monthly.map((entry) => [entry.month, entry.count]));
+  const maxCount = Math.max(1, ...months.map((month) => counts.get(month) ?? 0));
+  return <div className="competitorDetailGrid">
+    <div><h4>Πελάτες</h4>
+      {data.clients.length === 0 ? <p className="noRows">Δεν υπάρχουν αναθέσεις ή συμβάσεις.</p> : <ul className="clientList">{data.clients.map((client) => <li key={client.authority} title={`${client.awards} αναθέσεις, ${client.contracts} συμβάσεις`}><span>{client.authority}</span><b>{number.format(client.count)}</b><em>{percentText(client.share)}</em></li>)}</ul>}
+    </div>
+    <div><h4>Πορεία ανά μήνα <small>(αναθέσεις και συμβάσεις, τελευταίοι 24 μήνες)</small></h4>
+      <div className="miniBars" role="img" aria-label="Αναθέσεις και συμβάσεις ανά μήνα">{months.map((month) => {
+        const count = counts.get(month) ?? 0;
+        return <i key={month} title={`${monthLabel(month)}: ${number.format(count)}`} style={{ height: `${count === 0 ? 2 : Math.max(8, 100 * count / maxCount)}%` }} />;
+      })}</div>
+      <p className="miniBarsAxis"><span>{monthLabel(months[0])}</span><span>{monthLabel(months[months.length - 1])}</span></p>
+    </div>
+    <div><h4>Ενώσεις και εκπτώσεις</h4>
+      <p className="competitorUnion">{data.unionShare === null ? "—" : percentText(data.unionShare)} <span>των αναθέσεων και συμβάσεών του έγιναν σε ένωση εταιρειών.</span></p>
+      <p className="competitorDiscount">Μέση έκπτωση: <b>{percentText(data.discount.average)}</b> · με έκπτωση: <b>{percentText(data.discount.positiveShare)}</b><span>στους {number.format(data.discount.count)} διαγωνισμούς όπου υπολογίζεται</span></p>
+      <button type="button" className="profileLink" onClick={onShowDocuments}>Δες τα έγγραφά του →</button>
+    </div>
+  </div>;
+}
+
+function MarketExplorer({ year, authority, cpv, contractor, contractType }: { year: string; authority: string; cpv: string[]; contractor: string[]; contractType: string[] }) {
+  const [view, setView] = useState<"ranking" | "list">("ranking");
+  const [by, setBy] = useState<"contractor" | "authority">("contractor");
+  const [sorts, setSorts] = useState<Record<string, { key: string; dir: "asc" | "desc" }>>({
+    contractor: { key: "value", dir: "desc" }, authority: { key: "value", dir: "desc" }, list: { key: "date", dir: "desc" },
+  });
+  const [search, setSearch] = useState("");
+  const [q, setQ] = useState("");
+  const [page, setPage] = useState(1);
+  const [focus, setFocus] = useState<ExplorerFocus | null>(null);
+  const [open, setOpen] = useState<string | null>(null);
+  const [trend, setTrend] = useState<ExplorerTrendRow[] | null>(null);
+  const [rank, setRank] = useState<RankData | null>(null);
+  const [docs, setDocs] = useState<DocData | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const latest = useRef(0);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => { setQ(search.trim()); setPage(1); }, 400);
+    return () => window.clearTimeout(timer);
+  }, [search]);
+
+  // The filters of the left column plus the contractor / authority picked in the tables.
+  const baseParams = useMemo(() => {
+    const params = new URLSearchParams();
+    if (year !== "Όλα") params.set("year", year);
+    const authorityValue = focus?.kind === "authority" ? focus.value : authority;
+    if (authorityValue.trim() && authorityValue !== "Όλες") params.set("authority", authorityValue.trim());
+    (focus?.kind === "contractor" ? [focus.value] : contractor).forEach((item) => params.append("contractor", item));
+    cpv.forEach((item) => params.append("cpv", item));
+    contractType.forEach((item) => params.append("contractType", item));
+    return params.toString();
+  }, [year, authority, cpv, contractor, contractType, focus]);
+
+  const sortKey = view === "list" ? "list" : by;
+  const activeSort = sorts[sortKey];
+
+  useEffect(() => { setPage(1); setOpen(null); }, [baseParams, view, by, activeSort.key, activeSort.dir]);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`/api/market-explorer?view=trend&${baseParams}`)
+      .then((response) => response.ok ? response.json() : Promise.reject(new Error("trend")))
+      .then((payload) => { if (!cancelled) setTrend(Array.isArray(payload) ? payload : []); })
+      .catch(() => { if (!cancelled) setTrend([]); });
+    return () => { cancelled = true; };
+  }, [baseParams]);
+
+  useEffect(() => {
+    const requestId = ++latest.current;
+    const params = new URLSearchParams(baseParams);
+    params.set("view", view === "list" ? "documents" : "ranking");
+    if (view === "ranking") params.set("by", by);
+    params.set("sort", activeSort.key);
+    params.set("dir", activeSort.dir);
+    params.set("page", String(page));
+    params.set("pageSize", view === "list" ? "50" : "50");
+    if (q) params.set("q", q);
+    setLoading(true);
+    setFailed(false);
+    fetch(`/api/market-explorer?${params.toString()}`)
+      .then((response) => response.ok ? response.json() : Promise.reject(new Error("explorer")))
+      .then((payload) => {
+        if (requestId !== latest.current) return;
+        if (view === "list") setDocs((current) => page > 1 && current ? { total: payload.total, rows: [...current.rows, ...payload.rows] } : payload);
+        else setRank((current) => page > 1 && current ? { ...payload, rows: [...current.rows, ...payload.rows] } : payload);
+        setLoading(false);
+      })
+      .catch(() => { if (requestId !== latest.current) return; setFailed(true); setLoading(false); });
+  }, [baseParams, view, by, activeSort.key, activeSort.dir, q, page]);
+
+  const toggleSort = (key: string) => setSorts((current) => ({
+    ...current,
+    [sortKey]: current[sortKey].key === key ? { key, dir: current[sortKey].dir === "desc" ? "asc" : "desc" } : { key, dir: key === "name" || key === "authority" || key === "contractor" ? "asc" : "desc" },
+  }));
+  const arrow = (key: string) => activeSort.key === key ? (activeSort.dir === "desc" ? " ↓" : " ↑") : "";
+  const SortTh = ({ id, children, title }: { id: string; children: React.ReactNode; title?: string }) => <th className="sortTh" title={title} onClick={() => toggleSort(id)} aria-sort={activeSort.key === id ? (activeSort.dir === "desc" ? "descending" : "ascending") : "none"}>{children}{arrow(id)}</th>;
+
+  const rows = view === "list" ? (docs?.rows.length ?? 0) : (rank?.rows.length ?? 0);
+  const total = view === "list" ? (docs?.total ?? 0) : (rank?.total ?? 0);
+  const showFocus = (next: ExplorerFocus, target: "list" | "ranking", nextBy?: "contractor" | "authority") => {
+    setFocus(next); setView(target); if (nextBy) setBy(nextBy); setSearch(""); setQ("");
+  };
+
+  return <div className="explorer">
+    <div className="pageTitleRow explorerTitle"><div><p className="eyebrow">ΑΓΟΡΑ ΚΑΙ ΑΝΤΑΓΩΝΙΣΜΟΣ</p><h2>Αναθέσεις και συμβάσεις</h2><p className="explorerNote">Ισχύουν τα φίλτρα της αριστερής στήλης (έτος, αρχή, CPV, ανάδοχος, τύπος σύμβασης).</p></div></div>
+
+    <article className="panel explorerPanel"><PanelHeader title="Πορεία ανά μήνα" caption="Αναθέσεις και συμβάσεις με βάση την ημερομηνία τους" />
+      {trend === null ? <p className="noRows">Φόρτωση…</p> : <TrendChart data={trend} />}
+    </article>
+
+    <article className="panel explorerPanel">
+      <div className="explorerBar">
+        <div className="cmpToggle" role="tablist" aria-label="Προβολή">
+          <button type="button" className={view === "ranking" ? "active" : ""} onClick={() => setView("ranking")}>Κατάταξη</button>
+          <button type="button" className={view === "list" ? "active" : ""} onClick={() => setView("list")}>Λίστα εγγράφων</button>
+        </div>
+        {view === "ranking" && <div className="cmpToggle" role="group" aria-label="Ομαδοποίηση">
+          <button type="button" className={by === "contractor" ? "active" : ""} onClick={() => setBy("contractor")}>Ανά ανάδοχο</button>
+          <button type="button" className={by === "authority" ? "active" : ""} onClick={() => setBy("authority")}>Ανά αρχή</button>
+        </div>}
+        <input className="explorerSearch" type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder={view === "list" ? "Αναζήτηση σε αρχή, ανάδοχο, ΑΔΑΜ ή τίτλο" : by === "contractor" ? "Αναζήτηση αναδόχου" : "Αναζήτηση αρχής"} aria-label="Αναζήτηση" />
+        {focus && <span className="pickedTag"><i className="cmpKey" style={{ background: SERIES_COLORS[0] }} />{focus.kind === "contractor" ? "Ανάδοχος" : "Αρχή"}: {focus.label}<button type="button" aria-label="Αφαίρεση φίλτρου" onClick={() => setFocus(null)}>×</button></span>}
+        <span className="explorerCount">{loading && rows === 0 ? "Φόρτωση…" : <>{number.format(total)} {view === "list" ? "έγγραφα" : by === "contractor" ? "ανάδοχοι" : "αρχές"}{rank && view === "ranking" ? <> · αξία {euro.format(rank.totals.value)}</> : null}</>}</span>
+      </div>
+
+      {failed && <p className="noRows">Δεν φορτώθηκαν τα στοιχεία - δοκίμασε ξανά ή στένεψε τα φίλτρα.</p>}
+
+      {view === "ranking" && by === "contractor" && <div className="tableScroll explorerTable"><table>
+        <thead><tr><SortTh id="name">Ανάδοχος</SortTh><SortTh id="awards">Αναθέσεις</SortTh><SortTh id="contracts">Συμβάσεις</SortTh><SortTh id="value" title="Η αξία των ενώσεων μοιράζεται στα μέλη">Αξία</SortTh><SortTh id="share" title="Μερίδιο στην αξία όλων των αναδόχων του φίλτρου">Μερίδιο</SortTh><SortTh id="median" title="Η τυπική (διάμεση) έκπτωση σε σχέση με τον προϋπολογισμό· σε παρένθεση το πλήθος των διαγωνισμών στους οποίους βασίζεται">Διάμεση έκπτωση</SortTh><SortTh id="avgbudget">Μέσος Π/Υ</SortTh><SortTh id="last">Τελευταία</SortTh></tr></thead>
+        <tbody>{(rank?.rows ?? []).map((item) => {
+          const isOpen = open === item.key;
+          return <Fragment key={item.key}>
+            <tr className="competitorRow" onClick={() => setOpen(isOpen ? null : item.key ?? null)} aria-expanded={isOpen}>
+              <td><b>{isOpen ? "▾ " : "▸ "}{item.name}</b></td>
+              <td>{number.format(item.awards)}</td><td>{number.format(item.contracts)}</td><td>{item.value > 0 ? euro.format(item.value) : "—"}</td>
+              <td>{item.share != null ? percentText(item.share) : "—"}</td>
+              <td>{percentText(item.median)}{item.dn ? <small className="competitorEmpty"> ({number.format(item.dn)})</small> : null}</td>
+              <td>{item.avgbudget ? euro.format(item.avgbudget) : "—"}</td><td>{item.last_date ? formatDate(item.last_date) : "—"}</td>
+            </tr>
+            {isOpen && item.key && <tr className="competitorDetail"><td colSpan={8}><ExplorerContractorDetail contractorKey={item.key} year={year} onShowDocuments={() => showFocus({ kind: "contractor", value: item.key as string, label: item.name }, "list")} /></td></tr>}
+          </Fragment>;
+        })}</tbody></table></div>}
+
+      {view === "ranking" && by === "authority" && <div className="tableScroll explorerTable"><table>
+        <thead><tr><SortTh id="name">Αναθέτουσα/Διενεργούσα Αρχή</SortTh><SortTh id="tenders">Διαγωνισμοί</SortTh><SortTh id="awards">Αναθέσεις</SortTh><SortTh id="contracts">Συμβάσεις</SortTh><SortTh id="value">Αξία</SortTh><SortTh id="conversion" title="Ποσοστό των διαγωνισμών που έχουν ανάθεση ή σύμβαση">Με ανάθεση</SortTh><SortTh id="median" title="Η τυπική (διάμεση) έκπτωση, με το πλήθος των διαγωνισμών σε παρένθεση">Διάμεση έκπτωση</SortTh><SortTh id="topshare" title="Ο ανάδοχος με το μεγαλύτερο μερίδιο της αξίας της αρχής">Κορυφαίος ανάδοχος</SortTh></tr></thead>
+        <tbody>{(rank?.rows ?? []).map((item) => {
+          const isOpen = open === item.name;
+          return <Fragment key={item.name}>
+            <tr className="competitorRow" onClick={() => setOpen(isOpen ? null : item.name)} aria-expanded={isOpen}>
+              <td><b>{isOpen ? "▾ " : "▸ "}{item.name}</b></td>
+              <td>{number.format(item.tenders ?? 0)}</td><td>{number.format(item.awards)}</td><td>{number.format(item.contracts)}</td>
+              <td>{item.value > 0 ? euro.format(item.value) : "—"}</td>
+              <td>{percentText(item.conversion)}</td>
+              <td>{percentText(item.median)}{item.dn ? <small className="competitorEmpty"> ({number.format(item.dn)})</small> : null}</td>
+              <td>{item.top_name ? <>{shortName(item.top_name)}<small className="competitorEmpty"> ({percentText(item.topshare)})</small></> : "—"}</td>
+            </tr>
+            {isOpen && <tr className="competitorDetail"><td colSpan={8}><div className="explorerActions">
+              <button type="button" className="profileLink" onClick={() => showFocus({ kind: "authority", value: item.name, label: item.name }, "list")}>Δες τα έγγραφά της →</button>
+              <button type="button" className="profileLink" onClick={() => showFocus({ kind: "authority", value: item.name, label: item.name }, "ranking", "contractor")}>Δες τους αναδόχους της →</button>
+            </div></td></tr>}
+          </Fragment>;
+        })}</tbody></table></div>}
+
+      {view === "list" && <div className="tableScroll explorerTable"><table>
+        <thead><tr><SortTh id="date">Ημερομηνία</SortTh><SortTh id="kind">Είδος</SortTh><SortTh id="authority">Αναθέτουσα/Διενεργούσα Αρχή</SortTh><SortTh id="contractor">Ανάδοχος</SortTh><SortTh id="amount">Ποσό</SortTh><SortTh id="discount" title="Έκπτωση του διαγωνισμού σε σχέση με τον προϋπολογισμό, όπου υπολογίζεται">Έκπτωση</SortTh><th>ΑΔΑΜ</th></tr></thead>
+        <tbody>{(docs?.rows ?? []).map((row, index) => <tr key={`${row.adam}-${row.tender}-${index}`}>
+          <td>{row.date ? formatDate(row.date) : "—"}</td>
+          <td><span className={`updatesBadge ${row.kind === "contract" ? "good" : "info"}`}>{row.kind === "contract" ? "Σύμβαση" : "Ανάθεση"}</span></td>
+          <td title={row.title ?? undefined}>{row.authority}</td>
+          <td>{row.contractor}{row.union && <small className="competitorEmpty"> · ένωση</small>}</td>
+          <td>{euro.format(row.amount)}</td>
+          <td>{row.discount != null ? percentText(row.discount) : "—"}</td>
+          <td>{row.adam ? <AdamCopy adam={row.adam} className="adamCopy" /> : "—"}<small className="explorerTender" title="Ο διαγωνισμός">{row.tender}</small></td>
+        </tr>)}</tbody></table></div>}
+
+      {!loading && !failed && rows === 0 && <p className="noRows">Δεν βρέθηκαν αποτελέσματα για αυτά τα φίλτρα.</p>}
+      {rows < total && <button type="button" className="viewAll" disabled={loading} onClick={() => setPage((current) => current + 1)}>{loading ? "Φόρτωση…" : `Δες περισσότερα (${number.format(rows)} από ${number.format(total)})`}</button>}
+    </article>
+  </div>;
 }
 
 function MarketPanel({ awards, contracts, cpv, contractor, authority, year, contractType, documentType, loadedCount, totalCount, stillLoading, locked, selectedContractor, setSelectedContractor, contractorSearch, setContractorSearch, visibleCount, setVisibleCount }: {
