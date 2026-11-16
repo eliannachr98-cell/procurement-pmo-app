@@ -1,4 +1,4 @@
-explain analyze select public.market_documents();
-explain analyze select public.market_documents('2026', null, null, null, null, 'ΕΡΝΣΤ');
-explain analyze select public.market_documents(null, null, null, null, array['094428065']);
-explain analyze select public.market_trend('2026')
+explain analyze with pg as (select adam, authority_name, coalesce(nullif(budget_inc_vat,0), nullif(budget_ex_vat,0), nullif(budget_unknown_vat,0)) as b, publication_date from public.procurements_compact where document_category = 'declaration' order by publication_date desc nulls last limit 100),
+prm as (select array_agg(distinct authority_name) as a, array_agg(distinct b) as bl, min(publication_date) - 450 as f, max(publication_date) + 400 as t from pg)
+select count(*) from public.procurements_compact p, prm where p.authority_name = any(prm.a) and p.publication_date >= prm.f and p.publication_date <= prm.t and (p.budget_inc_vat = any(prm.bl) or p.budget_ex_vat = any(prm.bl) or p.budget_unknown_vat = any(prm.bl));
+explain analyze select adam from public.procurements_compact where document_category = 'declaration' order by publication_date desc nulls last limit 100 offset 100
