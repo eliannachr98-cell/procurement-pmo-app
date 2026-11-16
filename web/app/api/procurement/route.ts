@@ -220,12 +220,22 @@ async function fetchRelatedNotices(rows: ProcurementRow[], state: { partial: boo
   const shift = (date: string, days: number) => new Date(new Date(date).getTime() + days * 86400000).toISOString().slice(0, 10);
   const from = shift(publicationDates[0] ?? "2000-01-01", -450);
   const to = shift(publicationDates[publicationDates.length - 1] ?? "2100-01-01", 400);
-  const found = await withTimeout(supabaseGet<ProcurementRow[]>(
-    "procurements_compact?select=adam,title,authority_name,contract_type,procedure_type,document_category,nuts_code,nuts_name,publication_date,opening_at,budget_ex_vat,budget_inc_vat,budget_unknown_vat,status,cancelled_at" +
-    `&authority_name=in.(${encodeURIComponent(quoted)})` +
-    `&publication_date=gte.${from}&publication_date=lte.${to}` +
-    `&or=(budget_inc_vat.in.(${list}),budget_ex_vat.in.(${list}),budget_unknown_vat.in.(${list}))&limit=2000`,
-  ), 12000, null as ProcurementRow[] | null);
+  // The fast way: look up each (authority, budget) pair through the index of
+  // sql/related_notices.sql. If that function is not there, fall back to the old query.
+  const distinctPairs = [...new Map(pairs.map((row) => [`${row.authority_name}|${money(row)}`, { authority: row.authority_name as string, budget: money(row) }])).values()];
+  let rpcMissing = false;
+  let found = await withTimeout(
+    supabaseRpc<ProcurementRow[]>("related_notices", { p_pairs: distinctPairs, p_from: from, p_to: to }).catch(() => { rpcMissing = true; return null; }),
+    12000, null as ProcurementRow[] | null,
+  );
+  if (!found && rpcMissing) {
+    found = await withTimeout(supabaseGet<ProcurementRow[]>(
+      "procurements_compact?select=adam,title,authority_name,contract_type,procedure_type,document_category,nuts_code,nuts_name,publication_date,opening_at,budget_ex_vat,budget_inc_vat,budget_unknown_vat,status,cancelled_at" +
+      `&authority_name=in.(${encodeURIComponent(quoted)})` +
+      `&publication_date=gte.${from}&publication_date=lte.${to}` +
+      `&or=(budget_inc_vat.in.(${list}),budget_ex_vat.in.(${list}),budget_unknown_vat.in.(${list}))&limit=2000`,
+    ), 12000, null as ProcurementRow[] | null);
+  }
   if (!found) { state.partial = true; return []; }
   const have = new Set(rows.map((row) => row.adam));
   const keys = new Set(pairs.map((row) => `${row.authority_name}|${money(row)}`));
