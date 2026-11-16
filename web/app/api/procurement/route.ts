@@ -222,10 +222,22 @@ async function fetchRelatedNotices(rows: ProcurementRow[], state: { partial: boo
   const to = shift(publicationDates[publicationDates.length - 1] ?? "2100-01-01", 400);
   // The fast way: look up each (authority, budget) pair through the index of
   // sql/related_notices.sql. If that function is not there, fall back to the old query.
-  const distinctPairs = [...new Map(pairs.map((row) => [`${row.authority_name}|${money(row)}`, { authority: row.authority_name as string, budget: money(row) }])).values()];
+  // Each pair gets its own window around the tender's publication (30 days before, 400 after), so the
+  // other tenders of the same authority with the same budget (repeat purchases) do not come along.
+  const pairWindows = new Map<string, { authority: string; budget: number; d_from: string; d_to: string }>();
+  for (const row of pairs) {
+    const key = `${row.authority_name}|${money(row)}`;
+    const published = row.publication_date ?? "2000-01-01";
+    const from30 = shift(published, -30);
+    const to400 = shift(published, 400);
+    const current = pairWindows.get(key);
+    if (!current) pairWindows.set(key, { authority: row.authority_name as string, budget: money(row), d_from: from30, d_to: to400 });
+    else { if (from30 < current.d_from) current.d_from = from30; if (to400 > current.d_to) current.d_to = to400; }
+  }
+  const distinctPairs = [...pairWindows.values()];
   let rpcMissing = false;
   let found = await withTimeout(
-    supabaseRpc<ProcurementRow[]>("related_notices", { p_pairs: distinctPairs, p_from: from, p_to: to }).catch(() => { rpcMissing = true; return null; }),
+    supabaseRpc<ProcurementRow[]>("related_notices", { p_pairs: distinctPairs }).catch(() => { rpcMissing = true; return null; }),
     12000, null as ProcurementRow[] | null,
   );
   if (!found && rpcMissing) {
