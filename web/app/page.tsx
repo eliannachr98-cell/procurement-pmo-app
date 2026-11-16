@@ -859,7 +859,7 @@ export default function Home() {
           {(page === "overview" || page === "tenders") && scopeBar}
         </div>
       </div>
-      <div className={`workspace${page === "profile" ? " workspaceFull" : ""}${page === "tenders" || page === "overview" ? " tendersWorkspace" : ""}`}>
+      <div className={`workspace${page === "profile" ? " workspaceFull" : ""}${page === "tenders" || page === "overview" || page === "market" ? " tendersWorkspace" : ""}`}>
         <section className="content">
           {loading && tenders.length === 0 && <div className="dataBanner">Φόρτωση πραγματικών δεδομένων από Supabase…</div>}
           {dataError && <div className="dataBanner error">{dataError} · εμφανίζεται προσωρινό δείγμα.</div>}
