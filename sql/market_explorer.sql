@@ -183,7 +183,7 @@ begin
   if p_search is not null and p_search <> '' then
     title_join := 'left join public.procurements_compact pr on pr.adam = pay.tender';
     title_col := 'pr.title';
-    search_sql := format('(authority ilike %1$L or contractor ilike %1$L or adam ilike %1$L or tender ilike %1$L or title ilike %1$L)', '%' || p_search || '%');
+    search_sql := format('(pay.authority ilike %1$L or pay.contractor ilike %1$L or pay.adam ilike %1$L or pay.tender ilike %1$L or pr.title ilike %1$L)', '%' || p_search || '%');
   end if;
   execute format($q$
     with matched as (select p.adam, p.authority_name, p.discount, p.budget, p.publication_date from public.market_tender_facts p where %1$s),
