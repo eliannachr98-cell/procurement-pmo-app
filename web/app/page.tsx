@@ -31,6 +31,7 @@ type Tender = {
   awardValue?: number;
   contractValue?: number;
   budget: number;
+  budgetKey?: string;
 };
 type Award = {
   adam: string;
@@ -1415,7 +1416,7 @@ function TenderTable({ rows, expanded = false, title = "Λίστα διαγων�
   // Διακήρυξη and a later Παράταση) hang together: the tender the user marked
   // an offer on leads, and the related notices follow right below it.
   const grouped = useMemo(() => {
-    const groupKey = (tender: Tender) => tender.budget > 0 && tender.authority ? `${tender.authority}|${tender.budget}` : `solo|${tender.adam}`;
+    const groupKey = (tender: Tender) => tender.budget > 0 && tender.authority ? `${tender.authority}|${tender.budgetKey ?? tender.budget}` : `solo|${tender.adam}`;
     const order: string[] = [];
     const byKey = new Map<string, Tender[]>();
     rows.forEach((tender) => {

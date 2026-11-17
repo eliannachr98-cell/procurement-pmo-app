@@ -145,6 +145,17 @@ function money(row: {
   );
 }
 
+// The key two notices of the same tender share. A tender re-published by the authority can carry
+// another VAT rate - the amount with VAT then differs but the amount without VAT does not - so the
+// budget without VAT is the key when there is one, else the amount shown.
+function budgetKey(row: {
+  amount_inc_vat?: number | null; amount_ex_vat?: number | null; amount_unknown_vat?: number | null;
+  budget_inc_vat?: number | null; budget_ex_vat?: number | null; budget_unknown_vat?: number | null;
+}) {
+  const ex = Number(row.budget_ex_vat ?? 0);
+  return ex > 0 ? ex.toFixed(2) : money(row).toFixed(2);
+}
+
 async function supabasePage<T>(path: string): Promise<{ rows: T; total: number }> {
   const url = process.env.SUPABASE_URL;
   const key = process.env.SUPABASE_PUBLISHABLE_KEY;
@@ -224,14 +235,14 @@ async function fetchRelatedNotices(rows: ProcurementRow[], state: { partial: boo
   // sql/related_notices.sql. If that function is not there, fall back to the old query.
   // Each pair gets its own window around the tender's publication (30 days before, 400 after), so the
   // other tenders of the same authority with the same budget (repeat purchases) do not come along.
-  const pairWindows = new Map<string, { authority: string; budget: number; d_from: string; d_to: string }>();
+  const pairWindows = new Map<string, { authority: string; budget: number; budget_ex: number | null; d_from: string; d_to: string }>();
   for (const row of pairs) {
-    const key = `${row.authority_name}|${money(row)}`;
+    const key = `${row.authority_name}|${budgetKey(row)}|${money(row).toFixed(2)}`;
     const published = row.publication_date ?? "2000-01-01";
     const from30 = shift(published, -30);
     const to400 = shift(published, 400);
     const current = pairWindows.get(key);
-    if (!current) pairWindows.set(key, { authority: row.authority_name as string, budget: money(row), d_from: from30, d_to: to400 });
+    if (!current) pairWindows.set(key, { authority: row.authority_name as string, budget: money(row), budget_ex: Number(row.budget_ex_vat ?? 0) > 0 ? Number(row.budget_ex_vat) : null, d_from: from30, d_to: to400 });
     else { if (from30 < current.d_from) current.d_from = from30; if (to400 > current.d_to) current.d_to = to400; }
   }
   const distinctPairs = [...pairWindows.values()];
@@ -250,8 +261,9 @@ async function fetchRelatedNotices(rows: ProcurementRow[], state: { partial: boo
   }
   if (!found) { state.partial = true; return []; }
   const have = new Set(rows.map((row) => row.adam));
-  const keys = new Set(pairs.map((row) => `${row.authority_name}|${money(row)}`));
-  return found.filter((row) => !have.has(row.adam) && row.authority_name && keys.has(`${row.authority_name}|${money(row)}`));
+  const keysByKey = new Set(pairs.map((row) => `${row.authority_name}|${budgetKey(row)}`));
+  const keysByAmount = new Set(pairs.map((row) => `${row.authority_name}|${money(row).toFixed(2)}`));
+  return found.filter((row) => !have.has(row.adam) && row.authority_name && (keysByKey.has(`${row.authority_name}|${budgetKey(row)}`) || keysByAmount.has(`${row.authority_name}|${money(row).toFixed(2)}`)));
 }
 
 async function computeGet(request: Request) {
@@ -633,6 +645,7 @@ async function computeGet(request: Request) {
         awardValue: sumDistinct(linkedAwards, (row) => awardContractorsByAdam.get(row.adam)),
         contractValue: sumDistinct(linkedContracts, (row) => contractContractorsByAdam.get(row.adam)),
         budget: money(notice),
+        budgetKey: budgetKey(notice),
       };
     });
 
@@ -645,7 +658,7 @@ async function computeGet(request: Request) {
     const sameTender = new Map<string, typeof tenders>();
     for (const tender of tenders) {
       if (!tender.authority || tender.authority === "—" || tender.budget <= 0) continue;
-      const key = `${tender.authority}|${tender.budget.toFixed(2)}`;
+      const key = `${tender.authority}|${tender.budgetKey}`;
       const list = sameTender.get(key);
       if (list) list.push(tender); else sameTender.set(key, [tender]);
     }
@@ -653,7 +666,7 @@ async function computeGet(request: Request) {
     for (const tender of tenders) {
       if (!tender.authority || tender.authority === "—" || tender.budget <= 0) continue;
       let latest: string | undefined;
-      for (const peer of sameTender.get(`${tender.authority}|${tender.budget.toFixed(2)}`) ?? []) {
+      for (const peer of sameTender.get(`${tender.authority}|${tender.budgetKey}`) ?? []) {
         if (peer === tender || !peer.openingDate || peer.dateIssue) continue;
         if (tender.publicationDate && peer.publicationDate && peer.publicationDate < tender.publicationDate) continue;
         if (tender.openingDate) {
@@ -693,7 +706,7 @@ async function computeGet(request: Request) {
           for (const row of related) {
             if (row.adam === tender.adam || row.authority_name !== tender.authority || !row.opening_at || !row.publication_date) continue;
             if (tender.publicationDate && row.publication_date < tender.publicationDate) continue;
-            if (Math.abs(money(row) - tender.budget) > 0.01) continue;
+            if (budgetKey(row) !== tender.budgetKey) continue;
             const daysAfterPublication = (new Date(row.opening_at.slice(0, 10)).getTime() - new Date(row.publication_date).getTime()) / 86400000;
             if (daysAfterPublication < 0 || daysAfterPublication > 365) continue;
             if (tender.openingDate) {
@@ -820,7 +833,7 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   if (url.searchParams.get("q") || url.searchParams.get("adams")) return computeGet(request);
   // "v6" is the result-shape/logic version: bump it to drop cached lists after a change.
-  const key = "v7|" + [...url.searchParams.entries()].map(([name, value]) => `${name}=${value}`).sort().join("&");
+  const key = "v8|" + [...url.searchParams.entries()].map(([name, value]) => `${name}=${value}`).sort().join("&");
   const state: { failure: Response | null } = { failure: null };
   const body = await cachedScope<unknown>("list", key, async () => {
     const response = await computeGet(request);
