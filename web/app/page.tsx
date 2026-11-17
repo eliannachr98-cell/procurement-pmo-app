@@ -2652,7 +2652,7 @@ type FollowUpdates = {
   since: string;
   followed: { tenders: number; contractors: number; authorities: number; cpv?: number; adams?: string[] };
   tenders: UpdateTender[];
-  cpvTenders?: { adam: string; title: string; authority: string; date: string; budget: number | null; opening: string | null; region: string | null }[];
+  cpvTenders?: { adam: string; title: string; authority: string; date: string; budget: number | null; opening: string | null; region: string | null; republishes?: { adam: string; opening: string | null } | null }[];
   cpvEvents?: UpdateTender[];
   contractors: { key: string; name: string; total: number; items: { kind: string; date: string; adam: string | null; tender: string; authority: string; amount: number; union: boolean }[] }[];
   authorities: { authority: string; adam: string; title: string; date: string; budget: number | null }[];
@@ -2754,8 +2754,8 @@ function ProfileUpdates({ code, baseline, onUnauthorized, onSeen }: { code: stri
       {(data.cpvTenders ?? []).length > 0 && <section className="updatesSection"><h3>Νέοι διαγωνισμοί στα CPV και τις περιοχές σου</h3>
         <ul className="updatesEvents">{(data.cpvTenders ?? []).map((item) => <li key={item.adam}>
           <span className="updatesDate">{formatDate(item.date)}</span>
-          <span className="updatesBadge info">Διακήρυξη{(data.followed.adams ?? []).includes(item.adam) ? " ★" : ""}</span>
-          <span className="updatesText"><span className="updatesDocTitle" title={item.title}>{item.title}</span><span className="updatesAuthority">{item.authority}</span>{item.budget ? <b>{euro.format(item.budget)}</b> : null}{item.opening ? <small className="competitorEmpty">καταληκτική {formatDate(item.opening)}</small> : null}</span>
+          <span className={`updatesBadge ${item.republishes ? "warn" : "info"}`}>{item.republishes ? "Επαναδημοσίευση" : "Διακήρυξη"}{(data.followed.adams ?? []).includes(item.adam) ? " ★" : ""}</span>
+          <span className="updatesText"><span className="updatesDocTitle" title={item.title}>{item.title}</span><span className="updatesAuthority">{item.authority}</span>{item.budget ? <b>{euro.format(item.budget)}</b> : null}{item.opening ? <small className="competitorEmpty">{item.republishes ? `Νέα καταληκτική: ${formatDate(item.opening)}${item.republishes.opening ? ` (πριν: ${formatDate(item.republishes.opening)})` : ""} - ξαναδημοσίευση προηγούμενου διαγωνισμού` : `καταληκτική ${formatDate(item.opening)}`}</small> : null}</span>
           <AdamCopy adam={item.adam} className="adamCopy" />
           {isNew(item.date) && <b className="newBadge">ΝΕΟ</b>}
         </li>)}</ul>
