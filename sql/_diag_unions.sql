@@ -1,3 +1,0 @@
-explain analyze select public.follow_updates((select array_agg(adam) from (select adam from public.procurements_compact where document_category = 'declaration' and publication_date >= current_date - 150 order by publication_date desc limit 40) s), null, null, current_date - 30);
-select json_array_length(r->'cpvEvents') as cpv_changes, json_array_length(r->'cpvTenders') as cpv_new from (select public.follow_updates(null, null, null, current_date - 30, array['73200000-4','72222300-0','72225000-8','72200000-7'], array['EL3']) as r) q;
-select json_array_length(public.follow_updates(array['26PROC020026993','26PROC020205494'], null, null, current_date - 60)->'tenders') as starred_with_events
