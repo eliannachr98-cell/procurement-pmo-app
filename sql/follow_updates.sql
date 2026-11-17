@@ -28,7 +28,7 @@ declare
 begin
   if p_adams is null or cardinality(p_adams) = 0 then return result; end if;
   with t as (
-    select p.adam, p.title, p.authority_name, p.publication_date, p.cancelled_at, p.opening_at,
+    select p.adam, p.title, p.authority_name, p.publication_date, p.cancelled_at, p.opening_at, nullif(p.budget_ex_vat, 0) as budget_ex,
            coalesce(nullif(p.budget_inc_vat, 0), nullif(p.budget_ex_vat, 0), nullif(p.budget_unknown_vat, 0)) as budget
     from public.procurements_compact p
     where p.adam = any(p_adams)
@@ -40,9 +40,9 @@ begin
       from t
       join public.procurements_compact r
         on r.authority_name = t.authority_name and r.adam <> t.adam
-       and coalesce(nullif(r.budget_inc_vat, 0), nullif(r.budget_ex_vat, 0), nullif(r.budget_unknown_vat, 0)) = t.budget
+       and (coalesce(nullif(r.budget_inc_vat, 0), nullif(r.budget_ex_vat, 0), nullif(r.budget_unknown_vat, 0)) = t.budget or (t.budget_ex is not null and r.budget_ex_vat = t.budget_ex))
        and r.publication_date >= greatest(p_since, t.publication_date)
-      where t.budget > 0 and r.document_category = any(p_doc_kinds)
+      where (t.budget > 0 or t.budget_ex is not null) and r.document_category = any(p_doc_kinds)
       union all
       select t.adam, 'award', a.award_date::date, a.adam, a.title, null::timestamptz,
              coalesce(nullif(a.amount_inc_vat, 0), nullif(a.amount_ex_vat, 0), nullif(a.amount_unknown_vat, 0))
