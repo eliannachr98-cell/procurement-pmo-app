@@ -44,6 +44,17 @@ begin
        and r.publication_date >= greatest(p_since, t.publication_date)
       where (t.budget > 0 or t.budget_ex is not null) and r.document_category = any(p_doc_kinds)
       union all
+      -- a declaration re-published by the authority with a later deadline is, in substance, an extension
+      select t.adam, 'extension', r.publication_date::date, r.adam, r.title, r.opening_at, null::numeric
+      from t
+      join public.procurements_compact r
+        on r.authority_name = t.authority_name and r.adam <> t.adam and r.document_category = 'declaration'
+       and t.budget_ex is not null and r.budget_ex_vat = t.budget_ex and left(r.title, 40) = left(t.title, 40)
+       and r.publication_date > t.publication_date and r.publication_date >= p_since
+       and t.opening_at is not null and r.publication_date <= t.opening_at + interval '3 days'
+       and r.opening_at > t.opening_at and r.opening_at - t.opening_at <= interval '180 days'
+      where 'extension' = any(p_doc_kinds)
+      union all
       select t.adam, 'award', a.award_date::date, a.adam, a.title, null::timestamptz,
              coalesce(nullif(a.amount_inc_vat, 0), nullif(a.amount_ex_vat, 0), nullif(a.amount_unknown_vat, 0))
       from t join public.awards_compact a on a.procurement_adam = t.adam
@@ -106,9 +117,15 @@ begin
     -- new declarations in the followed CPVs (and regions)
     execute format($q$
       select coalesce(json_agg(json_build_object('adam', x.adam, 'title', x.title, 'authority', x.authority_name, 'date', x.publication_date,
-                                                 'budget', x.budget, 'opening', x.opening_at, 'region', x.nuts_name) order by x.publication_date desc, x.adam), '[]'::json)
+                                                 'budget', x.budget, 'opening', x.opening_at, 'region', x.nuts_name, 'republishes', x.republishes) order by x.publication_date desc, x.adam), '[]'::json)
       from (
         select p.adam, p.title, p.authority_name, p.publication_date, p.opening_at, p.nuts_name,
+               (select json_build_object('adam', e.adam, 'opening', e.opening_at) from public.procurements_compact e
+                 where e.authority_name = p.authority_name and e.adam <> p.adam and e.document_category = 'declaration'
+                   and p.budget_ex_vat > 0 and e.budget_ex_vat = p.budget_ex_vat and left(e.title, 40) = left(p.title, 40)
+                   and e.publication_date < p.publication_date and e.publication_date >= p.publication_date - 120
+                   and e.opening_at >= p.publication_date - 3 and p.opening_at > e.opening_at and p.opening_at - e.opening_at <= interval '180 days'
+                 order by e.publication_date desc limit 1) as republishes,
                coalesce(nullif(p.budget_inc_vat, 0), nullif(p.budget_ex_vat, 0), nullif(p.budget_unknown_vat, 0)) as budget
         from public.procurements_compact p
         join public.procurement_quality_flags f on f.adam = p.adam and f.notice_type_key = '3'
