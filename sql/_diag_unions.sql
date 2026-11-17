@@ -1,3 +1,8 @@
-explain analyze select public.follow_updates(null, null, null, current_date - 30, array['73200000-4','72222300-0','72225000-8','72200000-7'], array['EL3']);
-select json_array_length(r->'cpvTenders') as new_tenders, json_array_length(r->'cpvEvents') as tenders_with_changes, left((r->'cpvTenders'->0)::text, 400) as first_new, left((r->'cpvEvents'->0)::text, 600) as first_change from (select public.follow_updates(null, null, null, current_date - 30, array['73200000-4','72222300-0','72225000-8','72200000-7'], array['EL3']) as r) q;
-explain analyze select public.follow_updates((select array_agg(adam) from (select adam from public.procurements_compact where document_category = 'declaration' and publication_date >= current_date - 150 order by publication_date desc limit 40) s), null, null, current_date - 30)
+select 'the adam' as role, adam, document_category, publication_date::text as published, opening_at::text as opening, authority_name, budget_ex_vat::text as ex_vat, budget_inc_vat::text as inc_vat, budget_unknown_vat::text as unknown_vat, left(title, 110) as title, status
+from public.procurements_compact where adam = '26PROC020205494'
+union all
+select 'same authority, close in time', p.adam, p.document_category, p.publication_date::text, p.opening_at::text, p.authority_name, p.budget_ex_vat::text, p.budget_inc_vat::text, p.budget_unknown_vat::text, left(p.title, 110), p.status
+from public.procurements_compact p join public.procurements_compact t on t.adam = '26PROC020205494' and p.authority_name = t.authority_name and p.adam <> t.adam
+ and p.publication_date between t.publication_date - 120 and t.publication_date + 5
+ and (left(p.title, 30) = left(t.title, 30) or p.budget_ex_vat = t.budget_ex_vat or p.budget_inc_vat = t.budget_inc_vat or p.budget_inc_vat = t.budget_ex_vat or p.budget_ex_vat = t.budget_inc_vat)
+order by 1 desc, 4
