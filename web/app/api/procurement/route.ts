@@ -194,12 +194,12 @@ function groupBy<T>(rows: T[], key: (row: T) => string | null) {
   return grouped;
 }
 
-function statusFor(row: ProcurementRow, awards: AwardRow[], contracts: ContractRow[], validOpeningAt?: string) {
+function statusFor(row: ProcurementRow, awards: AwardRow[], contracts: ContractRow[], validOpeningAt?: string, cancelledByFlag = false) {
   // A cancelled notice that still has a contract or award counts as that;
   // only a cancelled notice with neither is "Ακυρωμένος".
   if (contracts.length) return "Συμβασιοποιημένος";
   if (awards.length) return "Ανατεθειμένος";
-  if (row.cancelled_at || row.status === "cancelled") return "Ακυρωμένος";
+  if (row.cancelled_at || row.status === "cancelled" || cancelledByFlag) return "Ακυρωμένος";
   // Must use the same validated opening date as the display value below -
   // a raw opening_at earlier than publication_date is bad source data, not
   // a real passed deadline, and was otherwise pushing those notices into
@@ -373,7 +373,7 @@ async function computeGet(request: Request) {
     const notices = [...pageNotices, ...relatedNotices];
     const noticeAdams = notices.map((row) => row.adam);
 
-    const [awards, contracts, noticeCpvs] = await Promise.all([
+    const [awards, contracts, noticeCpvs, cancelledFlags] = await Promise.all([
       relatedRows<AwardRow>(
         "awards_compact", "procurement_adam", noticeAdams,
         "adam,procurement_adam,title,authority_name,contract_type,award_date,amount_ex_vat,amount_inc_vat,amount_unknown_vat",
@@ -387,7 +387,13 @@ async function computeGet(request: Request) {
         "record_type,record_adam,cpv_code,cpv_description",
         "record_type=eq.procurement",
       ),
+      // The fresh cancellation flag of KHMDHS (the notice's own cancelled_at / status can lag behind it).
+      relatedRows<{ adam: string; cancelled_api: boolean | null }>(
+        "procurement_quality_flags", "adam", noticeAdams, "adam,cancelled_api", "cancelled_api=eq.true",
+      ).catch(() => [] as { adam: string; cancelled_api: boolean | null }[]),
     ]);
+
+    const cancelledByFlag = new Set(cancelledFlags.filter((row) => row.cancelled_api).map((row) => row.adam));
 
     // A contract's own procurement_adam is often unset - it's still linked to
     // the notice through its award (same gap already handled for the market
@@ -632,7 +638,7 @@ async function computeGet(request: Request) {
         documentType: notice.document_category ?? undefined,
         nutsCode: notice.nuts_code ?? undefined,
         nutsName: notice.nuts_name ?? undefined,
-        status: statusFor(notice, linkedAwards, linkedContracts, submissionDeadline),
+        status: statusFor(notice, linkedAwards, linkedContracts, submissionDeadline, cancelledByFlag.has(notice.adam)),
         publicationDate: notice.publication_date,
         deadline: submissionDeadline,
         openingDate: submissionDeadline,
