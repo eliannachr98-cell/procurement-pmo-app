@@ -1,0 +1,118 @@
+name: Load one year of awards or contracts
+
+# Loads a year's Αναθέσεις ("auction") or Συμβάσεις ("contract") from KHMDHS into the compact
+# tables, in weekly windows, one at a time (KHMDHS answers 429/500 when hit in parallel).
+# Notices are NOT loaded here (see load_declarations_year.yml).
+# Run "test" first (one week, first page only, nothing is written), then "full".
+# After a full load, refresh the caches: run "Refresh market facts" and "Refresh dashboard cache".
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: test = one week, one page, dry run; full = the whole year and writes
+        required: true
+        type: choice
+        options:
+          - test
+          - full
+        default: test
+      year:
+        description: Year to load (e.g. 2024)
+        required: true
+        type: string
+        default: "2024"
+      source:
+        description: What to load
+        required: true
+        type: choice
+        options:
+          - auction
+          - contract
+        default: auction
+      start:
+        description: "Optional first day (YYYY-MM-DD) to resume from"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: compact-awards-year
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+    steps:
+      - id: matrix
+        env:
+          MODE: ${{ inputs.mode }}
+          YEAR: ${{ inputs.year }}
+          START: ${{ inputs.start }}
+        shell: python
+        run: |
+          import json, os
+          from datetime import date, timedelta
+
+          year = int(os.environ["YEAR"])
+          if os.environ["MODE"] == "test":
+              windows = [{"date_from": f"{year}-06-03", "date_to": f"{year}-06-09", "max_pages": 1}]
+          else:
+              windows = []
+              first = date.fromisoformat(os.environ["START"]) if os.environ.get("START") else date(year, 1, 1)
+              current, end = first, min(date(year, 12, 31), date.today())
+              while current <= end:
+                  window_end = min(current + timedelta(days=6), end)
+                  windows.append({"date_from": current.isoformat(), "date_to": window_end.isoformat(), "max_pages": 0})
+                  current = window_end + timedelta(days=1)
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              output.write("matrix=" + json.dumps({"include": windows}, separators=(",", ":")) + "\n")
+
+  load:
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix: ${{ fromJson(needs.prepare.outputs.matrix) }}
+    name: ${{ inputs.source }} ${{ matrix.date_from }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install pinned dependencies
+        run: pip install "requests>=2.32,<3" "psycopg[binary]>=3.2,<4"
+      - name: Prepare compact data
+        env:
+          KHMDHS_READ_TIMEOUT: "120"
+        shell: bash
+        run: |
+          args=(
+            --date-from "${{ matrix.date_from }}"
+            --date-to "${{ matrix.date_to }}"
+            --source "${{ inputs.source }}"
+            --output-dir staging/compact
+          )
+          if [ "${{ matrix.max_pages }}" -gt 0 ]; then
+            args+=(--max-pages "${{ matrix.max_pages }}")
+          fi
+          python -u prepare_compact_data.py "${args[@]}"
+          echo "--- staged files:"; ls -la staging/compact; wc -l staging/compact/*.ndjson 2>/dev/null || true
+      - name: Write to the compact database (full mode only)
+        if: ${{ inputs.mode == 'full' }}
+        env:
+          DATABASE_URL: ${{ secrets.COMPACT_DATABASE_URL }}
+          EXPECTED_DB_REF: gunzsfttzijoxteppskb
+        run: python -u load_compact_data.py --input-dir staging/compact --write
+      - name: Save failed batch for diagnosis
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: failed-${{ inputs.source }}-${{ matrix.date_from }}
+          path: staging/compact
+          retention-days: 7
