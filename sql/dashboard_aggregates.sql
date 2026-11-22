@@ -54,6 +54,9 @@ begin
     foreach target_contract_type in array contract_types loop
     with matched as (
       select p.adam, p.opening_at, p.cancelled_at, p.status as raw_status,
+             -- the fresh cancellation flag from KHMDHS (procurement_quality_flags.cancelled_api) as well:
+             -- the compact data's own cancelled_at / status can lag behind it
+             coalesce((select qf.cancelled_api from public.procurement_quality_flags qf where qf.adam = p.adam), false) as cancelled_api,
              p.nuts_name, p.nuts_code, p.publication_date, p.authority_name,
              -- A handful of notices carry an obviously mistyped budget (a
              -- small municipal truck rental listed at >1 trillion euros) -
@@ -101,7 +104,7 @@ begin
         case
           when hc.adam is not null then 'Ολοκληρωμένος'
           when ha.adam is not null then 'Ανατεθειμένος'
-          when m.cancelled_at is not null or m.raw_status = 'cancelled' then 'Ακυρωμένος'
+          when m.cancelled_at is not null or m.raw_status = 'cancelled' or m.cancelled_api then 'Ακυρωμένος'
           -- A raw opening_at earlier than publication_date is bad source
           -- data, not a real passed deadline (the app-side route applies
           -- the same guard before showing/using this date) - without it, a
@@ -295,6 +298,9 @@ begin
   sql_text := $sql1$
     with matched as (
       select p.adam, p.opening_at, p.cancelled_at, p.status as raw_status,
+             -- the fresh cancellation flag from KHMDHS (procurement_quality_flags.cancelled_api) as well:
+             -- the compact data's own cancelled_at / status can lag behind it
+             coalesce((select qf.cancelled_api from public.procurement_quality_flags qf where qf.adam = p.adam), false) as cancelled_api,
              p.nuts_name, p.nuts_code, p.publication_date, p.authority_name,
              -- A handful of notices carry an obviously mistyped budget (a
              -- small municipal truck rental listed at >1 trillion euros) -
@@ -334,7 +340,7 @@ begin
         case
           when hc.adam is not null then 'Ολοκληρωμένος'
           when ha.adam is not null then 'Ανατεθειμένος'
-          when m.cancelled_at is not null or m.raw_status = 'cancelled' then 'Ακυρωμένος'
+          when m.cancelled_at is not null or m.raw_status = 'cancelled' or m.cancelled_api then 'Ακυρωμένος'
           -- A raw opening_at earlier than publication_date is bad source
           -- data, not a real passed deadline (the app-side route applies
           -- the same guard before showing/using this date) - without it, a
