@@ -132,7 +132,8 @@ begin
     execute format($q$
       with matched as (select p.* from public.market_tender_facts p where %1$s),
       rws as (
-        select f.ckey, f.contractor_name, f.kind, f.n, coalesce(f.amt_share, f.amt) as share, coalesce(f.doc_date, m.publication_date) as dt,
+        select f.ckey, f.contractor_name, f.kind, f.n, coalesce(f.doc_adam, f.n || '|' || coalesce(f.amt, 0)::text) as doc,
+               coalesce(f.amt_share, f.amt) as share, coalesce(f.doc_date, m.publication_date) as dt,
                m.authority_name, m.budget, m.discount
         from public.market_contractor_facts f join matched m on m.adam = f.n where %2$s
       ),
@@ -154,7 +155,12 @@ begin
       filtered as (select * from rows where %3$s)
       select json_build_object(
         'total', (select count(*) from filtered),
-        'totals', (select json_build_object('awards', coalesce(sum(awards), 0), 'contracts', coalesce(sum(contracts), 0), 'value', coalesce(sum(value), 0)) from filtered),
+        -- an award or contract of a union appears once per member in the rows, so the totals count each document once
+        'totals', (select json_build_object(
+                     'awards', count(distinct r.doc) filter (where r.kind = 'award'),
+                     'contracts', count(distinct r.doc) filter (where r.kind = 'contract'),
+                     'value', coalesce((select sum(value) from filtered), 0))
+                   from rws r where r.ckey in (select key from filtered)),
         'rows', coalesce((select json_agg(r) from (select * from filtered order by %4$s %5$s nulls last, name limit %6$s offset %7$s) r), '[]'::json))
     $q$, where_sql, c_sql, search_sql, sort_col, dir, greatest(p_limit, 1), greatest(p_offset, 0)) into result;
   end if;
